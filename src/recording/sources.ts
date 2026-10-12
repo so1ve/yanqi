@@ -13,6 +13,15 @@ export const sourceScope = Type.Union([
   Type.Object({ all: Type.Literal(true) }, { additionalProperties: false }),
   Type.Object(
     {
+      day: Type.String({
+        description:
+          "北京时间的自然日：today 或 YYYY-MM-DD。today 以请求发出时的日期为准。",
+      }),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
       sinceFirstMessageBy: Type.String({
         pattern: "^\\d+$",
         description:
@@ -94,7 +103,17 @@ export async function selectSources(
     let from: number | undefined;
     let to: number | undefined;
 
-    if ("minutes" in scope) {
+    if ("day" in scope) {
+      const day =
+        scope.day === "today"
+          ? new Intl.DateTimeFormat("sv-SE", {
+              timeZone: "Asia/Shanghai",
+            }).format(request.sentAt)
+          : z.iso.date().parse(scope.day);
+
+      from = timestamp(day);
+      to = from + 86_400_000;
+    } else if ("minutes" in scope) {
       from = request.sentAt - scope.minutes * 60_000;
     } else if ("from" in scope) {
       from = timestamp(scope.from);
