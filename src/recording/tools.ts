@@ -103,7 +103,7 @@ export function recordingTools(
   return [
     tool(
       "read_history",
-      "读取本地保存的本群成员原文，包括尚未归入话题的消息和 @ 消息。可按日期、多个话题、消息 ID 或全部历史读取。每次返回一页，长消息可能跨页；nextPage 不为空时还有后文。批量找某类内容并另建文档，直接调用 record 的 scope 和 focus，无需逐页读完。",
+      "读取本地保存的本群成员原文，包括尚未归入话题的消息和 @ 消息。可从某成员首次发言开始，或按日期、多个话题、消息 ID、全部历史读取。每次返回一页，长消息可能跨页；nextPage 不为空时还有后文。批量找某类内容并另建文档，直接调用 record 的 scope 和 focus，无需逐页读完。",
       object({
         scope: sourceScope,
         page: Type.Optional(Type.Integer({ minimum: 0 })),

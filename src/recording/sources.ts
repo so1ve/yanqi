@@ -12,6 +12,16 @@ const date = Type.String({
 export const sourceScope = Type.Union([
   Type.Object({ all: Type.Literal(true) }, { additionalProperties: false }),
   Type.Object(
+    {
+      sinceFirstMessageBy: Type.String({
+        pattern: "^\\d+$",
+        description:
+          "成员 QQ 号；从本群已保存的该成员首次发言起，包含此后所有成员的讨论。",
+      }),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
     { from: date, to: Type.Optional(date) },
     {
       additionalProperties: false,
@@ -96,6 +106,14 @@ export async function selectSources(
     }
 
     sources = await store.history(request.groupId, request.id - 1, from, to);
+
+    if ("sinceFirstMessageBy" in scope) {
+      const first = sources.findIndex(
+        (source) => source.userId === scope.sinceFirstMessageBy,
+      );
+
+      sources = first < 0 ? [] : sources.slice(first);
+    }
   }
 
   return [
