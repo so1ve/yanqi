@@ -20,12 +20,28 @@ export function logAgentEvents(
           return;
         }
 
+        const text = message.content
+          .filter((part) => part.type === "text")
+          .map((part) => part.text)
+          .join("");
+        const thinkingChars = message.content.reduce(
+          (size, part) =>
+            size + (part.type === "thinking" ? part.thinking.length : 0),
+          0,
+        );
+        const toolCalls = message.content.filter(
+          (part) => part.type === "toolCall",
+        ).length;
+
         logger.info(
-          "%s 模型返回：stop=%s tokens=%s/%s cache=%s/%s 耗时=%s",
+          "%s 模型返回：stop=%s tokens=%s/%s 正文=%s字符 思考=%s字符 工具=%s cache=%s/%s 耗时=%s",
           label,
           message.stopReason,
           message.usage.input,
           message.usage.output,
+          text.length,
+          thinkingChars,
+          toolCalls,
           message.usage.cacheRead,
           message.usage.cacheWrite,
           message.durationMs === undefined
@@ -35,14 +51,7 @@ export function logAgentEvents(
         logger.debug(
           "%s 返回内容：\n%s",
           label,
-          logDetail(
-            message.errorMessage ||
-              message.content
-                .filter((part) => part.type === "text")
-                .map((part) => part.text)
-                .join(""),
-            config,
-          ),
+          logDetail(message.errorMessage || text, config),
         );
 
         break;

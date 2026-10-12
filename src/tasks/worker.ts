@@ -213,7 +213,7 @@ export class BackgroundTasks {
                 : error instanceof AiError
                   ? `这次对话在“${error.stage}”这一步失败了。`
                   : error instanceof AiSizeError
-                    ? "AI 回复超出长度限制，这次对话未完成。"
+                    ? "AI 生成中途被服务截断，这次操作未完成。"
                     : "执行这次操作失败了，详细原因已记入日志。",
           },
         );

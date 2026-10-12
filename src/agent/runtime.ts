@@ -139,7 +139,8 @@ export class AgentRuntime {
       provider: "yanqi",
       baseUrl: endpoint.baseURL,
       input: ["text", "image"],
-      reasoning: false,
+      // reasoning 声明模型能力；thinkingLevel 控制是否启用思考。
+      reasoning: new URL(endpoint.baseURL).hostname === "api.deepseek.com",
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
       contextWindow: config.AI_INPUT_CHARS + config.AI_MAX_OUTPUT_TOKENS,
       maxTokens: config.AI_MAX_OUTPUT_TOKENS,
@@ -158,6 +159,7 @@ export class AgentRuntime {
     const agent = new Agent({
       initialState: {
         model,
+        thinkingLevel: "off",
         systemPrompt: schema
           ? `${instructions}\n最终回复必须是符合以下 JSON Schema 的 JSON 对象：\n${JSON.stringify(schema)}`
           : instructions,
@@ -177,7 +179,7 @@ export class AgentRuntime {
           timeout = setTimeout(() => agent.abort(), config.AI_TIMEOUT_MS);
           timeout.unref();
           this.#logger.info(
-            "%s 第 %s 轮请求：usage=%s provider=%s model=%s messages=%s chars=%s tools=%s",
+            "%s 第 %s 轮请求：usage=%s provider=%s model=%s messages=%s chars=%s tools=%s maxTokens=%s",
             label,
             turns,
             calls.at(-1),
@@ -186,6 +188,7 @@ export class AgentRuntime {
             context.messages.length,
             JSON.stringify(context.messages).length,
             tools.length,
+            config.AI_MAX_OUTPUT_TOKENS,
           );
 
           return streamSimple(model, context, {
@@ -292,7 +295,9 @@ export class AgentRuntime {
     );
 
     if (result?.stopReason === "length") {
-      throw new AiSizeError(`${purpose} 输出被截断`);
+      throw new AiSizeError(
+        `${purpose} 输出被服务截断（model=${modelId}，outputTokens=${result.usage.output}，maxTokens=${config.AI_MAX_OUTPUT_TOKENS}）`,
+      );
     }
 
     // reply 通过 SDK 的 terminate 结束工具循环，不再请求一轮空的收尾回复。
