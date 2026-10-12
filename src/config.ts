@@ -33,6 +33,8 @@ const schema = Type.Object({
   }),
   AI_TIMEOUT_MS: positive(120_000),
   AI_MAX_OUTPUT_TOKENS: positive(8192),
+  AI_THINKING_TIMEOUT_MS: positive(300_000),
+  AI_THINKING_MAX_OUTPUT_TOKENS: positive(32_768),
   AI_INPUT_CHARS: Type.Integer({
     minimum: 4000,
     maximum: Number.MAX_SAFE_INTEGER,

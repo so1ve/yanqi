@@ -15,6 +15,12 @@ import { logAgentEvents } from "./logging.ts";
 import { boundary } from "./prompts/common.ts";
 import { AiSizeError, reserveCall } from "./usage.ts";
 
+interface RequestOptions {
+  model?: ModelConfig;
+  tools?: AgentState["tools"];
+  thinking?: boolean;
+}
+
 export class AgentRuntime {
   #config: Config;
   #store: Store;
@@ -31,17 +37,16 @@ export class AgentRuntime {
     schema: S,
     instructions: string,
     input: unknown,
-    model = this.#config.AI_MODEL,
-    tools: AgentState["tools"] = [],
+    options: RequestOptions = {},
   ): Promise<Static<S>> {
     const content = JSON.stringify(input);
+    const model = options.model ?? this.#config.AI_MODEL;
 
     const text = await this.#run(
       purpose,
       `${boundary}\n${instructions}`,
       { role: "user", content, timestamp: Date.now() },
-      model,
-      tools,
+      options,
       schema,
     );
     let json: unknown;
@@ -85,15 +90,13 @@ export class AgentRuntime {
     purpose: string,
     instructions: string,
     input: unknown,
-    model = this.#config.AI_MODEL,
-    tools: AgentState["tools"] = [],
+    options: RequestOptions = {},
   ): Promise<string> {
     return this.#run(
       purpose,
       `${boundary}\n${instructions}`,
       { role: "user", content: JSON.stringify(input), timestamp: Date.now() },
-      model,
-      tools,
+      options,
     );
   }
 
@@ -106,8 +109,7 @@ export class AgentRuntime {
       "image",
       `${boundary}\n${instructions}`,
       { role: "user", content: [image], timestamp: Date.now() },
-      model,
-      [],
+      { model },
     );
   }
 
@@ -115,12 +117,24 @@ export class AgentRuntime {
     purpose: string,
     instructions: string,
     input: UserMessage,
-    endpoint: ModelConfig,
-    tools: AgentState["tools"],
+    options: RequestOptions,
     schema?: TSchema,
   ): Promise<string> {
     const config = this.#config;
+    const endpoint = options.model ?? config.AI_MODEL;
+    const tools = options.tools ?? [];
     const modelId = endpoint.model;
+    const isDeepSeek =
+      new URL(endpoint.baseURL).hostname === "api.deepseek.com";
+    const thinkingLevel = options.thinking && isDeepSeek ? "high" : "off";
+    const maxTokens =
+      thinkingLevel === "off"
+        ? config.AI_MAX_OUTPUT_TOKENS
+        : config.AI_THINKING_MAX_OUTPUT_TOKENS;
+    const timeoutMs =
+      thinkingLevel === "off"
+        ? config.AI_TIMEOUT_MS
+        : config.AI_THINKING_TIMEOUT_MS;
     const task = logContext.getStore();
     const label = [
       task?.task,
@@ -140,14 +154,14 @@ export class AgentRuntime {
       baseUrl: endpoint.baseURL,
       input: ["text", "image"],
       // reasoning 声明模型能力；thinkingLevel 控制是否启用思考。
-      reasoning: new URL(endpoint.baseURL).hostname === "api.deepseek.com",
+      reasoning: isDeepSeek,
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      contextWindow: config.AI_INPUT_CHARS + config.AI_MAX_OUTPUT_TOKENS,
-      maxTokens: config.AI_MAX_OUTPUT_TOKENS,
+      contextWindow: config.AI_INPUT_CHARS + maxTokens,
+      maxTokens,
       compat: {
         supportsStore: false,
         supportsDeveloperRole: false,
-        supportsReasoningEffort: false,
+        supportsReasoningEffort: isDeepSeek,
         supportsStrictMode: false,
         maxTokensField: "max_tokens",
       },
@@ -159,7 +173,7 @@ export class AgentRuntime {
     const agent = new Agent({
       initialState: {
         model,
-        thinkingLevel: "off",
+        thinkingLevel,
         systemPrompt: schema
           ? `${instructions}\n最终回复必须是符合以下 JSON Schema 的 JSON 对象：\n${JSON.stringify(schema)}`
           : instructions,
@@ -176,27 +190,29 @@ export class AgentRuntime {
           }
 
           calls.push(await reserveCall(config, this.#store, endpoint, purpose));
-          timeout = setTimeout(() => agent.abort(), config.AI_TIMEOUT_MS);
+          timeout = setTimeout(() => agent.abort(), timeoutMs);
           timeout.unref();
           this.#logger.info(
-            "%s 第 %s 轮请求：usage=%s provider=%s model=%s messages=%s chars=%s tools=%s maxTokens=%s",
+            "%s 第 %s 轮请求：usage=%s provider=%s model=%s thinking=%s messages=%s chars=%s tools=%s maxTokens=%s timeout=%s ms",
             label,
             turns,
             calls.at(-1),
             new URL(endpoint.baseURL).origin,
             modelId,
+            isDeepSeek ? thinkingLevel : "provider-default",
             context.messages.length,
             JSON.stringify(context.messages).length,
             tools.length,
-            config.AI_MAX_OUTPUT_TOKENS,
+            maxTokens,
+            timeoutMs,
           );
 
           return streamSimple(model, context, {
             ...options,
             apiKey: endpoint.apiKey,
-            maxTokens: config.AI_MAX_OUTPUT_TOKENS,
+            maxTokens,
             maxRetries: 0,
-            timeoutMs: config.AI_TIMEOUT_MS,
+            timeoutMs,
           });
         } catch (error) {
           if (error instanceof Error) {
@@ -296,7 +312,7 @@ export class AgentRuntime {
 
     if (result?.stopReason === "length") {
       throw new AiSizeError(
-        `${purpose} 输出被服务截断（model=${modelId}，outputTokens=${result.usage.output}，maxTokens=${config.AI_MAX_OUTPUT_TOKENS}）`,
+        `${purpose} 输出被服务截断（model=${modelId}，outputTokens=${result.usage.output}，maxTokens=${maxTokens}）`,
       );
     }
 

@@ -52,6 +52,7 @@ export class RecordingAI {
         ),
         `${prompts.summary}\n\n${prompts.focusedSummary}`,
         { ...input, focus },
+        { thinking: true },
       );
 
       return result.markdown.trim();
@@ -61,11 +62,17 @@ export class RecordingAI {
       "summary",
       `${prompts.summary}\n直接返回纪要正文，不返回 JSON。`,
       input,
+      { thinking: true },
     );
   }
 
   public merge(sections: string[]): Promise<string> {
-    return this.#runtime.text("summary_merge", prompts.merge, { sections });
+    return this.#runtime.text(
+      "summary_merge",
+      prompts.merge,
+      { sections },
+      { thinking: true },
+    );
   }
 
   public choosePublication(

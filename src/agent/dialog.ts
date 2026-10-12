@@ -23,8 +23,7 @@ export class DialogAI {
       "intent",
       `${prompts.intent}\n${prompts.memory}\n${this.#persona}`,
       state,
-      this.#config.AI_MODEL,
-      tools,
+      { model: this.#config.AI_MODEL, tools },
     );
   }
 }
