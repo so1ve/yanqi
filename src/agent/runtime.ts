@@ -7,6 +7,7 @@ import { z } from "zod";
 
 import type { Config, ModelConfig } from "../config.ts";
 import type { Store } from "../storage/store.ts";
+import { AiError } from "../utils/errors.ts";
 import { logContext, logDetail } from "../utils/logging.ts";
 import { logAgentEvents } from "./logging.ts";
 import { boundary, prompts } from "./prompts.ts";
@@ -46,7 +47,8 @@ export class AgentRuntime {
     try {
       json = JSON.parse(text);
     } catch (error) {
-      throw new Error(
+      throw new AiError(
+        "解析 AI 返回的 JSON",
         `${purpose} 未返回合法 JSON（model=${model.model}，${text.length} 字符）`,
         { cause: error },
       );
@@ -55,7 +57,8 @@ export class AgentRuntime {
     const parsed = schema.safeParse(json);
 
     if (!parsed.success) {
-      throw new Error(
+      throw new AiError(
+        "校验 AI 返回的字段",
         `${purpose} JSON 字段不符合约定：${parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("；")}`,
         { cause: parsed.error },
       );
@@ -146,7 +149,10 @@ export class AgentRuntime {
       streamFn: async (_model, context, options) => {
         try {
           if (++turns > 8) {
-            throw new Error(`${purpose} agent 已达到单次请求的 8 轮调用上限`);
+            throw new AiError(
+              "处理对话",
+              `${purpose} agent 已达到单次请求的 8 轮调用上限`,
+            );
           }
 
           calls.push(await reserveCall(config, this.#store, endpoint, purpose));
@@ -274,7 +280,8 @@ export class AgentRuntime {
     }
 
     if (result?.stopReason !== "stop") {
-      throw new Error(
+      throw new AiError(
+        "获取 AI 回复",
         `${purpose} 未返回完整结果（${result?.errorMessage || result?.stopReason || "无内容"}）`,
       );
     }
@@ -286,7 +293,7 @@ export class AgentRuntime {
 
     // 工具可以直接交付结果，不一定需要额外的文字答复。
     if (!text.trim() && tools.length === 0) {
-      throw new Error(`${purpose} 未返回文字`);
+      throw new AiError("读取 AI 正文", `${purpose} 未返回文字`);
     }
 
     return text;

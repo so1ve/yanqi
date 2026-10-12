@@ -5,7 +5,7 @@ import type { Context, Logger, Session } from "koishi";
 import { Ai } from "./agent/models.ts";
 import { MAX_REPLY_CHARS } from "./agent/prompts.ts";
 import { handleRequest } from "./agent/requests.ts";
-import { BudgetExceeded } from "./agent/usage.ts";
+import { AiSizeError, BudgetExceeded } from "./agent/usage.ts";
 import { collectAsset } from "./assets.ts";
 import type { Config } from "./config.ts";
 import type { Messenger } from "./onebot/messenger.ts";
@@ -14,7 +14,7 @@ import { detectTopics } from "./recording/detection.ts";
 import { Notes } from "./recording/notes.ts";
 import type { Store } from "./storage/store.ts";
 import type { Delivery, Job, JobKind } from "./types.ts";
-import { failureMessage } from "./utils/errors.ts";
+import { AiError, failureMessage } from "./utils/errors.ts";
 import { logContext, logDetail } from "./utils/logging.ts";
 import { beijingTime } from "./utils/time.ts";
 
@@ -316,12 +316,18 @@ export class Secretary {
       );
       if (job.kind === "intent") {
         await this.#store.deliveries.enqueue(
-          `intent-error:${job.payload.messageId}`,
+          `command:${job.payload.messageId}`,
           {
             kind: "text",
             groupId,
             content:
-              "这次对话没能完成。已保存的记录仍在，可以查询状态，或直接告诉我接下来要做什么。",
+              error instanceof BudgetExceeded
+                ? error.message
+                : error instanceof AiError
+                  ? `这次对话在“${error.stage}”这一步失败了。`
+                  : error instanceof AiSizeError
+                    ? "AI 回复超出长度限制，这次对话未完成。"
+                    : "执行这次操作失败了，详细原因已记入日志。",
           },
         );
       }
