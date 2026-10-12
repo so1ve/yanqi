@@ -1,4 +1,4 @@
-import { SQLitePlugin } from "../koishi.cts";
+import SQLitePlugin from "@koishijs/plugin-database-sqlite";
 
 export class SQLite extends SQLitePlugin {
   #writes: Promise<void> = Promise.resolve();

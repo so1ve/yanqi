@@ -5,5 +5,6 @@
 !pnpm-workspace.yaml
 !tsconfig.json
 !PERSONA.md
+!run.mjs
 !src/
 !src/**

@@ -11,9 +11,9 @@ RUN ENV=/root/.shrc SHELL=/bin/sh npx --yes get-pnpm
 
 RUN pnpm install --prod --frozen-lockfile --ignore-scripts
 
-COPY tsconfig.json PERSONA.md ./
+COPY tsconfig.json PERSONA.md run.mjs ./
 COPY src ./src
 
 ENV NODE_ENV=production
 
-CMD ["pnpm", "exec", "tsx", "src/main.ts"]
+CMD ["node", "run.mjs"]

@@ -1,8 +1,8 @@
 import type { Bot, Context } from "koishi";
+import { h } from "koishi";
 import type { OneBot } from "koishi-plugin-adapter-onebot";
 
 import type { Config } from "../config.ts";
-import { h } from "../koishi.cts";
 import type { Store } from "../storage/store.ts";
 import type { Asset, Segment } from "../types.ts";
 

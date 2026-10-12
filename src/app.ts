@@ -1,8 +1,11 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
+import { HTTP } from "@koishijs/plugin-http";
+import { Adapter, App } from "koishi";
+import { OneBotBot } from "koishi-plugin-adapter-onebot";
+
 import type { Config } from "./config.ts";
-import { Adapter, App, HTTP, OneBotBot } from "./koishi.cts";
 import { Secretary } from "./secretary.ts";
 import { defineModels } from "./storage/schema.ts";
 import { SQLite } from "./storage/sqlite.ts";

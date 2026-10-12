@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 
+import { $ } from "koishi";
+
 import { Memories } from "../agent/memory.ts";
-import { $ } from "../koishi.cts";
 import type { Asset, IncomingMessage, Message, Note, Topic } from "../types.ts";
 import { DeliveryQueue } from "./deliveries.ts";
 import { JobQueue, enqueueJob } from "./jobs.ts";

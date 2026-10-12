@@ -1,4 +1,5 @@
-import { $ } from "../koishi.cts";
+import { $ } from "koishi";
+
 import type { Job, JobKind, JobPayloads } from "../types.ts";
 import type { Database } from "./schema.ts";
 
