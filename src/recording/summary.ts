@@ -158,6 +158,30 @@ export class Summarizer {
     }
   }
 
+  async #merge(sections: string[]): Promise<string> {
+    if (sections.length === 1) {
+      return sections[0]!;
+    }
+
+    try {
+      return await this.#ai.recording.merge(sections);
+    } catch (error) {
+      if (!(error instanceof AiSizeError)) {
+        throw error;
+      }
+
+      this.#logger.warn(
+        "合并超出模型限制，拆小批次继续：sections=%s",
+        sections.length,
+      );
+      const middle = Math.ceil(sections.length / 2);
+      const first = await this.#merge(sections.slice(0, middle));
+      const second = await this.#merge(sections.slice(middle));
+
+      return `${first}\n\n${second}`;
+    }
+  }
+
   public async compose(sections: Note["sections"]): Promise<string> {
     const paragraphs = sections
       .map((section) => section.content)
@@ -171,9 +195,7 @@ export class Summarizer {
         return;
       }
 
-      chapters.push(
-        batch.length === 1 ? batch[0]! : await this.#ai.recording.merge(batch),
-      );
+      chapters.push(await this.#merge(batch));
       batch = [];
     };
 
