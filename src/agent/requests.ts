@@ -3,6 +3,7 @@ import { contextWithin, messageChunks } from "../recording/messages.ts";
 import type { Notes } from "../recording/notes.ts";
 import { recordingTools } from "../recording/tools.ts";
 import type { Store } from "../storage/store.ts";
+import { beijingDate, beijingTime } from "../utils/time.ts";
 import type { Ai } from "./models.ts";
 import { replyTool } from "./reply.ts";
 
@@ -79,11 +80,9 @@ export async function handleRequest(
       ),
       memory: { recent: memories.slice(0, 6), count: memories.length },
       isAdmin,
-      now: new Date(message.sentAt).toISOString(),
+      now: beijingTime(message.sentAt),
       timeZone: "Asia/Shanghai",
-      today: new Intl.DateTimeFormat("sv-SE", {
-        timeZone: "Asia/Shanghai",
-      }).format(message.sentAt),
+      today: beijingDate(message.sentAt),
     },
     [
       replyTool(store, message),

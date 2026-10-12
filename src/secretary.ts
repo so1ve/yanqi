@@ -16,6 +16,7 @@ import type { Store } from "./storage/store.ts";
 import type { Delivery, Job, JobKind } from "./types.ts";
 import { failureMessage } from "./utils/errors.ts";
 import { logContext, logDetail } from "./utils/logging.ts";
+import { beijingTime } from "./utils/time.ts";
 
 export class Secretary {
   #config: Config;
@@ -297,7 +298,7 @@ export class Secretary {
         message,
         retry.state === "failed"
           ? "已标记失败"
-          : `重试时间=${new Date(retry.runAfter).toISOString()}`,
+          : `重试时间=${beijingTime(retry.runAfter)}`,
       );
       this.#logger.debug(
         "任务 #%s 异常：%s",

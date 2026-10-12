@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import type { Store } from "../storage/store.ts";
 import type { Message } from "../types.ts";
+import { beijingDate } from "../utils/time.ts";
 
 const date = Type.String({
   description: "YYYY-MM-DD 按北京时间零点解释；也可使用带时区的 ISO 时间。",
@@ -106,9 +107,7 @@ export async function selectSources(
     if ("day" in scope) {
       const day =
         scope.day === "today"
-          ? new Intl.DateTimeFormat("sv-SE", {
-              timeZone: "Asia/Shanghai",
-            }).format(request.sentAt)
+          ? beijingDate(request.sentAt)
           : z.iso.date().parse(scope.day);
 
       from = timestamp(day);

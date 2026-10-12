@@ -1,5 +1,6 @@
 import type { Store } from "../storage/store.ts";
 import type { ChatMessage, Message } from "../types.ts";
+import { beijingTime } from "../utils/time.ts";
 
 async function messageText(store: Store, message: Message): Promise<string> {
   if (message.noteId !== null) {
@@ -32,7 +33,7 @@ export async function messageChunks(
   let size = 2;
 
   for (const message of messages) {
-    const text = `${message.recalledAt ? `[该消息已于 ${new Date(message.recalledAt).toISOString()} 撤回；以下为留存原文]\n` : ""}${await messageText(store, message)}`;
+    const text = `${message.recalledAt ? `[该消息已于 ${beijingTime(message.recalledAt)} 撤回；以下为留存原文]\n` : ""}${await messageText(store, message)}`;
     const quote = message.replyTo
       ? await store.quoted(message.groupId, message.replyTo)
       : null;
@@ -51,7 +52,7 @@ export async function messageChunks(
         mentions: message.segments
           .filter((segment) => segment.type === "at")
           .map((segment) => String(segment.data.qq)),
-        time: new Date(message.sentAt).toISOString(),
+        time: beijingTime(message.sentAt),
         text: text.slice(index * length, (index + 1) * length),
         replyTo: quote
           ? `m${quote.id}`

@@ -5,6 +5,7 @@ import { Type } from "typebox";
 import type { Config } from "../config.ts";
 import type { Store } from "../storage/store.ts";
 import type { Message, Topic } from "../types.ts";
+import { beijingTime } from "../utils/time.ts";
 import { messageChunks } from "./messages.ts";
 import type { Notes } from "./notes.ts";
 import { selectSources, sourceScope } from "./sources.ts";
@@ -371,17 +372,28 @@ export function recordingTools(
                         note.sections.flatMap((section) => section.messageIds),
                       ).size
                     : null,
-                deliveries: await store.deliveries.forNote(note.id),
+                deliveries: (await store.deliveries.forNote(note.id)).map(
+                  (delivery) => ({
+                    ...delivery,
+                    createdAt: beijingTime(delivery.createdAt),
+                  }),
+                ),
               }
             : null,
           needsUpdate: topic.generation !== topic.noteGeneration,
-          tasks: await store.jobs.forTopic(topic.id),
+          tasks: (await store.jobs.forTopic(topic.id)).map((task) => ({
+            ...task,
+            runAfter: beijingTime(task.runAfter),
+          })),
           samples: samples.map((source) => ({
             id: `m${source.id}`,
-            time: new Date(source.sentAt).toISOString(),
+            time: beijingTime(source.sentAt),
             author: source.displayName,
             excerpt: source.text.slice(0, 500),
-            recalledAt: source.recalledAt,
+            recalledAt:
+              source.recalledAt === null
+                ? null
+                : beijingTime(source.recalledAt),
           })),
         });
       },

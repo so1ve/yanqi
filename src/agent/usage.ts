@@ -1,5 +1,6 @@
 import type { Config } from "../config.ts";
 import type { Store } from "../storage/store.ts";
+import { beijingDate } from "../utils/time.ts";
 
 export class AiSizeError extends Error {}
 
@@ -19,7 +20,7 @@ export async function reserveCall(
   purpose: string,
 ): Promise<void> {
   const now = Date.now();
-  const day = new Date(now + 8 * 3_600_000).toISOString().slice(0, 10);
+  const day = beijingDate(now);
   const allowed = await store.reserveCall(
     day,
     model,
