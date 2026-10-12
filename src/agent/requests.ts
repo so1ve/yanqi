@@ -24,9 +24,9 @@ export async function handleRequest(
   notes: Notes,
   processPending: () => void,
 ): Promise<void> {
-  const message = await store.messages.get(messageId);
+  const message = await store.messages.getRequest(messageId);
 
-  if (message.recalledAt !== null) {
+  if (!message) {
     return;
   }
 
@@ -46,16 +46,11 @@ export async function handleRequest(
     Math.floor(config.AI_INPUT_CHARS / 4),
   );
   const memories = await store.memories.list(message.groupId, message.userId);
-  const isAdmin =
-    config.ADMIN_IDS.includes(message.userId) ||
-    message.role === "admin" ||
-    message.role === "owner";
   const tools = {
     store,
     message,
     config,
     notes,
-    isAdmin,
     wake: processPending,
   };
 
@@ -99,7 +94,6 @@ export async function handleRequest(
         }),
       ),
       memory: { recent: memories.slice(0, 6), count: memories.length },
-      isAdmin,
       now: beijingTime(message.sentAt),
       timeZone: "Asia/Shanghai",
       today: beijingDate(message.sentAt),

@@ -52,8 +52,8 @@ export class Secretary {
                 logDetail(failureMessage(error), this.#config),
               ),
             );
-        } else if (this.#config.AUTO_REPLY && !message.isBot) {
-          await this.#store.jobs.observe(message);
+        } else if (this.#config.AUTO_REPLY) {
+          await this.#store.messages.observe(message);
         }
 
         this.#logger[message.command ? "info" : "debug"](

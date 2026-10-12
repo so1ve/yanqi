@@ -11,7 +11,6 @@ export interface ToolContext {
   config: Config;
   store: Store;
   message: Message;
-  isAdmin: boolean;
   notes: Notes;
   wake: () => void;
 }
@@ -78,10 +77,4 @@ export async function getTopic({ store, message }: ToolContext, id: string) {
   }
 
   return topic;
-}
-
-export function requireAdmin({ isAdmin }: ToolContext): void {
-  if (!isAdmin) {
-    throw new Error("此操作需要群主、群管理员或配置中的管理员权限");
-  }
 }

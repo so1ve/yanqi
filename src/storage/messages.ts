@@ -1,15 +1,26 @@
 import assert from "node:assert/strict";
 
-import type { IncomingMessage, Message } from "../types.ts";
+import type { IncomingMessage, JobPayloads, Message } from "../types.ts";
 import { enqueueJob } from "./jobs.ts";
 import type { Database } from "./schema.ts";
 import { linkMessages, messageChanged } from "./topic-sources.ts";
 
 export class Messages {
   #db: Database;
+  #adminIds: string[];
 
-  constructor(db: Database) {
+  constructor(db: Database, adminIds: string[]) {
     this.#db = db;
+    this.#adminIds = adminIds;
+  }
+
+  #canInteract(message: IncomingMessage | Message): boolean {
+    return (
+      !message.isBot &&
+      (this.#adminIds.includes(message.userId) ||
+        message.role === "owner" ||
+        message.role === "admin")
+    );
   }
 
   public capture(input: IncomingMessage): Promise<Message | null> {
@@ -43,23 +54,25 @@ export class Messages {
         return null;
       }
 
-      const waiting = input.isBot
-        ? []
-        : await db.get("messages", {
+      const canInteract = this.#canInteract(input);
+      const waiting = canInteract
+        ? await db.get("messages", {
             groupId: input.groupId,
             userId: input.userId,
             awaitingReply: true,
             recalledAt: { $exists: false },
-          });
-      const quote = input.replyTo
-        ? await db.get("messages", {
-            groupId: input.groupId,
-            messageId: input.replyTo,
-            isBot: true,
           })
         : [];
+      const quote =
+        canInteract && input.replyTo
+          ? await db.get("messages", {
+              groupId: input.groupId,
+              messageId: input.replyTo,
+              isBot: true,
+            })
+          : [];
       const command =
-        !input.isBot &&
+        canInteract &&
         (input.addressed || waiting.length > 0 || quote.length > 0);
 
       if (waiting.length > 0) {
@@ -157,9 +170,59 @@ export class Messages {
     return message;
   }
 
+  public async getRequest(id: number): Promise<Message | null> {
+    const message = await this.get(id);
+
+    // 队列可能跨重启保留，读取时使用当前配置的名单。
+    return message.recalledAt === null && this.#canInteract(message)
+      ? message
+      : null;
+  }
+
+  public async observe(message: Message): Promise<void> {
+    if (!this.#canInteract(message)) {
+      return;
+    }
+
+    return this.#db.transact(async (db) => {
+      const [pending] = await db.get("jobs", {
+        "kind": "observe",
+        "state": "pending",
+        "payload.groupId": message.groupId,
+      });
+
+      if (pending) {
+        const payload = pending.payload as JobPayloads["observe"];
+
+        await db.set(
+          "jobs",
+          { id: pending.id },
+          {
+            payload: {
+              ...payload,
+              messageIds: [...payload.messageIds, message.id],
+            },
+          },
+        );
+      } else {
+        // 从第一条消息起收集一秒，后续消息不延后处理时间。
+        await enqueueJob(
+          db,
+          "observe",
+          `observe:${message.id}`,
+          {
+            groupId: message.groupId,
+            messageIds: [message.id],
+          },
+          message.receivedAt + 1000,
+        );
+      }
+    });
+  }
+
   public async awaitReply(request: Message): Promise<void> {
     await this.#db.transact(async (db) => {
-      const [next] = await db.get(
+      const following = await db.get(
         "messages",
         {
           groupId: request.groupId,
@@ -167,8 +230,9 @@ export class Messages {
           id: { $gt: request.id },
           recalledAt: { $exists: false },
         },
-        { sort: { id: "asc" }, limit: 1 },
+        { sort: { id: "asc" } },
       );
+      const next = following.find((message) => this.#canInteract(message));
 
       if (next) {
         await db.set("messages", { id: next.id }, { command: true });
@@ -294,7 +358,9 @@ export class Messages {
         recalledAt: { $exists: false },
       });
 
-      for (const message of messages) {
+      for (const message of messages.filter((item) =>
+        this.#canInteract(item),
+      )) {
         await db.set("messages", { id: message.id }, { command: true });
         await enqueueJob(db, "intent", `intent:${message.id}`, {
           groupId,

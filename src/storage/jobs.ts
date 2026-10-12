@@ -3,7 +3,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import { Logger } from "koishi";
 
-import type { Job, JobKind, JobPayloads, Message, Topic } from "../types.ts";
+import type { Job, JobKind, JobPayloads, Topic } from "../types.ts";
 import type { Database } from "./schema.ts";
 
 const logger = new Logger("yanqi:jobs");
@@ -80,43 +80,6 @@ export class JobQueue {
         requested,
       },
     );
-  }
-
-  public observe(message: Message): Promise<void> {
-    return this.#db.transact(async (db) => {
-      const [pending] = await db.get("jobs", {
-        "kind": "observe",
-        "state": "pending",
-        "payload.groupId": message.groupId,
-      });
-
-      if (pending) {
-        const payload = pending.payload as JobPayloads["observe"];
-
-        await db.set(
-          "jobs",
-          { id: pending.id },
-          {
-            payload: {
-              ...payload,
-              messageIds: [...payload.messageIds, message.id],
-            },
-          },
-        );
-      } else {
-        // 从第一条消息起收集一秒，后续消息不延后处理时间。
-        await enqueueJob(
-          db,
-          "observe",
-          `observe:${message.id}`,
-          {
-            groupId: message.groupId,
-            messageIds: [message.id],
-          },
-          message.receivedAt + 1000,
-        );
-      }
-    });
   }
 
   public async hasDetection(groupId: string): Promise<boolean> {

@@ -45,7 +45,7 @@ export function replyTool(context: ToolContext) {
           state === "done"
             ? "已发送到 QQ 群，本次答复结束，不再补发状态。"
             : state === "failed"
-              ? "QQ 发送失败，回复已保留，可由管理员重试发送。"
+              ? "QQ 发送失败，回复已保留，可以重试发送。"
               : "QQ 尚未确认发送，回复已保留，不要重复回复或声称已发送。",
       };
     },

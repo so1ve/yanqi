@@ -2,7 +2,7 @@ import { Type } from "typebox";
 
 import { taskStatus } from "../../tasks/status.ts";
 import type { ToolContext } from "./context.ts";
-import { object, requireAdmin, tool } from "./context.ts";
+import { object, tool } from "./context.ts";
 
 const parameters = Type.Union([
   object({ action: Type.Literal("status") }),
@@ -26,7 +26,7 @@ export function taskTool(context: ToolContext) {
   return tool(
     context,
     "task",
-    "inspect 查看任务详情；wait 等待完成并读取最新结果；retry 重试指定失败任务并等待。问图片内容先等待对应任务。附件可直接重试，其他重试需管理员。status 查本群总体状态；retry_failed 重试本群失败的后台和发送任务，需管理员。对话不会从头重跑。",
+    "inspect 查看任务详情；wait 等待完成并读取最新结果；retry 重试指定失败任务并等待。问图片内容先等待对应任务。status 查本群总体状态；retry_failed 重试本群失败的后台和发送任务。对话不会从头重跑。",
     parameters,
     async (args, signal) => {
       if (args.action === "status") {
@@ -41,7 +41,6 @@ export function taskTool(context: ToolContext) {
       }
 
       if (args.action === "retry_failed") {
-        requireAdmin(context);
         const jobs = await store.jobs.retryFailed(message.groupId);
         const deliveries = await store.deliveries.retryFailed(message.groupId);
 
@@ -60,14 +59,8 @@ export function taskTool(context: ToolContext) {
           );
         }
 
-        if (action === "retry") {
-          if (job.kind !== "asset") {
-            requireAdmin(context);
-          }
-
-          if (job.state === "failed") {
-            await store.jobs.restart(message.groupId, id);
-          }
+        if (action === "retry" && job.state === "failed") {
+          await store.jobs.restart(message.groupId, id);
         }
 
         if (job.kind === "asset" && "assetId" in job.payload) {

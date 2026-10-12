@@ -1,7 +1,7 @@
 import type { Config } from "../config.ts";
 import { contextWithin, messageChunks } from "../recording/messages.ts";
 import type { Store } from "../storage/store.ts";
-import type { Job } from "../types.ts";
+import type { Job, Message } from "../types.ts";
 import type { Ai } from "./ai.ts";
 
 export async function observeRecordingRequests(
@@ -16,10 +16,9 @@ export async function observeRecordingRequests(
 
   const { groupId, messageIds } = job.payload;
   const messages = (
-    await Promise.all(messageIds.map((id) => store.messages.get(id)))
+    await Promise.all(messageIds.map((id) => store.messages.getRequest(id)))
   ).filter(
-    (message) =>
-      !message.isBot && !message.command && message.recalledAt === null,
+    (message): message is Message => message !== null && !message.command,
   );
 
   if (messages.length === 0) {

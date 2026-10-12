@@ -26,10 +26,10 @@ export class Store {
   public readonly deliveries: DeliveryQueue;
   public readonly memories: Memories;
 
-  constructor(db: Database, directory: string) {
+  constructor(db: Database, directory: string, adminIds: string[]) {
     this.#db = db;
     this.directory = directory;
-    this.messages = new Messages(db);
+    this.messages = new Messages(db, adminIds);
     this.topics = new Topics(db);
     this.recordings = new Recordings(db);
     this.notes = new SavedNotes(db);

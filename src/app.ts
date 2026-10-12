@@ -35,7 +35,7 @@ export async function startApplication(config: Config): Promise<App> {
 
   await app.start();
 
-  const store = new Store(app.database, config.DATA_DIR);
+  const store = new Store(app.database, config.DATA_DIR, config.ADMIN_IDS);
 
   await store.initialize(config.GROUP_IDS);
   const secretary = new Secretary(app, config, store);
