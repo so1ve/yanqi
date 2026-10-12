@@ -2,6 +2,7 @@ import type { AgentState } from "@earendil-works/pi-agent-core";
 import { Agent } from "@earendil-works/pi-agent-core";
 import type { ImageContent, Model, UserMessage } from "@earendil-works/pi-ai";
 import { streamSimple } from "@earendil-works/pi-ai/api/openai-completions";
+import { jsonrepair } from "jsonrepair";
 import { Logger } from "koishi";
 import type { Static, TSchema } from "typebox";
 import * as Value from "typebox/value";
@@ -47,11 +48,22 @@ export class AgentRuntime {
 
     try {
       json = JSON.parse(text);
-    } catch (error) {
-      throw new AiError(
-        "解析 AI 返回的 JSON",
-        `${purpose} 未返回合法 JSON（model=${model.model}，${text.length} 字符）`,
-        { cause: error },
+    } catch {
+      try {
+        json = JSON.parse(jsonrepair(text));
+      } catch (error) {
+        throw new AiError(
+          "解析 AI 返回的 JSON",
+          `${purpose} 返回的 JSON 无法修复（model=${model.model}，${text.length} 字符）`,
+          { cause: error },
+        );
+      }
+
+      this.#logger.info(
+        "%s %s JSON 语法已修复（model=%s）",
+        logContext.getStore()?.task ?? "AI",
+        purpose,
+        model.model,
       );
     }
 
