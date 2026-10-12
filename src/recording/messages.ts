@@ -45,7 +45,12 @@ export async function messageChunks(
     for (let index = 0; index < parts; index++) {
       const item: ChatMessage = {
         id: `m${message.id}`,
-        author: `${message.displayName} (${message.userId})`,
+        author: message.displayName,
+        userId: message.userId,
+        isBot: message.isBot,
+        mentions: message.segments
+          .filter((segment) => segment.type === "at")
+          .map((segment) => String(segment.data.qq)),
         time: new Date(message.sentAt).toISOString(),
         text: text.slice(index * length, (index + 1) * length),
         replyTo: quote

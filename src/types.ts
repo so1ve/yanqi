@@ -93,6 +93,9 @@ export interface Note {
 export interface ChatMessage {
   id: string;
   author: string;
+  userId: string;
+  isBot: boolean;
+  mentions: string[];
   time: string;
   text: string;
   replyTo: string | null;

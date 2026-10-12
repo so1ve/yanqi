@@ -42,6 +42,7 @@ export async function handleRequest(
   await ai.request(
     {
       request,
+      self: { userId: config.BOT_QQ, names: ["言栖", "小栖"] },
       quoted,
       context,
       topics: (await store.topics(message.groupId, 15)).map(
