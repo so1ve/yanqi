@@ -1,7 +1,11 @@
 export interface DecisionRequest {
   input: string;
-  instructions: string;
-  criteria: Record<string, string>;
+  questions: Record<
+    string,
+    { instructions: string; criteria: Record<string, string> }
+  >;
 }
 
-export type EvaluateDecision = (request: DecisionRequest) => Promise<unknown>;
+export type EvaluateDecision = (
+  request: DecisionRequest,
+) => Promise<Record<string, unknown>>;

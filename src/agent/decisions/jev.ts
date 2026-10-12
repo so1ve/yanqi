@@ -10,7 +10,7 @@ const responseSchema = Type.Object({
 
 export async function requestJev(
   config: Config,
-  { input, instructions, criteria }: DecisionRequest,
+  { input, questions }: DecisionRequest,
 ): Promise<unknown> {
   const response = await fetch(config.DECISION_URL, {
     method: "POST",
@@ -23,7 +23,12 @@ export async function requestJev(
     body: JSON.stringify({
       model: config.DECISION_MODEL,
       state: input,
-      questions: { action: { type: "choice", instructions, criteria } },
+      questions: Object.fromEntries(
+        Object.entries(questions).map(([name, question]) => [
+          name,
+          { type: "choice", ...question },
+        ]),
+      ),
     }),
   });
 
@@ -34,14 +39,14 @@ export async function requestJev(
   return response.json();
 }
 
-export function readJevChoice(body: unknown): unknown {
+export function readJevAnswers(body: unknown): Record<string, unknown> {
   if (!Value.Check(responseSchema, body)) {
     throw new Error("决策服务返回的 answers 格式不正确");
   }
 
-  return body.answers.action;
+  return body.answers;
 }
 
 export function createJevDecision(config: Config): EvaluateDecision {
-  return async (request) => readJevChoice(await requestJev(config, request));
+  return async (request) => readJevAnswers(await requestJev(config, request));
 }

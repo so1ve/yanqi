@@ -39,7 +39,7 @@ export async function observeRecordingRequests(
   );
 
   for (const chunk of chunks) {
-    const requestIds = await ai.dialog.recordingRequests(chunk, context);
+    const requestIds = await ai.decisions.recordingRequests(chunk, context);
 
     const requests = await store.messages.scheduleRequests(
       groupId,

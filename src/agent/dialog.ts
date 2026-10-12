@@ -2,11 +2,9 @@ import { readFileSync } from "node:fs";
 
 import type { AgentState } from "@earendil-works/pi-agent-core";
 import { Logger } from "koishi";
-import { Type } from "typebox";
 
 import type { Config } from "../config.ts";
 import type { Store } from "../storage/store.ts";
-import type { ChatMessage } from "../types.ts";
 import { failureMessage } from "../utils/errors.ts";
 import { logDetail } from "../utils/logging.ts";
 import { prompts } from "./prompts/conversation.ts";
@@ -48,37 +46,6 @@ export class DialogAI {
       this.#config.AI_INTENT_MODEL ?? this.#config.AI_MODEL,
       tools,
     );
-  }
-
-  public async recordingRequests(
-    messages: ChatMessage[],
-    context: ChatMessage[],
-  ): Promise<string[]> {
-    const result = await this.#runtime.json(
-      "observe",
-      Type.Object(
-        {
-          requestIds: Type.Array(
-            Type.Enum([...new Set(messages.map((message) => message.id))], {
-              type: "string",
-            }),
-          ),
-        },
-        { additionalProperties: false },
-      ),
-      prompts.recordingRequests,
-      {
-        messages,
-        context,
-        self: {
-          userId: this.#config.BOT_QQ,
-          names: ["言栖", "小栖", "栖", "bot"],
-        },
-      },
-      this.#config.AI_DETECT_MODEL ?? this.#config.AI_MODEL,
-    );
-
-    return result.requestIds;
   }
 
   public async voice(groupId: string, message: string): Promise<string> {

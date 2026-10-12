@@ -11,23 +11,25 @@ export function createOpenAIDecision(config: Config): EvaluateDecision {
     maxRetries: 0,
   });
 
-  return async ({ input, instructions, criteria }) => {
+  return async ({ input, questions }) => {
     const result = await client.decisions.create({
       model: config.DECISION_MODEL,
       input,
-      questions: [
-        {
+      questions: Object.entries(questions).map(
+        ([name, { instructions, criteria }]) => ({
           type: "choice",
-          name: "action",
+          name,
           instructions,
           choices: Object.entries(criteria).map(([value, description]) => ({
             value,
             description,
           })),
-        },
-      ],
+        }),
+      ),
     });
 
-    return result.answers.find((item) => item.name === "action");
+    return Object.fromEntries(
+      result.answers.map((answer) => [answer.name, answer]),
+    );
   };
 }

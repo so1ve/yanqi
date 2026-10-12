@@ -7,16 +7,17 @@ import { RecordingAI } from "./recording.ts";
 import { AgentRuntime } from "./runtime.ts";
 
 export class Ai {
+  public readonly decisions: Decisions;
   public readonly dialog: DialogAI;
   public readonly recording: RecordingAI;
   public readonly media: MediaAI;
 
   constructor(config: Config, store: Store) {
     const runtime = new AgentRuntime(config, store);
-    const decisions = new Decisions(config, store, runtime);
+    this.decisions = new Decisions(config, store, runtime);
 
     this.dialog = new DialogAI(config, store, runtime);
-    this.recording = new RecordingAI(config, runtime, decisions);
+    this.recording = new RecordingAI(config, runtime, this.decisions);
     this.media = new MediaAI(config, store, runtime);
   }
 }

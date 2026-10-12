@@ -2,7 +2,7 @@ import { Type } from "typebox";
 import * as Value from "typebox/value";
 
 import type { Config } from "../../config.ts";
-import { readJevChoice, requestJev } from "./jev.ts";
+import { readJevAnswers, requestJev } from "./jev.ts";
 import type { EvaluateDecision } from "./types.ts";
 
 const responseSchema = Type.Object({
@@ -19,6 +19,6 @@ export function createClefDecision(config: Config): EvaluateDecision {
     }
 
     // Clef 复用 JEV 协议，结果包在 Workers AI 的 result 字段里。
-    return readJevChoice(body.result);
+    return readJevAnswers(body.result);
   };
 }

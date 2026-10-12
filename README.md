@@ -36,7 +36,9 @@ AI 只有调用 `reply` 才能向群里说话；会话中的普通文本和分�
 
 排查问题时设 `LOG_LEVEL=debug`，查看 `docker compose logs -f --no-log-prefix yanqi`。任务、群号、请求消息编号和 AI 调用编号会关联模型请求、工具调用与结果；每轮还会记录用量行号、提供商、输入字符数和耗时。`LOG_DETAIL_CHARS` 控制参数、结果和异常片段的长度，默认 4000；配置中的密钥会隐藏。
 
-`AI_DETECT_MODEL` 用于记录请求识别和自动话题识别，可选便宜的小模型。两者分别执行；前者只决定是否交给主 Agent，后者判断哪些原文值得自动归档。@ 请求直接交给主 Agent。用户请求的记录范围由主 Agent 确定，不由入口模型猜测。
+`DECISION_PROVIDER` 指定未 @ 消息的入口决策模型。同一批消息共用上下文，逐条判断是否需要处理记录请求；明确通过的交给主 Agent，明确忽略的不再调用对话模型。低于 `DECISION_CONFIDENCE`、接口失败或输入超过预算时，用 `AI_DETECT_MODEL` 补判尚无结论的消息。设为 `llm` 时直接由它判断；`AI_DETECT_MODEL` 留空使用 `AI_MODEL`。@ 请求直接通过决策并标记 🐳。用户请求的记录范围由主 Agent 确定，入口模型只决定是否接收请求。
+
+自动话题识别仍使用 `AI_DETECT_MODEL`，判断哪些原文值得自动归档，与用户的记录请求分开运行。
 
 `AUTO_REPLY=true` 时，获准交互成员的新消息收集一秒后进入记录请求识别队列，实际启动还受 `WORK_INTERVAL_MS` 轮询和排队影响。模型按语义判断用户是否在请机器人记录、整理、转写或调整记录，不匹配固定称呼或关键词；寒暄、只叫名字、成员之间的对话不会因此唤起主 Agent。记录范围尚不清楚也会交给主 Agent 处理。暂停自动归档、话题识别失败都不会阻塞这个入口；失败或重启后不重放旧请求。设为 `false` 可关闭未 @ 请求的识别，@、引用和追问后的回答继续有效。沿用 `AUTO_REPLY` 配置名，已有 `.env` 不需要改动。
 
@@ -76,7 +78,7 @@ AI 只有调用 `reply` 才能向群里说话；会话中的普通文本和分�
 
 对话调用记录工具后拿到具体任务 ID，可以用 `task` 等待结果。后台整理先写草稿，再保存完整版本，最后决定发布。发送全文直接读数据库。后台保存通知通过 `AI_REPLY_MODEL` 调整措辞，普通对话由 `AI_INTENT_MODEL` 直接生成。数据库和 Markdown 的格式没有改变。
 
-决策提供者分别放在 `agent/decisions/llm.ts`、`openai.ts`、`jev.ts` 和 `clef.ts`。OpenAI 与 Vercel 共用 SDK 协议实现，Clef 复用 JEV 请求格式并解析 Workers AI 的响应封装。独立服务目前提供纪要发布建议，最终仍由 LLM 结合完整上下文判断；未启用独立服务时直接使用 LLM。
+决策提供者分别放在 `agent/decisions/llm.ts`、`openai.ts`、`jev.ts` 和 `clef.ts`。OpenAI 与 Vercel 共用 SDK 协议实现，Clef 复用 JEV 请求格式并解析 Workers AI 的响应封装。独立服务负责未 @ 请求的入口判断，也提供纪要发布建议；发布仍由 LLM 结合完整上下文作最终判断。未启用独立服务时直接使用 LLM。
 
 ## 用 Docker 启动
 
@@ -98,6 +100,18 @@ AI_AUDIO_MODEL=https://audio.example/v1,audio-api-key,audio-model
 ```
 
 `AI_DETECT_MODEL`、`AI_INTENT_MODEL` 和 `AI_REPLY_MODEL` 留空时使用 `AI_MODEL` 的整套配置；`AI_VISION_MODEL` 和 `AI_AUDIO_MODEL` 留空时不解析对应附件。图片服务需要支持图片输入，音频服务需要支持 OpenAI 兼容的 `/audio/transcriptions`。原来的 `AI_BASE_URL`、`AI_API_KEY` 已合并进各模型配置，独立决策服务仍使用 `DECISION_*` 配置。
+
+使用 [Cloudflare Clef](https://developers.cloudflare.com/workers-ai/models/clef/) 做入口判断时，在 `.env` 中填写：
+
+```dotenv
+DECISION_PROVIDER=clef
+DECISION_URL=https://api.cloudflare.com/client/v4/accounts/YOUR_ACCOUNT_ID/ai/run/@cf/cloudflare/clef
+DECISION_API_KEY=
+DECISION_MODEL=clef
+DECISION_CONFIDENCE=0.8
+```
+
+在 Cloudflare 控制台进入 **Workers AI → Use REST API → Create a Workers AI API Token**。把生成的 Token 填入 `DECISION_API_KEY`，不加 `Bearer ` 前缀；把同页 **Get Account ID** 的账号 ID 替换到地址的 `YOUR_ACCOUNT_ID`。若自行创建 Token，需给该账号授予 **Workers AI – Read** 和 **Workers AI – Edit** 权限，详见 [Cloudflare REST API 配置说明](https://developers.cloudflare.com/workers-ai/get-started/rest-api/)。`DECISION_MODEL` 填 `clef`，完整模型路径只出现在 URL 中。补齐 Token 和账号 ID 后再启动。
 
 然后在项目目录运行：
 
