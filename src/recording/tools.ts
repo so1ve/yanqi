@@ -279,7 +279,7 @@ export function recordingTools(
     ),
     tool(
       "search",
-      "按标题、纪要内容或编号查找本群已有记录，返回标题、简介、完整 ID 和整理状态。它不会搜索全部聊天；查原文用 read_history，跨历史收集内容另建文档用 record。向群发送全文时调用 send。",
+      "按标题、纪要内容或编号查找本群已有记录。没有纪要命中时，补充同一查询的聊天原文片段，便于直接 record。原文是字面搜索结果，不代表完整讨论；按范围语义整理用 record，查上下文用 read_history，发送纪要用 send。",
       object({
         query: Type.String({ minLength: 1, maxLength: 200, pattern: "\\S" }),
       }),
@@ -299,7 +299,19 @@ export function recordingTools(
                 }),
               ),
             )
-          : "本群没有找到匹配的记录。";
+          : JSON.stringify({
+              records: [],
+              historyMatches: await messageChunks(
+                store,
+                await store.searchMessages(
+                  message.groupId,
+                  query.trim(),
+                  message.id - 1,
+                ),
+                Math.floor(config.AI_INPUT_CHARS / 4),
+              ).then((pages) => pages[0] ?? []),
+              hint: "没有已整理的纪要不代表没有讨论。这些只是原文字面匹配的片段；已有明确范围和目标时直接 record，不要求用户提供纪要 ID。",
+            });
       },
     ),
     tool(

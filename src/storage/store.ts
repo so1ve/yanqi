@@ -753,6 +753,28 @@ export class Store {
     );
   }
 
+  public searchMessages(
+    groupId: string,
+    query: string,
+    through: number,
+  ): Promise<Message[]> {
+    const literal = new RegExp(
+      query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+      "i",
+    );
+
+    return this.#db.get(
+      "messages",
+      {
+        groupId,
+        id: { $lte: through },
+        isBot: false,
+        text: literal,
+      },
+      { sort: { id: "desc" }, limit: 8 },
+    );
+  }
+
   public reserveCall(
     day: string,
     model: string,
