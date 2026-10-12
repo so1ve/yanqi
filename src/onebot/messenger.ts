@@ -1,5 +1,5 @@
 import type { Bot, Context } from "koishi";
-import { h, Logger } from "koishi";
+import { Logger, h } from "koishi";
 import type { OneBot } from "koishi-plugin-adapter-onebot";
 
 import type { Config } from "../config.ts";
@@ -20,7 +20,7 @@ function textParts(text: string, length: number): string[] {
     const chunk = chars.slice(position, position + length);
     const newline = chunk.lastIndexOf("\n");
     const size =
-      position + length < chars.length && newline >= 0
+      position + length < chars.length && newline !== -1
         ? newline + 1
         : chunk.length;
 

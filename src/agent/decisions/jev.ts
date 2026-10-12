@@ -47,6 +47,7 @@ export function readJevAnswers(body: unknown): Record<string, unknown> {
   return body.answers;
 }
 
-export function createJevDecision(config: Config): EvaluateDecision {
-  return async (request) => readJevAnswers(await requestJev(config, request));
-}
+export const createJevDecision =
+  (config: Config): EvaluateDecision =>
+  async (request) =>
+    readJevAnswers(await requestJev(config, request));

@@ -10,8 +10,9 @@ const responseSchema = Type.Object({
   result: Type.Unknown(),
 });
 
-export function createClefDecision(config: Config): EvaluateDecision {
-  return async (request) => {
+export const createClefDecision =
+  (config: Config): EvaluateDecision =>
+  async (request) => {
     const body = await requestJev(config, request);
 
     if (!Value.Check(responseSchema, body)) {
@@ -21,4 +22,3 @@ export function createClefDecision(config: Config): EvaluateDecision {
     // Clef 复用 JEV 协议，结果包在 Workers AI 的 result 字段里。
     return readJevAnswers(body.result);
   };
-}

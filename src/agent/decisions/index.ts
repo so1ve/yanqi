@@ -22,15 +22,22 @@ const choiceSchema = Type.Object({
 
 function createIndependentDecision(config: Config): EvaluateDecision | null {
   switch (config.DECISION_PROVIDER) {
-    case "llm":
+    case "llm": {
       return null;
+    }
+
     case "openai":
-    case "vercel":
+    case "vercel": {
       return createOpenAIDecision(config);
-    case "jev":
+    }
+
+    case "jev": {
       return createJevDecision(config);
-    case "clef":
+    }
+
+    case "clef": {
       return createClefDecision(config);
+    }
   }
 }
 
@@ -59,6 +66,7 @@ export class Decisions {
     // Clef 每次最多接受 64 个问题，同一批消息共用上下文。
     for (let offset = 0; offset < ids.length; offset += 64) {
       const candidates = ids.slice(offset, offset + 64);
+
       selected.push(...(await this.#classify(input, candidates)));
     }
 

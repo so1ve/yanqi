@@ -2,12 +2,9 @@ import { decodeHTML } from "entities";
 import type { Token } from "marked";
 import { Marked } from "marked";
 
-function isTranscriptLink(token: Token): boolean {
-  return (
-    token.type === "link" &&
-    /^(?:\.\/)?transcript\.md(?:[?#].*)?$/.test(token.href)
-  );
-}
+const isTranscriptLink = (token: Token): boolean =>
+  token.type === "link" &&
+  /^(?:\.\/)?transcript\.md(?:[?#].*)?$/.test(token.href);
 
 const markdown = new Marked({
   renderer: {
@@ -120,6 +117,5 @@ const markdown = new Marked({
   },
 });
 
-export function renderQQ(text: string): string {
-  return markdown.parse(text, { async: false }).trimEnd();
-}
+export const renderQQ = (text: string): string =>
+  markdown.parse(text, { async: false }).trimEnd();

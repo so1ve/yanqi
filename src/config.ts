@@ -84,9 +84,8 @@ function readModel(value: string, field: string) {
   };
 }
 
-function readOptionalModel(value: string | undefined, field: string) {
-  return value ? readModel(value, field) : undefined;
-}
+const readOptionalModel = (value: string | undefined, field: string) =>
+  value ? readModel(value, field) : undefined;
 
 export type ModelConfig = ReturnType<typeof readModel>;
 export type Config = ReturnType<typeof readConfig>;

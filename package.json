@@ -9,8 +9,8 @@
   "scripts": {
     "check": "tsc",
     "dev": "tsx watch --include \"src/**/*.ts\" --env-file-if-exists=.env run.mjs",
-    "lint": "eslint . && prettier --check .",
-    "lint:fix": "eslint --fix . && prettier --write .",
+    "lint": "eslint . && prettier --check . '!data/**'",
+    "lint:fix": "eslint --fix . && prettier --write . '!data/**'",
     "start": "node --env-file-if-exists=.env run.mjs"
   },
   "dependencies": {

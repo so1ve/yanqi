@@ -9,7 +9,6 @@ const require = createRequire(import.meta.url);
 
 // Koishi 的 ESM loader 无法启动；SQLite 则需要 ESM 入口才能直接导入驱动类。
 const entries = new Map([
-  ["koishi", pathToFileURL(require.resolve("koishi")).href],
   [
     "@koishijs/plugin-database-sqlite",
     new URL(
@@ -17,6 +16,7 @@ const entries = new Map([
       import.meta.resolve("@koishijs/plugin-database-sqlite/package.json"),
     ).href,
   ],
+  ["koishi", pathToFileURL(require.resolve("koishi")).href],
 ]);
 
 await unrun({

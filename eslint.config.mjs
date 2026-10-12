@@ -15,6 +15,13 @@ export default so1ve(
     },
   },
   {
+    files: ["**/*.mjs"],
+    rules: {
+      // JavaScript 已有原生 no-unused-vars 检查，避免 TypeScript 规则误报。
+      "unused-imports/no-unused-vars": "off",
+    },
+  },
+  {
     files: ["**/*.ts", "**/*.mjs"],
     rules: {
       "style/padding-line-between-statements": [
