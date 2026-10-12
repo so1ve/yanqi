@@ -3,22 +3,18 @@ import { Type } from "typebox";
 import type { Config } from "../config.ts";
 import type { ChatMessage, Topic } from "../types.ts";
 import { beijingTime } from "../utils/time.ts";
-import type { DecisionProvider } from "./decisions.ts";
+import type { Decisions } from "./decisions/index.ts";
 import { prompts } from "./prompts/recording.ts";
 import type { AgentRuntime } from "./runtime.ts";
 import type { Detection } from "./schemas.ts";
-import { detectionSchema, publicationSchema } from "./schemas.ts";
+import { detectionSchema } from "./schemas.ts";
 
 export class RecordingAI {
   #config: Config;
   #runtime: AgentRuntime;
-  #decisions: DecisionProvider;
+  #decisions: Decisions;
 
-  constructor(
-    config: Config,
-    runtime: AgentRuntime,
-    decisions: DecisionProvider,
-  ) {
+  constructor(config: Config, runtime: AgentRuntime, decisions: Decisions) {
     this.#config = config;
     this.#runtime = runtime;
     this.#decisions = decisions;
@@ -78,7 +74,7 @@ export class RecordingAI {
     return this.#runtime.text("summary_merge", prompts.merge, { sections });
   }
 
-  public async choosePublication(
+  public choosePublication(
     topic: Topic,
     recording: { revision: number; sources: number; requested: boolean },
     context: ChatMessage[],
@@ -103,24 +99,7 @@ export class RecordingAI {
       recent,
       now: beijingTime(Date.now()),
     };
-    const decisionHint = await this.#decisions.choose(
-      "publish",
-      prompts.publishChoice,
-      input,
-      {
-        send: "用户需要这份纪要，或发送有助于当前话题的讨论",
-        notify: "用户正在等保存结果，或简短告知新记录有助于当前讨论；不发全文",
-        silent: "补整理旧聊天、后台更新或当前已无须通知，只保存在本地",
-      },
-    );
 
-    const result = await this.#runtime.json(
-      "publication",
-      publicationSchema,
-      prompts.publication,
-      { ...input, decisionHint },
-    );
-
-    return result.action;
+    return this.#decisions.choosePublication(input);
   }
 }

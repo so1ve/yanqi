@@ -69,11 +69,14 @@ AI 只有调用 `reply` 才能向群里说话；会话中的普通文本和分�
 | `tasks/worker.ts`                             | 领取任务、控制并发、执行和处理失败重试                                              |
 | `agent/requests.ts`                           | 准备当前请求的上下文和工具                                                          |
 | `agent/tools/`                                | 9 个工具入口；统一检查请求是否撤回，各工具只处理当前群的数据                        |
+| `agent/decisions/`                            | LLM、OpenAI/Vercel、JEV、Clef 的决策实现；入口统一处理选择、用量和错误日志          |
 | `agent/dialog.ts`、`recording.ts`、`media.ts` | 分别处理对话与措辞、讨论整理、媒体理解；共用 `runtime.ts` 的模型调用                |
 | `recording/`                                  | 选原文、分段整理、写入纪要和决定是否发布                                            |
 | `storage/`                                    | 按消息、话题、记录、纪要、附件、记忆、用量和队列存取 SQLite；`Store` 只组装这些对象 |
 
 对话调用记录工具后拿到具体任务 ID，可以用 `task` 等待结果。后台整理先写草稿，再保存完整版本，最后决定发布。发送全文直接读数据库。后台保存通知通过 `AI_REPLY_MODEL` 调整措辞，普通对话由 `AI_INTENT_MODEL` 直接生成。数据库和 Markdown 的格式没有改变。
+
+决策提供者分别放在 `agent/decisions/llm.ts`、`openai.ts`、`jev.ts` 和 `clef.ts`。OpenAI 与 Vercel 共用 SDK 协议实现，Clef 复用 JEV 请求格式并解析 Workers AI 的响应封装。独立服务目前提供纪要发布建议，最终仍由 LLM 结合完整上下文判断；未启用独立服务时直接使用 LLM。
 
 ## 用 Docker 启动
 
