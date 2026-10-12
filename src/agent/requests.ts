@@ -42,7 +42,16 @@ export async function handleRequest(
   await ai.request(
     {
       request,
-      self: { userId: config.BOT_QQ, names: ["言栖", "小栖"] },
+      self: {
+        userId: config.BOT_QQ,
+        names: ["言栖", "小栖"],
+        models: {
+          conversation: (config.AI_INTENT_MODEL ?? config.AI_MODEL).model,
+          wording: (config.AI_REPLY_MODEL ?? config.AI_MODEL).model,
+          recording: config.AI_MODEL.model,
+          vision: config.AI_VISION_MODEL?.model ?? null,
+        },
+      },
       quoted,
       context,
       topics: (await store.topics(message.groupId, 15)).map(
