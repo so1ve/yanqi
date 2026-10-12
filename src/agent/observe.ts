@@ -1,4 +1,5 @@
 import type { Config } from "../config.ts";
+import type { Messenger } from "../onebot/messenger.ts";
 import { contextWithin, messageChunks } from "../recording/messages.ts";
 import type { Store } from "../storage/store.ts";
 import type { Job, Message } from "../types.ts";
@@ -9,6 +10,7 @@ export async function observeRecordingRequests(
   config: Config,
   store: Store,
   ai: Ai,
+  messenger: Messenger,
 ): Promise<void> {
   if (!config.AUTO_REPLY) {
     return;
@@ -39,9 +41,13 @@ export async function observeRecordingRequests(
   for (const chunk of chunks) {
     const requestIds = await ai.dialog.recordingRequests(chunk, context);
 
-    await store.messages.scheduleRequests(
+    const requests = await store.messages.scheduleRequests(
       groupId,
       requestIds.map((id) => Number(id.slice(1))),
     );
+
+    for (const message of requests) {
+      void messenger.acknowledge(message);
+    }
   }
 }

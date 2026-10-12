@@ -1,10 +1,12 @@
 import type { Bot, Context } from "koishi";
-import { h } from "koishi";
+import { h, Logger } from "koishi";
 import type { OneBot } from "koishi-plugin-adapter-onebot";
 
 import type { Config } from "../config.ts";
 import type { Store } from "../storage/store.ts";
-import type { Asset, Note, Segment } from "../types.ts";
+import type { Asset, Message, Note, Segment } from "../types.ts";
+import { failureMessage } from "../utils/errors.ts";
+import { logDetail } from "../utils/logging.ts";
 import { renderQQ } from "./render.ts";
 
 type ProtocolBot = Bot & { internal: OneBot.Internal };
@@ -30,6 +32,8 @@ function textParts(text: string, length: number): string[] {
 }
 
 export function createMessenger(config: Config, store: Store, ctx: Context) {
+  const logger = new Logger("yanqi:qq");
+
   function getBot(): ProtocolBot {
     const bot = ctx.bots.find(
       (candidate) => candidate.selfId === config.BOT_QQ,
@@ -74,9 +78,24 @@ export function createMessenger(config: Config, store: Store, ctx: Context) {
     get online(): boolean {
       return ctx.bots.find((bot) => bot.selfId === config.BOT_QQ)?.status === 1;
     },
-    async acknowledge(groupId: string, messageId: string) {
-      if (config.ACK_EMOJI_ID) {
+    async acknowledge({
+      id,
+      groupId,
+      messageId,
+    }: Pick<Message, "id" | "groupId" | "messageId">) {
+      if (!config.ACK_EMOJI_ID) {
+        return;
+      }
+
+      try {
         await getBot().createReaction(groupId, messageId, config.ACK_EMOJI_ID);
+      } catch (error) {
+        logger.warn(
+          "处理标记失败：m%s group=%s %s",
+          id,
+          groupId,
+          logDetail(failureMessage(error), config),
+        );
       }
     },
     async sendText(groupId: string, text: string) {

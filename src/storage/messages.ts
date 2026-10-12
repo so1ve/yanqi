@@ -220,8 +220,8 @@ export class Messages {
     });
   }
 
-  public async awaitReply(request: Message): Promise<void> {
-    await this.#db.transact(async (db) => {
+  public async awaitReply(request: Message): Promise<Message | null> {
+    return this.#db.transact(async (db) => {
       const following = await db.get(
         "messages",
         {
@@ -235,14 +235,22 @@ export class Messages {
       const next = following.find((message) => this.#canInteract(message));
 
       if (next) {
+        if (next.command) {
+          return null;
+        }
+
         await db.set("messages", { id: next.id }, { command: true });
         await enqueueJob(db, "intent", `intent:${next.id}`, {
           groupId: next.groupId,
           messageId: next.id,
         });
-      } else {
-        await db.set("messages", { id: request.id }, { awaitingReply: true });
+
+        return { ...next, command: true };
       }
+
+      await db.set("messages", { id: request.id }, { awaitingReply: true });
+
+      return null;
     });
   }
 
@@ -344,12 +352,12 @@ export class Messages {
   public async scheduleRequests(
     groupId: string,
     messageIds: number[],
-  ): Promise<void> {
+  ): Promise<Message[]> {
     if (messageIds.length === 0) {
-      return;
+      return [];
     }
 
-    await this.#db.transact(async (db) => {
+    return this.#db.transact(async (db) => {
       const messages = await db.get("messages", {
         groupId,
         id: messageIds,
@@ -358,15 +366,17 @@ export class Messages {
         recalledAt: { $exists: false },
       });
 
-      for (const message of messages.filter((item) =>
-        this.#canInteract(item),
-      )) {
+      const requests = messages.filter((message) => this.#canInteract(message));
+
+      for (const message of requests) {
         await db.set("messages", { id: message.id }, { command: true });
         await enqueueJob(db, "intent", `intent:${message.id}`, {
           groupId,
           messageId: message.id,
         });
       }
+
+      return requests.map((message) => ({ ...message, command: true }));
     });
   }
 

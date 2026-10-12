@@ -43,15 +43,7 @@ export class Secretary {
 
       if (message) {
         if (message.command) {
-          void this.#messenger
-            .acknowledge(message.groupId, message.messageId)
-            .catch((error) =>
-              this.#logger.warn(
-                "收到请求的表情回应失败：m%s %s",
-                message.id,
-                logDetail(failureMessage(error), this.#config),
-              ),
-            );
+          void this.#messenger.acknowledge(message);
         } else if (this.#config.AUTO_REPLY) {
           await this.#store.messages.observe(message);
         }

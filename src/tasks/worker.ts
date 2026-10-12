@@ -124,6 +124,7 @@ export class BackgroundTasks {
             this.#store,
             this.#ai,
             this.#notes,
+            this.#messenger,
             () => this.run(),
           );
 
@@ -142,6 +143,7 @@ export class BackgroundTasks {
             this.#config,
             this.#store,
             this.#ai,
+            this.#messenger,
           );
 
           break;

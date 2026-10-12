@@ -1,5 +1,6 @@
 import { Type } from "typebox";
 
+import type { Messenger } from "../../onebot/messenger.ts";
 import type { ToolContext } from "./context.ts";
 import { object, tool } from "./context.ts";
 
@@ -16,7 +17,7 @@ const parameters = object({
   ),
 });
 
-export function replyTool(context: ToolContext) {
+export function replyTool(context: ToolContext, messenger: Messenger) {
   const { store, message, wake } = context;
 
   return tool(
@@ -33,7 +34,11 @@ export function replyTool(context: ToolContext) {
       });
 
       if (enqueued && waitForReply) {
-        await store.messages.awaitReply(message);
+        const next = await store.messages.awaitReply(message);
+
+        if (next) {
+          void messenger.acknowledge(next);
+        }
       }
 
       wake();
