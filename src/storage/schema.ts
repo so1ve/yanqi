@@ -92,6 +92,7 @@ export function defineModels(model: Database): void {
       addressed: { type: "boolean", initial: false },
       role: "string",
       command: { type: "boolean", initial: false },
+      awaitingReply: { type: "boolean", initial: false },
       recalledAt: { type: "integer", nullable: true },
       noteId: { type: "integer", nullable: true },
     },

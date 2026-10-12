@@ -24,6 +24,7 @@ export interface Message extends Omit<IncomingMessage, "raw" | "noteId"> {
   id: number;
   rawJson: string;
   command: boolean;
+  awaitingReply: boolean;
   recalledAt: number | null;
   noteId: number | null;
 }

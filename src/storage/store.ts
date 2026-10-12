@@ -35,8 +35,6 @@ export class Store {
   }
 
   public capture(input: IncomingMessage): Promise<Message | null> {
-    const command = input.addressed && !input.isBot;
-
     return this.#db.transact(async (db) => {
       const [existing] = await db.get("messages", {
         groupId: input.groupId,
@@ -65,6 +63,33 @@ export class Store {
         }
 
         return null;
+      }
+
+      const waiting = input.isBot
+        ? []
+        : await db.get("messages", {
+            groupId: input.groupId,
+            userId: input.userId,
+            awaitingReply: true,
+            recalledAt: { $exists: false },
+          });
+      const quote = input.replyTo
+        ? await db.get("messages", {
+            groupId: input.groupId,
+            messageId: input.replyTo,
+            isBot: true,
+          })
+        : [];
+      const command =
+        !input.isBot &&
+        (input.addressed || waiting.length > 0 || quote.length > 0);
+
+      if (waiting.length > 0) {
+        await db.set(
+          "messages",
+          { id: waiting.map((item) => item.id) },
+          { awaitingReply: false },
+        );
       }
 
       const { raw, ...fields } = input;
@@ -152,6 +177,31 @@ export class Store {
     }
 
     return message;
+  }
+
+  public async awaitReply(request: Message): Promise<void> {
+    await this.#db.transact(async (db) => {
+      const [next] = await db.get(
+        "messages",
+        {
+          groupId: request.groupId,
+          userId: request.userId,
+          id: { $gt: request.id },
+          recalledAt: { $exists: false },
+        },
+        { sort: { id: "asc" }, limit: 1 },
+      );
+
+      if (next) {
+        await db.set("messages", { id: next.id }, { command: true });
+        await enqueueJob(db, "intent", `intent:${next.id}`, {
+          groupId: next.groupId,
+          messageId: next.id,
+        });
+      } else {
+        await db.set("messages", { id: request.id }, { awaitingReply: true });
+      }
+    });
   }
 
   public async quoted(
