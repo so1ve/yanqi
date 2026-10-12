@@ -248,9 +248,15 @@ export function recordingTools(
       }),
       async (args) => {
         const owned = await store.manualTopics(message.groupId, message.userId);
-        const topic = args.topicId ? await getTopic(args.topicId) : owned[0];
+        const topic = args.topicId
+          ? await getTopic(args.topicId)
+          : (owned[0] ??
+            (await store.lastStoppedRecording(
+              message.groupId,
+              message.userId,
+            )));
 
-        if (topic?.mode !== "manual" || topic.state !== "active") {
+        if (topic?.mode !== "manual") {
           return "没有找到正在进行的手动记录。";
         }
 
@@ -258,21 +264,22 @@ export function recordingTools(
           return "请记录的发起人或管理员结束这段记录。";
         }
 
+        if (topic.state === "closed" && topic.endedAtMessageId === null) {
+          return `这份记录已经关闭。${await arrange(topic, topic.directive === "send")}`;
+        }
+
         const included = args.include
           ? await selectSources(store, message, args.include)
           : [];
-
-        if (args.directive !== undefined) {
-          await store.setDirective(topic.id, args.directive, message.id);
-        }
 
         const stopped = await store.stopRecording(
           topic.id,
           message.id,
           included.map((source) => source.id),
+          args.directive,
         );
 
-        return `这段记录已结束。${await arrange(stopped, stopped.directive === "send")}`;
+        return `${topic.state === "closed" ? "这段连续记录此前已结束，继续处理同一份纪要。" : "这段记录已结束。"}${await arrange(stopped, stopped.directive === "send")}`;
       },
     ),
     tool(

@@ -45,6 +45,7 @@ export interface Topic {
   noteGeneration: number;
   directive: "auto" | "send" | "hold";
   directiveMessageId: number | null;
+  endedAtMessageId: number | null;
 }
 
 export interface Asset {

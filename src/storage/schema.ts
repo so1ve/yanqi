@@ -132,6 +132,7 @@ export function defineModels(model: Database): void {
         type: "integer",
         nullable: true,
       },
+      endedAtMessageId: { type: "integer", nullable: true },
     },
     {
       primary: "id",

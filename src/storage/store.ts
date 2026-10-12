@@ -526,13 +526,19 @@ export class Store {
     topicId: string,
     through: number,
     include: number[],
+    directive?: Topic["directive"],
   ): Promise<Topic> {
     return this.#db.transact(async (db) => {
+      const [existing] = await db.get("topics", { id: topicId });
+
+      assert.ok(existing);
+      const endedAtMessageId = existing.endedAtMessageId ?? through;
+
       if (include.length > 0) {
         await this.#link(
           db,
           topicId,
-          include.filter((id) => id < through),
+          include.filter((id) => id < endedAtMessageId),
         );
       }
 
@@ -541,7 +547,7 @@ export class Store {
       assert.ok(topic);
       const removed = await db.remove("topic_messages", {
         topicId,
-        messageId: { $gte: through },
+        messageId: { $gte: endedAtMessageId },
       });
 
       if (removed.removed) {
@@ -557,6 +563,11 @@ export class Store {
       }
 
       topic.state = "closed";
+      topic.endedAtMessageId = endedAtMessageId;
+      if (directive !== undefined) {
+        topic.directive = directive;
+        topic.directiveMessageId = through;
+      }
       await db.set(
         "topics",
         { id: topicId },
@@ -564,11 +575,46 @@ export class Store {
           state: topic.state,
           lastSourceId: topic.lastSourceId,
           generation: topic.generation,
+          endedAtMessageId,
+          directive: topic.directive,
+          directiveMessageId: topic.directiveMessageId,
         },
       );
 
+      if (topic.lastSourceId && topic.generation !== topic.noteGeneration) {
+        await enqueueJob(
+          db,
+          "summarize",
+          `summarize:${topic.id}:${topic.generation}`,
+          {
+            groupId: topic.groupId,
+            topicId: topic.id,
+            requested: true,
+          },
+        );
+      }
+
       return topic;
     });
+  }
+
+  public async lastStoppedRecording(
+    groupId: string,
+    ownerId: string,
+  ): Promise<Topic | null> {
+    const [topic] = await this.#db.get(
+      "topics",
+      {
+        groupId,
+        ownerId,
+        mode: "manual",
+        state: "closed",
+        endedAtMessageId: { $exists: true },
+      },
+      { sort: { endedAtMessageId: "desc" }, limit: 1 },
+    );
+
+    return topic ?? null;
   }
 
   public reviseRecording(
