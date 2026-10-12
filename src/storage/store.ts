@@ -52,7 +52,7 @@ export class Store {
       { kind: "observe", $or: [{ state: "pending" }, { state: "running" }] },
       {
         state: "failed",
-        lastError: "服务重启，跳过旧消息的搭话判断",
+        lastError: "服务重启，跳过旧消息的记录请求识别",
       },
     );
     await this.#db.set("jobs", { state: "running" }, (row) => ({

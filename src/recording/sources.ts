@@ -10,8 +10,18 @@ const date = Type.String({
   description: "YYYY-MM-DD 按北京时间零点解释；也可使用带时区的 ISO 时间。",
 });
 
+export const sourceId = Type.String({ pattern: "^m[1-9][0-9]*$" });
+
 export const sourceScope = Type.Union([
   Type.Object({ all: Type.Literal(true) }, { additionalProperties: false }),
+  Type.Object(
+    { fromMessageId: sourceId, throughMessageId: Type.Optional(sourceId) },
+    {
+      additionalProperties: false,
+      description:
+        "完整的消息区间，包含起止消息；省略终点时包含直到当前请求的消息。适用于从上下文确定讨论起止点。",
+    },
+  ),
   Type.Object(
     {
       day: Type.String({
@@ -48,7 +58,7 @@ export const sourceScope = Type.Union([
   ),
   Type.Object(
     {
-      sourceIds: Type.Array(Type.String({ pattern: "^m[1-9][0-9]*$" }), {
+      sourceIds: Type.Array(sourceId, {
         minItems: 1,
       }),
     },
@@ -88,6 +98,28 @@ export async function selectSources(
     ) {
       throw new Error("只能使用当前请求及此前保存的本群成员原文");
     }
+  } else if ("fromMessageId" in scope) {
+    const first = await store.messages.get(
+      Number(scope.fromMessageId.slice(1)),
+    );
+    const last = scope.throughMessageId
+      ? await store.messages.get(Number(scope.throughMessageId.slice(1)))
+      : request;
+
+    if (
+      first.groupId !== request.groupId ||
+      last.groupId !== request.groupId ||
+      first.id > last.id ||
+      last.id > request.id
+    ) {
+      throw new Error(
+        "消息区间必须按先后顺序指定，且仅限本群当前请求及此前的消息",
+      );
+    }
+
+    sources = await store.messages.history(request.groupId, last.id, {
+      fromId: first.id,
+    });
   } else if ("topicIds" in scope) {
     sources = [];
 
@@ -101,8 +133,8 @@ export async function selectSources(
       sources.push(...(await store.topics.messages(topic.id, request.id - 1)));
     }
   } else {
-    let from: number | undefined;
-    let to: number | undefined;
+    let from = 0;
+    let to = Number.MAX_SAFE_INTEGER;
 
     if ("day" in scope) {
       const day =
@@ -116,19 +148,18 @@ export async function selectSources(
       from = request.sentAt - scope.minutes * 60_000;
     } else if ("from" in scope) {
       from = timestamp(scope.from);
-      to = scope.to === undefined ? undefined : timestamp(scope.to);
+      to =
+        scope.to === undefined ? Number.MAX_SAFE_INTEGER : timestamp(scope.to);
 
-      if (to !== undefined && to <= from) {
+      if (to <= from) {
         throw new Error("结束时间必须晚于开始时间");
       }
     }
 
-    sources = await store.messages.history(
-      request.groupId,
-      request.id - 1,
+    sources = await store.messages.history(request.groupId, request.id - 1, {
       from,
       to,
-    );
+    });
 
     if ("sinceFirstMessageBy" in scope) {
       const first = sources.findIndex(

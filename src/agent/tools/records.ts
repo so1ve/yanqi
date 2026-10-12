@@ -43,7 +43,7 @@ export function recordTools(context: ToolContext) {
     tool(
       context,
       "record",
-      "新建文档。scope 可指定全部历史、多个话题或消息范围，focus 指定选材要求。后台逐段读取完整范围，无需先搜索话题或逐页读完。可自行拟定标题；directive 省略为自行判断，send 为完成后发送，hold 为只保存。返回任务 ID，可用 task 等待。",
+      "新建文档。先依据请求和上下文确定范围；指代或讨论开头不清时，用 read(context) 回溯。scope 可指定消息起止 ID、全部历史、多个话题或时间范围，focus 指定选材要求。后台读取完整范围，不只整理你看到的片段。可自行拟定标题；directive 省略为自行判断，send 为完成后发送，hold 为只保存。返回任务 ID，可用 task 等待。",
       createParameters,
       async (args) => {
         const sources = await selectSources(store, message, args.scope);

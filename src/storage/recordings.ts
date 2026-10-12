@@ -18,26 +18,28 @@ export class Recordings {
       title: string;
       focus?: string;
       directive: Topic["directive"];
-      messages: number[] | "following";
+      messages: number[];
+      following?: boolean;
     },
   ): Promise<Topic> {
     return this.#db.transact(async (db) => {
-      const continuous = options.messages === "following";
-      const messages =
-        options.messages === "following"
-          ? (
-              await db.get(
-                "messages",
-                {
-                  groupId: request.groupId,
-                  id: { $gt: request.id },
-                  isBot: false,
-                  command: false,
-                },
-                ["id"],
-              )
-            ).map((message) => message.id)
-          : options.messages;
+      const messages = [...options.messages];
+
+      if (options.following) {
+        const subsequent = await db.get(
+          "messages",
+          {
+            groupId: request.groupId,
+            id: { $gt: request.id },
+            isBot: false,
+            command: false,
+          },
+          ["id"],
+        );
+
+        messages.push(...subsequent.map((message) => message.id));
+      }
+
       const topic = await db.create("topics", {
         id: randomUUID(),
         groupId: request.groupId,
@@ -45,7 +47,7 @@ export class Recordings {
         focus: options.focus ?? "",
         mode: "manual",
         ownerId: request.userId,
-        state: continuous ? "active" : "closed",
+        state: options.following ? "active" : "closed",
         lastActiveAt: request.receivedAt,
         directive: options.directive,
         directiveMessageId: request.id,

@@ -4,7 +4,7 @@ import type { Store } from "../storage/store.ts";
 import type { Job } from "../types.ts";
 import type { Ai } from "./ai.ts";
 
-export async function observeConversation(
+export async function observeRecordingRequests(
   job: Job<"observe">,
   config: Config,
   store: Store,
@@ -38,11 +38,11 @@ export async function observeConversation(
   );
 
   for (const chunk of chunks) {
-    const replyIds = await ai.dialog.observe(chunk, context);
+    const requestIds = await ai.dialog.recordingRequests(chunk, context);
 
-    await store.messages.requestReplies(
+    await store.messages.scheduleRequests(
       groupId,
-      replyIds.map((id) => Number(id.slice(1))),
+      requestIds.map((id) => Number(id.slice(1))),
     );
   }
 }

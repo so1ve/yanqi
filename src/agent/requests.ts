@@ -1,5 +1,9 @@
 import type { Config } from "../config.ts";
-import { contextWithin, messageChunks } from "../recording/messages.ts";
+import {
+  contextWithin,
+  conversationBefore,
+  messageChunks,
+} from "../recording/messages.ts";
 import type { Notes } from "../recording/notes.ts";
 import type { Store } from "../storage/store.ts";
 import { beijingDate, beijingTime } from "../utils/time.ts";
@@ -35,9 +39,10 @@ export async function handleRequest(
   const quoted = quote
     ? await contextWithin(store, [quote], Math.floor(config.AI_INPUT_CHARS / 6))
     : [];
-  const context = await contextWithin(
+  const context = await conversationBefore(
     store,
-    await store.messages.conversation(message.groupId, 40, message.id - 1),
+    message.groupId,
+    message.id,
     Math.floor(config.AI_INPUT_CHARS / 4),
   );
   const memories = await store.memories.list(message.groupId, message.userId);
@@ -59,7 +64,7 @@ export async function handleRequest(
       request,
       self: {
         userId: config.BOT_QQ,
-        names: ["言栖", "小栖"],
+        names: ["言栖", "小栖", "栖", "bot"],
         models: {
           conversation: (config.AI_INTENT_MODEL ?? config.AI_MODEL).model,
           notification: (config.AI_REPLY_MODEL ?? config.AI_MODEL).model,
@@ -68,7 +73,8 @@ export async function handleRequest(
         },
       },
       quoted,
-      context,
+      context: context.messages,
+      contextBeforeId: context.nextBeforeId,
       topics: (await store.topics.list(message.groupId, 15)).map(
         ({
           id,

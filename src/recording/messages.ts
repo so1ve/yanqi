@@ -124,3 +124,26 @@ export async function contextWithin(
 
   return result;
 }
+
+export async function conversationBefore(
+  store: Store,
+  groupId: string,
+  beforeId: number,
+  budget: number,
+): Promise<{ messages: ChatMessage[]; nextBeforeId: string | null }> {
+  const messages = await contextWithin(
+    store,
+    await store.messages.conversation(groupId, 40, beforeId - 1),
+    budget,
+  );
+  const first = messages[0];
+  const earlier = first
+    ? await store.messages.conversation(
+        groupId,
+        1,
+        Number(first.id.slice(1)) - 1,
+      )
+    : [];
+
+  return { messages, nextBeforeId: earlier.length > 0 ? first!.id : null };
+}

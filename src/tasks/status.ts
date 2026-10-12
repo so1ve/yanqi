@@ -20,7 +20,7 @@ export async function taskStatus(store: Store, groupId: string, id: number) {
         : job.kind === "detect"
           ? "自动识别群里的讨论话题"
           : job.kind === "observe"
-            ? "判断最近群聊是否需要接话"
+            ? "识别群成员是否在请求记录"
             : "处理群成员的对话请求",
     state: job.state,
     attempts: job.attempts,

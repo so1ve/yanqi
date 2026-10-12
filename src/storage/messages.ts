@@ -240,15 +240,22 @@ export class Messages {
   public history(
     groupId: string,
     through: number,
-    from = 0,
-    to = Number.MAX_SAFE_INTEGER,
+    {
+      from = 0,
+      to = Number.MAX_SAFE_INTEGER,
+      fromId = 0,
+    }: {
+      from?: number;
+      to?: number;
+      fromId?: number;
+    } = {},
   ): Promise<Message[]> {
     return this.#db.get(
       "messages",
       {
         groupId,
         sentAt: { $gte: from, $lt: to },
-        id: { $lte: through },
+        id: { $gte: fromId, $lte: through },
         isBot: false,
       },
       { sort: { id: "asc" } },
@@ -270,7 +277,7 @@ export class Messages {
     );
   }
 
-  public async requestReplies(
+  public async scheduleRequests(
     groupId: string,
     messageIds: number[],
   ): Promise<void> {

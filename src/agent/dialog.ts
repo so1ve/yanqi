@@ -50,27 +50,30 @@ export class DialogAI {
     );
   }
 
-  public async observe(
+  public async recordingRequests(
     messages: ChatMessage[],
     context: ChatMessage[],
   ): Promise<string[]> {
     const result = await this.#runtime.json(
       "observe",
       z.object({
-        replyIds: z.array(
+        requestIds: z.array(
           z.enum([...new Set(messages.map((message) => message.id))]),
         ),
       }),
-      prompts.observe,
+      prompts.recordingRequests,
       {
         messages,
         context,
-        self: { userId: this.#config.BOT_QQ, names: ["言栖", "小栖"] },
+        self: {
+          userId: this.#config.BOT_QQ,
+          names: ["言栖", "小栖", "栖", "bot"],
+        },
       },
       this.#config.AI_DETECT_MODEL ?? this.#config.AI_MODEL,
     );
 
-    return result.replyIds;
+    return result.requestIds;
   }
 
   public async voice(groupId: string, message: string): Promise<string> {

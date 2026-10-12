@@ -12,7 +12,12 @@ import {
 } from "./context.ts";
 
 const parameters = Type.Union([
-  object({ action: Type.Literal("start"), title, directive }),
+  object({
+    action: Type.Literal("start"),
+    title,
+    include: Type.Optional(sourceScope),
+    directive,
+  }),
   object({
     action: Type.Literal("stop"),
     topicId: Type.Optional(topicId),
@@ -27,7 +32,7 @@ export function followTool(context: ToolContext) {
   return tool(
     context,
     "follow",
-    "开始或结束连续记录。每位成员在本群最多同时发起一段；stop 不填 topicId 时选请求者的记录，只有发起人或管理员可结束。include 可把更早的讨论并入同一份纪要，不另建重复记录。回顾历史用 record。",
+    "开始或结束连续记录。只有要继续记录后续讨论时才 start；include 可在开始或结束时把已讨论的内容并入同一份记录。每位成员在本群最多同时发起一段；stop 不填 topicId 时选请求者的记录，只有发起人或管理员可结束。只回顾已有内容用 record。",
     parameters,
     async (args) => {
       const owned = await store.topics.following(
@@ -40,9 +45,13 @@ export function followTool(context: ToolContext) {
           return `你已有正在进行的记录：${owned.map((topic) => `「${topic.title}」`).join("、")}。`;
         }
 
+        const included = args.include
+          ? await selectSources(store, message, args.include)
+          : [];
         const topic = await store.recordings.create(message, {
           title: args.title || "连续讨论记录",
-          messages: "following",
+          messages: included.map((source) => source.id),
+          following: true,
           directive: args.directive ?? "auto",
         });
 

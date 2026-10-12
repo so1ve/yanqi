@@ -1,7 +1,11 @@
 import { Type } from "typebox";
 
-import { messageChunks } from "../../recording/messages.ts";
-import { selectSources, sourceScope } from "../../recording/sources.ts";
+import { conversationBefore, messageChunks } from "../../recording/messages.ts";
+import {
+  selectSources,
+  sourceId,
+  sourceScope,
+} from "../../recording/sources.ts";
 import { taskStatus } from "../../tasks/status.ts";
 import { beijingTime } from "../../utils/time.ts";
 import type { ToolContext } from "./context.ts";
@@ -9,6 +13,10 @@ import { getTopic, object, tool, topicId } from "./context.ts";
 
 const page = Type.Optional(Type.Integer({ minimum: 0 }));
 const parameters = Type.Union([
+  object({
+    action: Type.Literal("context"),
+    beforeId: Type.Optional(sourceId),
+  }),
   object({ action: Type.Literal("history"), scope: sourceScope, page }),
   object({ action: Type.Literal("note"), topicId, page }),
   object({
@@ -25,10 +33,22 @@ export function readTool(context: ToolContext) {
   return tool(
     context,
     "read",
-    "读取本群本地资料。history 按 scope 分页读原文；note 分页读纪要；search 字面查标题、正文或编号，无纪要命中时附原文片段；inspect 查看记录范围、实际保存版本和任务进度。nextPage 不为空说明还有后文。整理全部历史用 record，无需先读完；发送全文用 edit_record(action=send)。",
+    "读取本群本地资料。context 从 beforeId 之前向前读聊天，省略则从当前请求前开始；返回的 nextBeforeId 可继续回溯，以确定讨论起止点。history 按 scope 分页读完整原文；note 分页读纪要；search 字面查标题、正文或编号；inspect 查看范围、保存版本和进度。nextPage 不为空说明还有后文。已知完整范围可直接 record，无需先读完；发送全文用 edit_record(action=send)。",
     parameters,
     async (args) => {
       switch (args.action) {
+        case "context": {
+          return conversationBefore(
+            store,
+            message.groupId,
+            Math.min(
+              args.beforeId ? Number(args.beforeId.slice(1)) : message.id,
+              message.id,
+            ),
+            size,
+          );
+        }
+
         case "history": {
           const sources = await selectSources(store, message, args.scope);
           const pages = await messageChunks(store, sources, size);
