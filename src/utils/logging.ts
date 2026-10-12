@@ -26,7 +26,8 @@ export function logDetail(value: unknown, config: Config): string {
             depth: 5,
             maxArrayLength: 30,
             maxStringLength: null,
-            breakLength: Infinity,
+            breakLength: 100,
+            compact: 3,
           });
 
   for (const secret of [

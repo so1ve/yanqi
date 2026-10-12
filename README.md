@@ -28,7 +28,7 @@ AI 只有调用 `reply` 才能向群里说话；会话中的普通文本和分�
 
 问“今天 AI 用了多少 token”可查本群按提供商、配置项、模型和用途汇总的用量。每轮调用及缓存用量保存在本地 `usage` 表，配置项名称用于区分 key，不保存 key 本身。没有上报用量的调用单独计数，不能视为零费用；金额以提供商账单为准。
 
-排查问题时设 `LOG_LEVEL=debug`，查看 `docker compose logs -f yanqi`。任务、群号、请求消息编号和 AI 调用编号会关联模型请求、工具调用与结果；每轮还会记录用量行号、提供商、输入字符数和耗时。`LOG_DETAIL_CHARS` 控制参数、结果和异常片段的长度，默认 4000；配置中的密钥会隐藏。
+排查问题时设 `LOG_LEVEL=debug`，查看 `docker compose logs -f --no-log-prefix yanqi`。任务、群号、请求消息编号和 AI 调用编号会关联模型请求、工具调用与结果；每轮还会记录用量行号、提供商、输入字符数和耗时。`LOG_DETAIL_CHARS` 控制参数、结果和异常片段的长度，默认 4000；配置中的密钥会隐藏。
 
 `AI_DETECT_MODEL` 用于记录请求识别和自动话题识别，可选便宜的小模型。两者分别执行；前者只决定是否交给主 Agent，后者判断哪些原文值得自动归档。@ 请求直接交给主 Agent。用户请求的记录范围由主 Agent 确定，不由入口模型猜测。
 
@@ -109,19 +109,21 @@ docker compose logs -f napcat
 QQ 登录后，言栖会自动连接。查看言栖日志：
 
 ```sh
-docker compose logs -f yanqi
+docker compose --ansi always logs -f --no-log-prefix yanqi
 ```
 
-默认 `LOG_LEVEL=info` 会记录任务入队、开始、完成或重试，AI 模型与轮次、返回状态和 token 用量，工具调用，以及群消息发送结果。日志带时间和耗时，AI 日志同时标明所属任务或发送编号；并行处理时仍能追到对应请求。整理进度、草稿路径和最终保存位置也会写入日志。
+默认 `LOG_LEVEL=info` 会记录任务入队、开始、完成或重试，AI 模型与轮次、返回状态和 token 用量，工具调用，以及群消息发送结果。日志按毫秒时间、模块名、等级和正文排列，模块名按列对齐；AI 日志同时标明所属任务或发送编号，并行处理时仍能追到对应请求。整理进度、草稿路径和最终保存位置也会写入日志。
+
+沿用 Koishi 自带的 logger。容器没有 TTY 时，底层库默认关闭颜色，所以 Compose 显示的服务名前缀可能有颜色，应用日志却没有。Compose 配置已通过 `FORCE_COLOR=2` 开启应用颜色，并默认使用北京时间（`TZ=Asia/Shanghai`）。修改后需要重新创建言栖容器；旧日志不会补上颜色。在 `.env` 中设 `FORCE_COLOR=0` 可关闭应用颜色。上面的 `--ansi always` 控制 Compose 的 ANSI 输出，`--no-log-prefix` 则去掉重复的服务名前缀。直接在终端运行时，logger 自动判断颜色支持。
 
 需要查看 AI 输入和返回片段、工具参数与结果、异常堆栈时，在 `.env` 中设置 `LOG_LEVEL=debug`，然后更新容器：
 
 ```sh
 docker compose up -d --build yanqi
-docker compose logs -f yanqi
+docker compose --ansi always logs -f --no-log-prefix yanqi
 ```
 
-Debug 日志可能包含聊天内容，每条详情默认最多显示 4000 个字符，可通过 `LOG_DETAIL_CHARS` 调整，并隐藏配置中的 AI 密钥、决策服务密钥和 OneBot token。不会打印请求头、完整配置或图片的 base64 数据。开启 debug 只调整言栖的日志，不开启适配器的底层报文日志。
+Debug 日志的输入、返回内容和工具详情另起一行，长对象会换行缩进。这些详情可能包含聊天内容，每条默认最多显示 4000 个字符，可通过 `LOG_DETAIL_CHARS` 调整，并隐藏配置中的 AI 密钥、决策服务密钥和 OneBot token。不会打印请求头、完整配置或图片的 base64 数据。开启 debug 只调整言栖的日志，不开启适配器的底层报文日志。
 
 ## TODOs
 

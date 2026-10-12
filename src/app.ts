@@ -17,7 +17,11 @@ export async function startApplication(config: Config): Promise<App> {
   const logger = new Logger("yanqi");
 
   logger.level = config.LOG_LEVEL === "debug" ? Logger.DEBUG : Logger.INFO;
-  Logger.targets[0]!.showTime = "yyyy-MM-dd hh:mm:ss";
+  Object.assign(Logger.targets[0]!, {
+    showTime: "yyyy-MM-dd hh:mm:ss.SSS",
+    showDiff: false,
+    label: { width: 14, align: "right" },
+  });
 
   const app = new App({
     nickname: ["言栖", "小栖"],

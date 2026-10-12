@@ -33,7 +33,7 @@ export function logAgentEvents(
             : `${Math.round(message.durationMs)} ms`,
         );
         logger.debug(
-          "%s 返回内容：%s",
+          "%s 返回内容：\n%s",
           label,
           logDetail(
             message.errorMessage ||
@@ -56,7 +56,7 @@ export function logAgentEvents(
           event.toolCallId,
         );
         logger.debug(
-          "%s 工具参数：call=%s %s",
+          "%s 工具参数：call=%s\n%s",
           label,
           event.toolCallId,
           logDetail(event.args, config),
@@ -77,7 +77,7 @@ export function logAgentEvents(
             : `${Math.round(event.durationMs)} ms`,
         );
         logger[event.isError ? "warn" : "debug"](
-          "%s 工具结果：call=%s %s",
+          "%s 工具结果：call=%s\n%s",
           label,
           event.toolCallId,
           logDetail(event.result, config),

@@ -33,6 +33,8 @@ services:
       ONEBOT_URL: ws://napcat:3001
       DATA_DIR: /app/data
       BOT_PERSONA_FILE: ${BOT_PERSONA_FILE:+/app/PERSONA.md}
+      FORCE_COLOR: ${FORCE_COLOR:-2}
+      TZ: ${TZ:-Asia/Shanghai}
     volumes:
       - ${DATA_DIR:-./data}:/app/data
       - ${BOT_PERSONA_FILE:-./PERSONA.md}:/app/PERSONA.md:ro

@@ -217,11 +217,11 @@ export class AgentRuntime {
       }
     });
     this.#logger.debug(
-      "%s 输入：%s",
+      "%s 输入：\n%s",
       label,
       logDetail(
         typeof input.content === "string"
-          ? input.content
+          ? JSON.parse(input.content)
           : input.content.map((part) =>
               part.type === "image" ? `[图片 ${part.mimeType}]` : part.text,
             ),
