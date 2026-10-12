@@ -102,6 +102,28 @@ export function recordingTools(
 
   return [
     tool(
+      "read_note",
+      "读取本群已有纪要的一页正文，供核实细节、回答具体问题。直接发送全文必须调用 send，不要逐页读出再用 reply 重写。",
+      object({ topicId, page: Type.Optional(Type.Integer({ minimum: 0 })) }),
+      async ({ topicId, page = 0 }) => {
+        const topic = await getTopic(topicId);
+        const note = await store.latestNote(topic.id);
+
+        if (!note)
+          return "这份纪要尚未保存；查看进度用 inspect，读取原文用 read_history。";
+
+        const size = Math.floor(config.AI_INPUT_CHARS / 4);
+
+        return JSON.stringify({
+          topicId,
+          revision: note.revision,
+          page,
+          nextPage: (page + 1) * size < note.markdown.length ? page + 1 : null,
+          markdown: note.markdown.slice(page * size, (page + 1) * size),
+        });
+      },
+    ),
+    tool(
       "read_history",
       "读取本地保存的本群成员原文，包括尚未归入话题的消息和 @ 消息。可从某成员首次发言开始，或按日期、多个话题、消息 ID、全部历史读取。每次返回一页，长消息可能跨页；nextPage 不为空时还有后文。批量找某类内容并另建文档，直接调用 record 的 scope 和 focus，无需逐页读完。",
       object({
