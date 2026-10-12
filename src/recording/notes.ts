@@ -166,24 +166,44 @@ export class Notes {
           throw result.reason;
         }
 
-        const { messageIds, content } = result.value;
-        const previous = additions.at(-1);
-
-        // 跨批次的长消息放在同一段，下次更新仍按完整原文处理。
-        if (previous && previous.messageIds.at(-1) === messageIds[0]) {
-          previous.messageIds.push(...messageIds.slice(1));
-          previous.content = [previous.content, content]
-            .filter(Boolean)
-            .join("\n\n");
-        } else {
-          additions.push({ messageIds, content });
-        }
+        additions.push(result.value);
       }
 
       yield [...sections, ...additions].sort(
         (a, b) => a.messageIds[0]! - b.messageIds[0]!,
       );
     }
+  }
+
+  async #compose(sections: Note["sections"]): Promise<string> {
+    const paragraphs = sections
+      .map((section) => section.content)
+      .filter(Boolean);
+    const budget = Math.floor(this.#config.AI_INPUT_CHARS / 3);
+    const chapters: string[] = [];
+    let batch: string[] = [];
+
+    const merge = async () => {
+      if (batch.length === 0) return;
+
+      chapters.push(
+        batch.length === 1 ? batch[0]! : await this.#ai.merge(batch),
+      );
+      batch = [];
+    };
+
+    // 汇总也分批，避免长历史在最后一步又塞进单次模型调用。
+    for (const paragraph of paragraphs) {
+      if (JSON.stringify([...batch, paragraph]).length > budget) {
+        await merge();
+      }
+
+      batch.push(paragraph);
+    }
+
+    await merge();
+
+    return chapters.join("\n\n");
   }
 
   public async generate(topicId: string, requested: boolean): Promise<void> {
@@ -248,6 +268,7 @@ export class Notes {
         );
       }
 
+      content = await this.#compose(sections);
       const markdown = `${header}\n\n${content || "在这些已保存的讨论中，没有找到与整理要求相关的内容。"}\n\n${footer}`;
 
       await writeMarkdown(path, markdown);

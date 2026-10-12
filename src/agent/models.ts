@@ -203,6 +203,10 @@ export class Ai {
     );
   }
 
+  public merge(sections: string[]): Promise<string> {
+    return this.#runtime.text("summary_merge", prompts.merge, { sections });
+  }
+
   public async shouldPublish(
     topic: Topic,
     recording: { revision: number; sources: number },
