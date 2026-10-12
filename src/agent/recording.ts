@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { Type } from "typebox";
 
 import type { Config } from "../config.ts";
 import type { ChatMessage, Topic } from "../types.ts";
@@ -56,7 +56,10 @@ export class RecordingAI {
     if (focus) {
       const result = await this.#runtime.json(
         "summary",
-        z.object({ markdown: z.string() }),
+        Type.Object(
+          { markdown: Type.String() },
+          { additionalProperties: false },
+        ),
         `${prompts.summary}\n\n${prompts.focusedSummary}`,
         { ...input, focus },
       );

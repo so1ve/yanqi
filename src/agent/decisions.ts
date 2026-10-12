@@ -1,12 +1,26 @@
 import { Logger } from "koishi";
 import OpenAI from "openai";
-import { z } from "zod";
+import { Type } from "typebox";
+import * as Value from "typebox/value";
 
 import type { Config } from "../config.ts";
 import type { Store } from "../storage/store.ts";
 import { failureMessage } from "../utils/errors.ts";
 import { logContext, logDetail } from "../utils/logging.ts";
 import { BudgetExceeded, reserveCall } from "./usage.ts";
+
+const clefResponse = Type.Object({
+  success: Type.Literal(true),
+  result: Type.Unknown(),
+});
+const decisionResponse = Type.Object({
+  answers: Type.Record(Type.String(), Type.Unknown()),
+});
+const choiceSchema = Type.Object({
+  type: Type.Literal("choice"),
+  choice: Type.String(),
+  confidence: Type.Number({ minimum: 0, maximum: 1 }),
+});
 
 export class DecisionProvider {
   #config: Config;
@@ -73,20 +87,21 @@ export class DecisionProvider {
       throw new Error(`决策服务请求失败（HTTP ${response.status}）`);
     }
 
-    const raw: unknown = await response.json();
+    let body: unknown = await response.json();
     // Clef returns the decision data inside the Workers AI 'result' field.
-    const body =
-      this.#config.DECISION_PROVIDER === "clef"
-        ? z.object({ success: z.literal(true), result: z.unknown() }).parse(raw)
-            .result
-        : raw;
-    const result = z
-      .object({
-        answers: z.record(z.string(), z.unknown()),
-      })
-      .parse(body);
+    if (this.#config.DECISION_PROVIDER === "clef") {
+      if (!Value.Check(clefResponse, body)) {
+        throw new Error("Clef 未返回成功的决策结果");
+      }
 
-    return result.answers.action;
+      body = body.result;
+    }
+
+    if (!Value.Check(decisionResponse, body)) {
+      throw new Error("决策服务返回的 answers 格式不正确");
+    }
+
+    return body.answers.action;
   }
 
   public async choose(
@@ -137,30 +152,26 @@ export class DecisionProvider {
       );
       const answer = await this.#evaluate(input, instructions, criteria);
 
-      const parsed = z
-        .object({
-          type: z.literal("choice"),
-          choice: z.string(),
-          confidence: z.number().min(0).max(1),
-        })
-        .parse(answer);
+      if (!Value.Check(choiceSchema, answer)) {
+        throw new Error("决策服务返回的选项或置信度格式不正确");
+      }
 
-      if (!Object.hasOwn(criteria, parsed.choice)) {
+      if (!Object.hasOwn(criteria, answer.choice)) {
         throw new Error("决策服务返回了未提供的选项");
       }
 
-      const accepted = parsed.confidence >= this.#config.DECISION_CONFIDENCE;
+      const accepted = answer.confidence >= this.#config.DECISION_CONFIDENCE;
 
       this.#logger.info(
         "%s 独立决策完成：choice=%s confidence=%s accepted=%s 耗时=%s ms",
         label,
-        parsed.choice,
-        parsed.confidence,
+        answer.choice,
+        answer.confidence,
         accepted,
         Math.round(performance.now() - startedAt),
       );
 
-      return accepted ? parsed.choice : null;
+      return accepted ? answer.choice : null;
     } catch (error) {
       if (error instanceof BudgetExceeded) {
         throw error;

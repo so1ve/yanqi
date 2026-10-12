@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import type { AgentState } from "@earendil-works/pi-agent-core";
 import { Logger } from "koishi";
-import { z } from "zod";
+import { Type } from "typebox";
 
 import type { Config } from "../config.ts";
 import type { Store } from "../storage/store.ts";
@@ -56,11 +56,16 @@ export class DialogAI {
   ): Promise<string[]> {
     const result = await this.#runtime.json(
       "observe",
-      z.object({
-        requestIds: z.array(
-          z.enum([...new Set(messages.map((message) => message.id))]),
-        ),
-      }),
+      Type.Object(
+        {
+          requestIds: Type.Array(
+            Type.Enum([...new Set(messages.map((message) => message.id))], {
+              type: "string",
+            }),
+          ),
+        },
+        { additionalProperties: false },
+      ),
       prompts.recordingRequests,
       {
         messages,
@@ -97,7 +102,7 @@ export class DialogAI {
         this.#config.AI_REPLY_MODEL ?? this.#config.AI_MODEL,
       );
 
-      return result.text;
+      return result.text.trim();
     } catch (error) {
       this.#logger.warn(
         "回复改写失败，使用原答复：%s",

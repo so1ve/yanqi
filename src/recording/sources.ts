@@ -1,6 +1,6 @@
 import type { Static } from "typebox";
 import { Type } from "typebox";
-import { z } from "zod";
+import { Format } from "typebox/format";
 
 import type { Store } from "../storage/store.ts";
 import type { Message } from "../types.ts";
@@ -67,11 +67,22 @@ export const sourceScope = Type.Union([
 ]);
 
 function timestamp(value: string): number {
-  if (z.iso.date().safeParse(value).success) {
+  if (Format.IsDate(value)) {
     return Date.parse(`${value}T00:00:00+08:00`);
   }
 
-  return Date.parse(z.iso.datetime({ offset: true }).parse(value));
+  // RFC 3339 要求秒数，补齐只写到分钟的 ISO 时间。
+  const datetime = value.replace(
+    /T(\d{2}:\d{2})(?=Z$|[+-]\d{2}:\d{2}$)/,
+    "T$1:00",
+  );
+  const result = Date.parse(datetime);
+
+  if (!Format.IsDateTime(datetime) || !Number.isFinite(result)) {
+    throw new Error("时间需要使用 YYYY-MM-DD 或带时区的 ISO 时间");
+  }
+
+  return result;
 }
 
 export async function selectSources(
@@ -138,9 +149,11 @@ export async function selectSources(
 
     if ("day" in scope) {
       const day =
-        scope.day === "today"
-          ? beijingDate(request.sentAt)
-          : z.iso.date().parse(scope.day);
+        scope.day === "today" ? beijingDate(request.sentAt) : scope.day;
+
+      if (!Format.IsDate(day)) {
+        throw new Error("日期需要使用 today 或 YYYY-MM-DD");
+      }
 
       from = timestamp(day);
       to = from + 86_400_000;

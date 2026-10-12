@@ -3,7 +3,8 @@ import { Agent } from "@earendil-works/pi-agent-core";
 import type { ImageContent, Model, UserMessage } from "@earendil-works/pi-ai";
 import { streamSimple } from "@earendil-works/pi-ai/api/openai-completions";
 import { Logger } from "koishi";
-import { z } from "zod";
+import type { Static, TSchema } from "typebox";
+import * as Value from "typebox/value";
 
 import type { Config, ModelConfig } from "../config.ts";
 import type { Store } from "../storage/store.ts";
@@ -24,14 +25,14 @@ export class AgentRuntime {
     this.#store = store;
   }
 
-  public async json<S extends z.ZodType>(
+  public async json<S extends TSchema>(
     purpose: string,
     schema: S,
     instructions: string,
     input: unknown,
     model = this.#config.AI_MODEL,
     tools: AgentState["tools"] = [],
-  ): Promise<z.output<S>> {
+  ): Promise<Static<S>> {
     const content = JSON.stringify(input);
 
     const text = await this.#run(
@@ -54,17 +55,18 @@ export class AgentRuntime {
       );
     }
 
-    const parsed = schema.safeParse(json);
+    const parsed = Value.Clean(schema, json);
 
-    if (!parsed.success) {
+    if (!Value.Check(schema, parsed)) {
       throw new AiError(
         "校验 AI 返回的字段",
-        `${purpose} JSON 字段不符合约定：${parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("；")}`,
-        { cause: parsed.error },
+        `${purpose} JSON 字段不符合约定：${Value.Errors(schema, parsed)
+          .map((error) => `${error.instancePath}: ${error.message}`)
+          .join("；")}`,
       );
     }
 
-    return parsed.data;
+    return parsed;
   }
 
   public text(
@@ -103,7 +105,7 @@ export class AgentRuntime {
     input: UserMessage,
     endpoint: ModelConfig,
     tools: AgentState["tools"],
-    schema?: z.ZodType,
+    schema?: TSchema,
   ): Promise<string> {
     const config = this.#config;
     const modelId = endpoint.model;
@@ -118,7 +120,6 @@ export class AgentRuntime {
       .filter(Boolean)
       .join(" ");
     const startedAt = performance.now();
-    const responseSchema = schema ? z.toJSONSchema(schema) : undefined;
     const model: Model<"openai-completions"> = {
       id: modelId,
       name: modelId,
@@ -145,8 +146,8 @@ export class AgentRuntime {
     const agent = new Agent({
       initialState: {
         model,
-        systemPrompt: responseSchema
-          ? `${instructions}\n最终回复必须是符合以下 JSON Schema 的 JSON 对象：\n${JSON.stringify(responseSchema)}`
+        systemPrompt: schema
+          ? `${instructions}\n最终回复必须是符合以下 JSON Schema 的 JSON 对象：\n${JSON.stringify(schema)}`
           : instructions,
         tools,
       },
@@ -190,7 +191,7 @@ export class AgentRuntime {
           throw error;
         }
       },
-      onPayload: responseSchema
+      onPayload: schema
         ? (payload) => ({
             ...(payload as Record<string, unknown>),
             response_format:
@@ -200,7 +201,7 @@ export class AgentRuntime {
                     json_schema: {
                       name: purpose,
                       strict: true,
-                      schema: responseSchema,
+                      schema,
                     },
                   }
                 : { type: "json_object" },
