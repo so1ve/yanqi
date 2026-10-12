@@ -1,0 +1,48 @@
+import type { Config } from "../config.ts";
+import { contextWithin, messageChunks } from "../recording/messages.ts";
+import type { Store } from "../storage/store.ts";
+import type { Job } from "../types.ts";
+import type { Ai } from "./ai.ts";
+
+export async function observeConversation(
+  job: Job<"observe">,
+  config: Config,
+  store: Store,
+  ai: Ai,
+): Promise<void> {
+  if (!config.AUTO_REPLY) {
+    return;
+  }
+
+  const { groupId, messageIds } = job.payload;
+  const messages = (
+    await Promise.all(messageIds.map((id) => store.messages.get(id)))
+  ).filter(
+    (message) =>
+      !message.isBot && !message.command && message.recalledAt === null,
+  );
+
+  if (messages.length === 0) {
+    return;
+  }
+
+  const context = await contextWithin(
+    store,
+    await store.messages.conversation(groupId, 20, messages[0]!.id - 1),
+    Math.floor(config.AI_INPUT_CHARS / 4),
+  );
+  const chunks = await messageChunks(
+    store,
+    messages,
+    Math.floor(config.AI_INPUT_CHARS / 2),
+  );
+
+  for (const chunk of chunks) {
+    const replyIds = await ai.dialog.observe(chunk, context);
+
+    await store.messages.requestReplies(
+      groupId,
+      replyIds.map((id) => Number(id.slice(1))),
+    );
+  }
+}

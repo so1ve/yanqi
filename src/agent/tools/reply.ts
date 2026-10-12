@@ -1,13 +1,11 @@
 import { Type } from "typebox";
 
-import { MAX_REPLY_CHARS } from "../prompts/common.ts";
 import type { ToolContext } from "./context.ts";
-import { assertActive, object, tool } from "./context.ts";
+import { object, tool } from "./context.ts";
 
 const parameters = object({
   text: Type.String({
     minLength: 1,
-    maxLength: MAX_REPLY_CHARS,
     pattern: "\\S",
   }),
   waitForReply: Type.Optional(
@@ -19,24 +17,19 @@ const parameters = object({
 });
 
 export function replyTool(context: ToolContext) {
-  const { store, message, ai, wake } = context;
+  const { store, message, wake } = context;
 
   return tool(
     context,
     "reply",
-    `向 QQ 群回复一两句，通常 60 字以内，最多 ${MAX_REPLY_CHARS} 字符。只答当前问题，不发内部分析、无关状态或菜单。等待实际发送结果；一次请求只调用一次，发纪要用 edit_record(action=send)。`,
+    "向 QQ 群发送答复并结束本次对话。先完成必要的查询和操作，最后调用一次。按问题所需详略回答，不限字数，不发内部分析或无关状态。发纪要用 edit_record(action=send)。",
     parameters,
     async ({ text, waitForReply }, signal) => {
       const key = `command:${message.id}`;
-      const reply = await ai.dialog.voice(message.groupId, text);
-
-      signal?.throwIfAborted();
-      await assertActive(context);
-
       const enqueued = await store.deliveries.enqueue(key, {
         kind: "text",
         groupId: message.groupId,
-        content: reply,
+        content: text,
       });
 
       if (enqueued && waitForReply) {
@@ -56,5 +49,6 @@ export function replyTool(context: ToolContext) {
               : "QQ 尚未确认发送，回复已保留，不要重复回复或声称已发送。",
       };
     },
+    { terminate: true },
   );
 }

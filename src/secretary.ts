@@ -52,6 +52,8 @@ export class Secretary {
                 logDetail(failureMessage(error), this.#config),
               ),
             );
+        } else if (this.#config.AUTO_REPLY && !message.isBot) {
+          await this.#store.jobs.observe(message);
         }
 
         this.#logger[message.command ? "info" : "debug"](
@@ -101,8 +103,7 @@ export class Secretary {
 
     for (const groupId of this.#config.GROUP_IDS) {
       if (
-        (!this.#config.AUTO_REPLY &&
-          !(await this.#store.groups.automatic(groupId))) ||
+        !(await this.#store.groups.automatic(groupId)) ||
         (await this.#store.jobs.hasDetection(groupId))
       ) {
         continue;
@@ -116,11 +117,7 @@ export class Secretary {
       if (
         messages.length > 0 &&
         (messages.length >= this.#config.DETECT_BATCH_SIZE ||
-          messages[0]!.receivedAt +
-            (this.#config.AUTO_REPLY
-              ? Math.min(3000, this.#config.DETECT_INTERVAL_MS)
-              : this.#config.DETECT_INTERVAL_MS) <=
-            now)
+          messages[0]!.receivedAt + this.#config.DETECT_INTERVAL_MS <= now)
       ) {
         await this.#store.jobs.enqueue(
           "detect",

@@ -282,7 +282,8 @@ export class AgentRuntime {
       throw new AiSizeError(`${purpose} 输出被截断`);
     }
 
-    if (result?.stopReason !== "stop") {
+    // reply 通过 SDK 的 terminate 结束工具循环，不再请求一轮空的收尾回复。
+    if (result?.stopReason !== "stop" && result?.stopReason !== "toolUse") {
       throw new AiError(
         "获取 AI 回复",
         `${purpose} 未返回完整结果（${result?.errorMessage || result?.stopReason || "无内容"}）`,

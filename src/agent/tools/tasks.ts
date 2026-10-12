@@ -54,7 +54,7 @@ export function taskTool(context: ToolContext) {
       const job = await store.jobs.get(message.groupId, id);
 
       if (action !== "inspect") {
-        if (job.kind === "intent") {
+        if (job.kind === "intent" || job.kind === "observe") {
           throw new Error(
             "对话不能从头重跑或相互等待，请查询它依赖的附件或纪要任务",
           );

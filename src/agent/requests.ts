@@ -49,7 +49,6 @@ export async function handleRequest(
     store,
     message,
     config,
-    ai,
     notes,
     isAdmin,
     wake: processPending,
@@ -63,13 +62,13 @@ export async function handleRequest(
         names: ["言栖", "小栖"],
         models: {
           conversation: (config.AI_INTENT_MODEL ?? config.AI_MODEL).model,
-          wording: (config.AI_REPLY_MODEL ?? config.AI_MODEL).model,
+          notification: (config.AI_REPLY_MODEL ?? config.AI_MODEL).model,
           recording: config.AI_MODEL.model,
           vision: config.AI_VISION_MODEL?.model ?? null,
         },
       },
       quoted,
-      context: await ai.dialog.relevantContext(request, context),
+      context,
       topics: (await store.topics.list(message.groupId, 15)).map(
         ({
           id,

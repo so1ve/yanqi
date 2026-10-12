@@ -3,7 +3,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import { Logger } from "koishi";
 
-import type { Job, JobKind, JobPayloads, Topic } from "../types.ts";
+import type { Job, JobKind, JobPayloads, Message, Topic } from "../types.ts";
 import type { Database } from "./schema.ts";
 
 const logger = new Logger("yanqi:jobs");
@@ -82,6 +82,43 @@ export class JobQueue {
     );
   }
 
+  public observe(message: Message): Promise<void> {
+    return this.#db.transact(async (db) => {
+      const [pending] = await db.get("jobs", {
+        "kind": "observe",
+        "state": "pending",
+        "payload.groupId": message.groupId,
+      });
+
+      if (pending) {
+        const payload = pending.payload as JobPayloads["observe"];
+
+        await db.set(
+          "jobs",
+          { id: pending.id },
+          {
+            payload: {
+              ...payload,
+              messageIds: [...payload.messageIds, message.id],
+            },
+          },
+        );
+      } else {
+        // 从第一条消息起收集一秒，后续消息不延后处理时间。
+        await enqueueJob(
+          db,
+          "observe",
+          `observe:${message.id}`,
+          {
+            groupId: message.groupId,
+            messageIds: [message.id],
+          },
+          message.receivedAt + 1000,
+        );
+      }
+    });
+  }
+
   public async hasDetection(groupId: string): Promise<boolean> {
     const rows = await this.#db.get(
       "jobs",
@@ -98,15 +135,19 @@ export class JobQueue {
 
   public claim(kind: JobKind, now: number): Promise<Job | null> {
     return this.#db.transact(async (db) => {
+      const pausedGroups =
+        kind === "detect" || kind === "summarize"
+          ? (await db.get("groups", { aiEnabled: false }, ["id"])).map(
+              (group) => group.id,
+            )
+          : [];
       const pausedTopics =
         kind === "summarize"
           ? (
               await db.get(
                 "topics",
                 {
-                  groupId: (
-                    await db.get("groups", { aiEnabled: false }, ["id"])
-                  ).map((group) => group.id),
+                  groupId: pausedGroups,
                   mode: "auto",
                 },
                 ["id"],
@@ -147,6 +188,10 @@ export class JobQueue {
             })
           : [];
       const job = pending.find(({ payload }) => {
+        if (kind === "detect") {
+          return !pausedGroups.includes(payload.groupId);
+        }
+
         if (kind === "intent" && "messageId" in payload) {
           const request = requests.find(
             (message) => message.id === payload.messageId,
@@ -225,7 +270,7 @@ export class JobQueue {
           id,
           "payload.groupId": groupId,
           "$or": [{ state: "failed" }, { state: "done" }],
-          "kind": { $ne: "intent" },
+          "$not": { $or: [{ kind: "intent" }, { kind: "observe" }] },
         },
         {
           state: "pending",
@@ -252,7 +297,7 @@ export class JobQueue {
         signal?.throwIfAborted();
         const job = await this.get(groupId, id);
 
-        if (job.kind === "intent") {
+        if (job.kind === "intent" || job.kind === "observe") {
           throw new Error("不能等待对话任务，请等待附件或纪要任务");
         }
 
@@ -302,7 +347,9 @@ export class JobQueue {
     after?: number,
   ): Promise<{ state: "failed" | "pending"; runAfter: number }> {
     const state =
-      job.kind === "intent" || (after === undefined && job.attempts >= 5)
+      job.kind === "intent" ||
+      job.kind === "observe" ||
+      (after === undefined && job.attempts >= 5)
         ? "failed"
         : "pending";
     const runAfter =
@@ -329,7 +376,7 @@ export class JobQueue {
       db.set(
         "jobs",
         {
-          "kind": { $ne: "intent" },
+          "$not": { $or: [{ kind: "intent" }, { kind: "observe" }] },
           "state": "failed",
           "payload.groupId": groupId,
         },

@@ -24,46 +24,6 @@ export class RecordingAI {
     this.#decisions = decisions;
   }
 
-  public async observe(
-    messages: ChatMessage[],
-    context: ChatMessage[],
-  ): Promise<{ messageIds: string[]; replyIds: string[] }> {
-    const replyIds = [
-      ...new Set(
-        messages
-          .filter((message) => !message.command && !message.isBot)
-          .map((message) => message.id),
-      ),
-    ];
-    const result = await this.#runtime.json(
-      "observe",
-      z.object({
-        messageIds: z.array(
-          z.enum([
-            ...new Set(
-              [...messages, ...context]
-                .filter((message) => !message.isBot)
-                .map((message) => message.id),
-            ),
-          ]),
-        ),
-        replyIds:
-          replyIds.length > 0
-            ? z.array(z.enum(replyIds))
-            : z.array(z.string()).max(0),
-      }),
-      prompts.observe,
-      {
-        messages,
-        context,
-        self: { userId: this.#config.BOT_QQ, names: ["言栖", "小栖"] },
-      },
-      this.#config.AI_DETECT_MODEL ?? this.#config.AI_MODEL,
-    );
-
-    return result;
-  }
-
   public detect(
     messages: ChatMessage[],
     context: ChatMessage[],

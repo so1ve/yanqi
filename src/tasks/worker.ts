@@ -1,6 +1,7 @@
 import { Logger } from "koishi";
 
 import type { Ai } from "../agent/ai.ts";
+import { observeConversation } from "../agent/observe.ts";
 import { handleRequest } from "../agent/requests.ts";
 import { AiSizeError, BudgetExceeded } from "../agent/usage.ts";
 import { collectAsset } from "../assets.ts";
@@ -43,7 +44,13 @@ export class BackgroundTasks {
   public run(): void {
     this.#outbox.flush();
 
-    for (const kind of ["intent", "detect", "summarize", "asset"] as const) {
+    for (const kind of [
+      "intent",
+      "observe",
+      "detect",
+      "summarize",
+      "asset",
+    ] as const) {
       const concurrency = kind === "intent" ? 4 : kind === "asset" ? 2 : 1;
 
       while ((this.#running.get(kind) ?? 0) < concurrency) {
@@ -125,6 +132,12 @@ export class BackgroundTasks {
 
         case "detect": {
           await detectTopics(job, this.#config, this.#store, this.#ai);
+
+          break;
+        }
+
+        case "observe": {
+          await observeConversation(job, this.#config, this.#store, this.#ai);
 
           break;
         }

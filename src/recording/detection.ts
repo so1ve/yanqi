@@ -11,7 +11,6 @@ export async function detectTopics(
   ai: Ai,
 ): Promise<void> {
   const groupId = job.payload.groupId;
-  const recording = await store.groups.automatic(groupId);
   const messages = await Promise.all(
     job.payload.messageIds.map((id) => store.messages.get(id)),
   );
@@ -41,37 +40,10 @@ export async function detectTopics(
   >();
 
   for (const chunk of chunks) {
-    const observation =
-      config.AUTO_REPLY || (recording && config.AI_DETECT_MODEL)
-        ? await ai.recording.observe(chunk, context)
-        : null;
-
-    if (config.AUTO_REPLY && observation) {
-      await store.messages.requestReplies(
-        groupId,
-        observation.replyIds.map((id) => Number(id.slice(1))),
-      );
-    }
-
-    if (!recording) {
-      continue;
-    }
-
-    const selected = observation ? new Set(observation.messageIds) : null;
-    const messages = selected
-      ? chunk.filter((message) => selected.has(message.id))
-      : chunk;
-
-    if (messages.length === 0) {
-      continue;
-    }
-
-    const selectedContext = selected
-      ? context.filter((message) => selected.has(message.id))
-      : context.filter((message) => !message.isBot);
-    const result = await ai.recording.detect(messages, selectedContext, topics);
+    const selectedContext = context.filter((message) => !message.isBot);
+    const result = await ai.recording.detect(chunk, selectedContext, topics);
     const known = new Set(
-      [...messages, ...selectedContext].map((item) => item.id),
+      [...chunk, ...selectedContext].map((item) => item.id),
     );
 
     for (const proposed of result.topics) {

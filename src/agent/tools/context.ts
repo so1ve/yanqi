@@ -6,14 +6,12 @@ import type { Config } from "../../config.ts";
 import type { Notes } from "../../recording/notes.ts";
 import type { Store } from "../../storage/store.ts";
 import type { Message } from "../../types.ts";
-import type { Ai } from "../ai.ts";
 
 export interface ToolContext {
   config: Config;
   store: Store;
   message: Message;
   isAdmin: boolean;
-  ai: Ai;
   notes: Notes;
   wake: () => void;
 }
@@ -39,6 +37,7 @@ export const tool = <P extends TSchema>(
   description: string,
   parameters: P,
   execute: (args: Static<P>, signal?: AbortSignal) => Promise<unknown>,
+  options: { terminate?: boolean } = {},
 ): AgentTool<P> => ({
   name,
   label: name,
@@ -57,6 +56,7 @@ export const tool = <P extends TSchema>(
         },
       ],
       details: {},
+      terminate: options.terminate ?? false,
     };
   },
 });

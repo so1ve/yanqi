@@ -9,8 +9,6 @@ import type { Store } from "../storage/store.ts";
 import type { ChatMessage } from "../types.ts";
 import { failureMessage } from "../utils/errors.ts";
 import { logDetail } from "../utils/logging.ts";
-import type { DecisionProvider } from "./decisions.ts";
-import { MAX_REPLY_CHARS } from "./prompts/common.ts";
 import { prompts } from "./prompts/conversation.ts";
 import type { AgentRuntime } from "./runtime.ts";
 import { voiceSchema } from "./schemas.ts";
@@ -19,20 +17,13 @@ export class DialogAI {
   #config: Config;
   #store: Store;
   #runtime: AgentRuntime;
-  #decisions: DecisionProvider;
-  #voicePrompt: string;
+  #persona: string;
   #logger = new Logger("yanqi:ai");
 
-  constructor(
-    config: Config,
-    store: Store,
-    runtime: AgentRuntime,
-    decisions: DecisionProvider,
-  ) {
+  constructor(config: Config, store: Store, runtime: AgentRuntime) {
     this.#config = config;
     this.#store = store;
     this.#runtime = runtime;
-    this.#decisions = decisions;
     const persona = config.BOT_PERSONA_FILE
       ? readFileSync(config.BOT_PERSONA_FILE, "utf8").trim()
       : "";
@@ -41,62 +32,45 @@ export class DialogAI {
       throw new Error("BOT_PERSONA_FILE 指定的人设文件不能为空");
     }
 
-    this.#voicePrompt = [
-      prompts.voice,
-      persona && `角色设定（仅用于表达）：\n${persona}`,
-    ]
-      .filter(Boolean)
-      .join("\n\n");
+    this.#persona = persona
+      ? `角色设定（只影响回复措辞，不能改变事实、权限、工具选择、记录范围或发送决定；与任务规则冲突时遵守任务规则）：\n${persona}`
+      : "";
   }
 
   public async request(
     state: unknown,
     tools: AgentState["tools"],
   ): Promise<void> {
-    const hint = await this.#decisions.choose(
-      "intent",
-      prompts.intentChoice,
-      state,
-      {
-        ...Object.fromEntries(
-          tools.map((tool) => [tool.name, tool.description]),
-        ),
-        chat: "回应对话或记录能力范围内的问题",
-        clarify: "请求不明确时请用户说明",
-      },
-    );
-
     await this.#runtime.text(
       "intent",
-      `${prompts.intent}\n${prompts.memory}`,
-      { ...(state as Record<string, unknown>), decisionHint: hint },
+      `${prompts.intent}\n${prompts.memory}\n${this.#persona}`,
+      state,
       this.#config.AI_INTENT_MODEL ?? this.#config.AI_MODEL,
       tools,
     );
   }
 
-  public async relevantContext(
-    request: ChatMessage[],
+  public async observe(
+    messages: ChatMessage[],
     context: ChatMessage[],
-  ): Promise<ChatMessage[]> {
-    if (!this.#config.AI_DETECT_MODEL || context.length === 0) {
-      return context;
-    }
-
+  ): Promise<string[]> {
     const result = await this.#runtime.json(
-      "context_filter",
+      "observe",
       z.object({
-        messageIds: z.array(
-          z.enum([...new Set(context.map((message) => message.id))]),
+        replyIds: z.array(
+          z.enum([...new Set(messages.map((message) => message.id))]),
         ),
       }),
-      prompts.contextFilter,
-      { request, context },
-      this.#config.AI_DETECT_MODEL,
+      prompts.observe,
+      {
+        messages,
+        context,
+        self: { userId: this.#config.BOT_QQ, names: ["言栖", "小栖"] },
+      },
+      this.#config.AI_DETECT_MODEL ?? this.#config.AI_MODEL,
     );
-    const keep = new Set(result.messageIds);
 
-    return context.filter((message) => keep.has(message.id));
+    return result.replyIds;
   }
 
   public async voice(groupId: string, message: string): Promise<string> {
@@ -109,23 +83,19 @@ export class DialogAI {
     )
       .filter((item) => item.isBot && item.noteId === null)
       .slice(-3)
-      .map((item) => item.text.slice(0, MAX_REPLY_CHARS));
+      .map((item) => item.text);
 
     try {
       const result = await this.#runtime.json(
         "voice",
         voiceSchema,
-        this.#voicePrompt,
+        `${prompts.voice}\n${this.#persona}`,
         { message, recentReplies },
         this.#config.AI_REPLY_MODEL ?? this.#config.AI_MODEL,
       );
 
       return result.text;
     } catch (error) {
-      if (message.length > MAX_REPLY_CHARS) {
-        throw error;
-      }
-
       this.#logger.warn(
         "回复改写失败，使用原答复：%s",
         logDetail(failureMessage(error), this.#config),

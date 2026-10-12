@@ -15,7 +15,7 @@ export class Ai {
     const runtime = new AgentRuntime(config, store);
     const decisions = new DecisionProvider(config, store);
 
-    this.dialog = new DialogAI(config, store, runtime, decisions);
+    this.dialog = new DialogAI(config, store, runtime);
     this.recording = new RecordingAI(config, runtime, decisions);
     this.media = new MediaAI(config, store, runtime);
   }

@@ -38,7 +38,7 @@ export class Groups {
       revision: { $gt: 0 },
     });
     const failed = await this.#db.eval("jobs", (row) => $.count(row.id), {
-      "kind": { $ne: "intent" },
+      "$not": { $or: [{ kind: "intent" }, { kind: "observe" }] },
       "state": "failed",
       "payload.groupId": groupId,
     });

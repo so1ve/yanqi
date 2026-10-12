@@ -1,7 +1,5 @@
 import { z } from "zod";
 
-import { MAX_REPLY_CHARS } from "./prompts/common.ts";
-
 export const detectionSchema = z.object({
   topics: z.array(
     z.object({
@@ -29,5 +27,5 @@ export const publicationSchema = z.object({
 export type Detection = z.infer<typeof detectionSchema>;
 
 export const voiceSchema = z.object({
-  text: z.string().trim().min(1).max(MAX_REPLY_CHARS),
+  text: z.string().trim().min(1),
 });

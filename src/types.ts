@@ -61,6 +61,7 @@ export interface Asset {
 
 export interface JobPayloads {
   intent: { groupId: string; messageId: number };
+  observe: { groupId: string; messageIds: number[] };
   detect: { groupId: string; messageIds: number[] };
   summarize: {
     groupId: string;

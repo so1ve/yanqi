@@ -46,6 +46,15 @@ export class Store {
       "groups",
       groups.map((id) => ({ id })),
     );
+    // 重启后不再判断旧闲聊是否需要插话；新消息会带上近期上下文。
+    await this.#db.set(
+      "jobs",
+      { kind: "observe", $or: [{ state: "pending" }, { state: "running" }] },
+      {
+        state: "failed",
+        lastError: "服务重启，跳过旧消息的搭话判断",
+      },
+    );
     await this.#db.set("jobs", { state: "running" }, (row) => ({
       state: $.if($.eq(row.kind, "intent"), "failed", "pending"),
     }));
