@@ -4,6 +4,7 @@ import type { Notes } from "../recording/notes.ts";
 import { recordingTools } from "../recording/tools.ts";
 import type { Store } from "../storage/store.ts";
 import type { Ai } from "./models.ts";
+import { replyTool } from "./reply.ts";
 
 export async function handleRequest(
   messageId: number,
@@ -37,7 +38,8 @@ export async function handleRequest(
     config.ADMIN_IDS.includes(message.userId) ||
     message.role === "admin" ||
     message.role === "owner";
-  const response = await ai.request(
+
+  await ai.request(
     {
       request,
       quoted,
@@ -47,6 +49,7 @@ export async function handleRequest(
           id,
           title,
           description,
+          focus,
           state,
           mode,
           ownerId,
@@ -56,6 +59,7 @@ export async function handleRequest(
           id,
           title,
           description,
+          focus,
           state,
           mode,
           ownerId,
@@ -66,27 +70,15 @@ export async function handleRequest(
       memory: { recent: memories.slice(0, 6), count: memories.length },
       isAdmin,
       now: new Date(message.sentAt).toISOString(),
+      timeZone: "Asia/Shanghai",
+      today: new Intl.DateTimeFormat("sv-SE", {
+        timeZone: "Asia/Shanghai",
+      }).format(message.sentAt),
     },
     [
-      ...recordingTools(
-        store,
-        notes,
-        message,
-        isAdmin,
-        new Set([...request, ...quoted, ...context].map((item) => item.id)),
-      ),
+      replyTool(store, message),
+      ...recordingTools(store, notes, message, isAdmin, config),
       ...store.memories.tools(message),
     ],
   );
-
-  if ((await store.message(message.id)).recalledAt === null) {
-    await store.deliveries.enqueue(
-      `command:${message.id}`,
-      message.groupId,
-      null,
-      null,
-      "text",
-      response,
-    );
-  }
 }

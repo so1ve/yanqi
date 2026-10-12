@@ -44,6 +44,14 @@ export class Store {
       });
 
       if (existing) {
+        if (input.noteId !== undefined) {
+          await db.set(
+            "messages",
+            { id: existing.id },
+            { noteId: input.noteId },
+          );
+        }
+
         if (
           input.isBot &&
           JSON.parse(existing.rawJson).source === "yanqi-send" &&
@@ -163,19 +171,13 @@ export class Store {
     await this.#db.transact(async (db) => {
       const [message] = await db.get("messages", { groupId, messageId });
 
-      if (message?.recalledAt !== null) {
+      if (!message || message.recalledAt !== null) {
         return;
       }
 
       await db.set("messages", { id: message.id }, { recalledAt: now });
       await db.remove("memories", { sourceMessageId: message.id });
-      const links = await db.get("topic_messages", { messageId: message.id });
-
-      await db.set(
-        "topics",
-        { id: links.map((link) => link.topicId) },
-        (row) => ({ generation: $.add(row.generation, 1) }),
-      );
+      await this.#messageChanged(db, message.id);
     });
   }
 
@@ -207,19 +209,19 @@ export class Store {
     return messages.reverse();
   }
 
-  public window(
+  public history(
     groupId: string,
-    since: number,
     through: number,
+    from = 0,
+    to = Number.MAX_SAFE_INTEGER,
   ): Promise<Message[]> {
     return this.#db.get(
       "messages",
       {
         groupId,
-        sentAt: { $gte: since },
+        sentAt: { $gte: from, $lt: to },
         id: { $lte: through },
         isBot: false,
-        command: false,
       },
       { sort: { id: "asc" } },
     );
@@ -289,26 +291,43 @@ export class Store {
     });
   }
 
-  public createTopic(
-    groupId: string,
-    title: string,
-    mode: Topic["mode"],
-    ownerId: string | null,
-    messages: number[],
-    now: number,
-    directive: Topic["directive"] = "auto",
-    directiveMessageId: number | null = null,
+  public createRecording(
+    request: Message,
+    options: {
+      title: string;
+      focus?: string;
+      directive: Topic["directive"];
+      messages: number[] | "following";
+    },
   ): Promise<Topic> {
     return this.#db.transact(async (db) => {
+      const continuous = options.messages === "following";
+      const messages =
+        options.messages === "following"
+          ? (
+              await db.get(
+                "messages",
+                {
+                  groupId: request.groupId,
+                  id: { $gt: request.id },
+                  isBot: false,
+                  command: false,
+                },
+                ["id"],
+              )
+            ).map((message) => message.id)
+          : options.messages;
       const topic = await db.create("topics", {
         id: randomUUID(),
-        groupId,
-        title,
-        mode,
-        ownerId,
-        lastActiveAt: now,
-        directive,
-        directiveMessageId,
+        groupId: request.groupId,
+        title: options.title,
+        focus: options.focus ?? "",
+        mode: "manual",
+        ownerId: request.userId,
+        state: continuous ? "active" : "closed",
+        lastActiveAt: request.receivedAt,
+        directive: options.directive,
+        directiveMessageId: request.id,
       });
 
       await this.#link(db, topic.id, messages);
@@ -341,7 +360,11 @@ export class Store {
         continue;
       }
 
-      await db.create("topic_messages", { topicId, messageId: id });
+      await db.create("topic_messages", {
+        topicId,
+        messageId: id,
+        generation: topic.generation + added + 1,
+      });
       topic.lastSourceId = Math.max(topic.lastSourceId, id);
       topic.lastActiveAt = Math.max(topic.lastActiveAt, source.receivedAt);
       added++;
@@ -355,7 +378,6 @@ export class Store {
           generation: topic.generation + added,
           lastSourceId: topic.lastSourceId,
           lastActiveAt: topic.lastActiveAt,
-          state: "active",
         },
       );
     }
@@ -423,10 +445,80 @@ export class Store {
     );
   }
 
-  public async closeTopic(topicId: string): Promise<void> {
-    await this.#db.transact((db) =>
-      db.set("topics", { id: topicId }, { state: "closed" }),
+  public async changedTopicMessages(
+    topicId: string,
+    since: number,
+  ): Promise<Set<number>> {
+    const links = await this.#db.get(
+      "topic_messages",
+      { topicId, generation: { $gt: since } },
+      ["messageId"],
     );
+
+    return new Set(links.map((link) => link.messageId));
+  }
+
+  async #messageChanged(db: Database, messageId: number): Promise<void> {
+    const links = await db.get("topic_messages", { messageId });
+
+    for (const { topicId } of links) {
+      const [topic] = await db.get("topics", { id: topicId });
+
+      assert.ok(topic);
+      const generation = topic.generation + 1;
+
+      await db.set("topic_messages", { topicId, messageId }, { generation });
+      await db.set("topics", { id: topicId }, { generation });
+    }
+  }
+
+  public stopRecording(
+    topicId: string,
+    through: number,
+    include: number[],
+  ): Promise<Topic> {
+    return this.#db.transact(async (db) => {
+      if (include.length > 0) {
+        await this.#link(
+          db,
+          topicId,
+          include.filter((id) => id < through),
+        );
+      }
+
+      const [topic] = await db.get("topics", { id: topicId });
+
+      assert.ok(topic);
+      const removed = await db.remove("topic_messages", {
+        topicId,
+        messageId: { $gte: through },
+      });
+
+      if (removed.removed) {
+        const links = await db.get("topic_messages", { topicId }, [
+          "messageId",
+        ]);
+
+        topic.lastSourceId = links.reduce(
+          (latest, link) => Math.max(latest, link.messageId),
+          0,
+        );
+        topic.generation++;
+      }
+
+      topic.state = "closed";
+      await db.set(
+        "topics",
+        { id: topicId },
+        {
+          state: topic.state,
+          lastSourceId: topic.lastSourceId,
+          generation: topic.generation,
+        },
+      );
+
+      return topic;
+    });
   }
 
   public async setDirective(
@@ -497,15 +589,7 @@ export class Store {
       }
 
       await db.set("assets", { id }, { state, path, interpretation, error });
-      const links = await db.get("topic_messages", {
-        messageId: asset.messageId,
-      });
-
-      await db.set(
-        "topics",
-        { id: links.map((link) => link.topicId) },
-        (row) => ({ generation: $.add(row.generation, 1) }),
-      );
+      await this.#messageChanged(db, asset.messageId);
     });
   }
 
@@ -514,6 +598,7 @@ export class Store {
     sourceThrough: number,
     generation: number,
     markdown: string,
+    sections: Note["sections"],
     path: string,
     now: number,
   ): Promise<Note> {
@@ -529,6 +614,7 @@ export class Store {
         sourceThrough,
         generation,
         markdown,
+        sections,
         path,
         createdAt: now,
       });
@@ -573,7 +659,12 @@ export class Store {
       "topics",
       {
         groupId,
-        $or: [{ title: literal }, { id: notes.map((note) => note.topicId) }],
+        $or: [
+          { id: literal },
+          { title: literal },
+          { description: literal },
+          { id: notes.map((note) => note.topicId) },
+        ],
       },
       { sort: { lastActiveAt: "desc" }, limit: 10 },
     );
@@ -607,6 +698,7 @@ export class Store {
       groupId,
     });
     const failed = await this.#db.eval("jobs", (row) => $.count(row.id), {
+      "kind": { $ne: "intent" },
       "state": "failed",
       "payload.groupId": groupId,
     });
@@ -614,7 +706,23 @@ export class Store {
       "$or": [{ state: "pending" }, { state: "running" }],
       "payload.groupId": groupId,
     });
+    const failedDeliveries = await this.#db.eval(
+      "deliveries",
+      (row) => $.count(row.id),
+      {
+        groupId,
+        state: "failed",
+      },
+    );
+    const pendingDeliveries = await this.#db.eval(
+      "deliveries",
+      (row) => $.count(row.id),
+      {
+        groupId,
+        state: "pending",
+      },
+    );
 
-    return `本群已保存 ${messages} 条消息、${notes} 版纪要。自动整理${(await this.aiEnabled(groupId)) ? "开启" : "关闭"}。\n待处理任务 ${pending}，需重试任务 ${failed}。`;
+    return `本群已保存 ${messages} 条消息（含机器人回复）、${notes} 版纪要。自动整理${(await this.aiEnabled(groupId)) ? "开启" : "关闭"}。\n处理中或等待中的任务 ${pending}，待发送 ${pendingDeliveries}，可重试的后台任务 ${failed}，发送失败 ${failedDeliveries}。`;
   }
 }

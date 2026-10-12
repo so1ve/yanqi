@@ -17,13 +17,15 @@ export interface IncomingMessage {
   isBot: boolean;
   addressed: boolean;
   role: "owner" | "admin" | "member";
+  noteId?: number;
 }
 
-export interface Message extends Omit<IncomingMessage, "raw"> {
+export interface Message extends Omit<IncomingMessage, "raw" | "noteId"> {
   id: number;
   rawJson: string;
   command: boolean;
   recalledAt: number | null;
+  noteId: number | null;
 }
 
 export interface Topic {
@@ -31,6 +33,7 @@ export interface Topic {
   groupId: string;
   title: string;
   description: string;
+  focus: string;
   mode: "auto" | "manual";
   ownerId: string | null;
   state: "active" | "closed";
@@ -60,8 +63,6 @@ export interface JobPayloads {
   summarize: {
     groupId: string;
     topicId: string;
-    through: number;
-    generation: number;
     requested: boolean;
   };
   asset: { groupId: string; assetId: number };
@@ -86,6 +87,7 @@ export interface Note {
   markdown: string;
   path: string;
   generation: number;
+  sections: { messageIds: number[]; content: string }[];
 }
 
 export interface ChatMessage {

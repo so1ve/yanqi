@@ -2,44 +2,55 @@ import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 
 import type { AgentState } from "@earendil-works/pi-agent-core";
+import { Logger } from "koishi";
 import OpenAI from "openai";
 import { z } from "zod";
 
 import type { Config } from "../config.ts";
 import type { Store } from "../storage/store.ts";
 import type { ChatMessage, Topic } from "../types.ts";
+import { failureMessage } from "../utils/errors.ts";
+import { logContext, logDetail } from "../utils/logging.ts";
 import { DecisionProvider } from "./decisions.ts";
 import { prompts } from "./prompts.ts";
 import { AgentRuntime } from "./runtime.ts";
 import type { Detection } from "./schemas.ts";
 import { detectionSchema, publicationSchema, voiceSchema } from "./schemas.ts";
-import { AiSizeError, BudgetExceeded, reserveCall } from "./usage.ts";
+import { BudgetExceeded, reserveCall } from "./usage.ts";
 
 export class Ai {
-  #client: OpenAI;
   #config: Config;
   #store: Store;
   #decisions: DecisionProvider;
-  #persona: string;
+  #voicePrompt: string;
   #runtime: AgentRuntime;
+  #logger = new Logger("yanqi:ai");
 
   constructor(config: Config, store: Store) {
     this.#config = config;
     this.#store = store;
-    this.#client = new OpenAI({
-      apiKey: config.AI_API_KEY,
-      baseURL: config.AI_BASE_URL,
-      timeout: config.AI_TIMEOUT_MS,
-      maxRetries: 0,
-    });
     this.#decisions = new DecisionProvider(config);
     this.#runtime = new AgentRuntime(config, store);
-    this.#persona = config.BOT_PERSONA_FILE
+
+    const persona = config.BOT_PERSONA_FILE
       ? readFileSync(config.BOT_PERSONA_FILE, "utf8").trim()
       : "";
-    if (config.BOT_PERSONA_FILE && !this.#persona) {
+    if (config.BOT_PERSONA_FILE && !persona) {
       throw new Error("BOT_PERSONA_FILE 指定的人设文件不能为空");
     }
+
+    const writingSkill = readFileSync(
+      "./skills/speak-plainly/SKILL.md",
+      "utf8",
+    );
+
+    this.#voicePrompt = [
+      prompts.voice,
+      `写作要求（用于本次 QQ 群回复，保持原答复的语言）：\n${writingSkill}`,
+      persona && `角色设定（仅用于表达）：\n${persona}`,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
   }
 
   async #choose(
@@ -53,10 +64,27 @@ export class Ai {
     }
 
     const input = JSON.stringify(state);
+    const label = [logContext.getStore(), purpose].filter(Boolean).join(" ");
 
     if (input.length > this.#config.AI_INPUT_CHARS) {
-      throw new AiSizeError(`${purpose} 决策输入超过单次字符上限`);
+      this.#logger.debug(
+        "%s 决策输入过长（%s 字符），由 Agent 继续判断",
+        label,
+        input.length,
+      );
+
+      return null;
     }
+
+    const startedAt = performance.now();
+
+    this.#logger.info(
+      "%s 独立决策开始：provider=%s model=%s chars=%s",
+      label,
+      this.#config.DECISION_PROVIDER,
+      this.#config.DECISION_MODEL,
+      input.length,
+    );
 
     try {
       await reserveCall(
@@ -83,13 +111,33 @@ export class Ai {
         throw new Error("决策服务返回了未提供的选项");
       }
 
-      return parsed.confidence >= this.#config.DECISION_CONFIDENCE
-        ? parsed.choice
-        : null;
+      const accepted = parsed.confidence >= this.#config.DECISION_CONFIDENCE;
+
+      this.#logger.info(
+        "%s 独立决策完成：choice=%s confidence=%s accepted=%s 耗时=%s ms",
+        label,
+        parsed.choice,
+        parsed.confidence,
+        accepted,
+        Math.round(performance.now() - startedAt),
+      );
+
+      return accepted ? parsed.choice : null;
     } catch (error) {
       if (error instanceof BudgetExceeded) {
         throw error;
       }
+
+      this.#logger.warn(
+        "%s 独立决策失败，改由 Agent 判断：%s",
+        label,
+        logDetail(failureMessage(error), this.#config),
+      );
+      this.#logger.debug(
+        "%s 决策异常：%s",
+        label,
+        logDetail(error, this.#config),
+      );
 
       return null;
     }
@@ -98,22 +146,20 @@ export class Ai {
   public async request(
     state: unknown,
     tools: AgentState["tools"],
-  ): Promise<string> {
+  ): Promise<void> {
     const hint = await this.#choose("intent", prompts.intentChoice, state, {
       ...Object.fromEntries(tools.map((tool) => [tool.name, tool.description])),
       chat: "回应对话或记录能力范围内的问题",
       clarify: "请求不明确时请用户说明",
     });
-    const answer = await this.#runtime.json(
+
+    await this.#runtime.text(
       "intent",
-      z.strictObject({ response: z.string().min(1).max(1200) }),
       `${prompts.intent}\n${prompts.memory}`,
       { ...(state as Record<string, unknown>), decisionHint: hint },
-      this.#config.AI_INTENT_MODEL || this.#config.AI_MODEL,
+      this.#config.AI_INTENT_MODEL ?? this.#config.AI_MODEL,
       tools,
     );
-
-    return answer.response;
   }
 
   public detect(
@@ -126,15 +172,41 @@ export class Ai {
       detectionSchema,
       prompts.detect,
       { messages, context, topics },
-      this.#config.AI_DETECT_MODEL || this.#config.AI_MODEL,
+      this.#config.AI_DETECT_MODEL ?? this.#config.AI_MODEL,
     );
   }
 
-  public summarize(title: string, messages: ChatMessage[]): Promise<string> {
-    return this.#runtime.text("summary", prompts.summary, {
+  public async summarize(
+    {
       title,
+      description,
+      focus,
+    }: Pick<Topic, "title" | "description" | "focus">,
+    messages: ChatMessage[],
+    context: ChatMessage[],
+  ): Promise<string> {
+    const input = {
+      topic: { title, description },
       messages,
-    });
+      context,
+    };
+
+    if (focus) {
+      const result = await this.#runtime.json(
+        "summary",
+        z.object({ markdown: z.string() }),
+        `${prompts.summary}\n\n${prompts.focusedSummary}`,
+        { ...input, focus },
+      );
+
+      return result.markdown.trim();
+    }
+
+    return this.#runtime.text(
+      "summary",
+      `${prompts.summary}\n直接返回纪要正文，不返回 JSON。`,
+      input,
+    );
   }
 
   public async shouldPublish(
@@ -161,6 +233,7 @@ export class Ai {
           id: topic.id,
           title: topic.title,
           description: topic.description,
+          focus: topic.focus,
           directive: topic.directive,
           directiveMessageId:
             topic.directiveMessageId === null
@@ -177,16 +250,12 @@ export class Ai {
   }
 
   public async voice(message: string): Promise<string> {
-    if (!this.#persona) {
-      return message;
-    }
-
     const result = await this.#runtime.json(
       "voice",
       voiceSchema,
-      `${prompts.voice}\n\n角色设定（仅用于表达）：\n${this.#persona}`,
+      this.#voicePrompt,
       { message },
-      this.#config.AI_REPLY_MODEL || this.#config.AI_MODEL,
+      this.#config.AI_REPLY_MODEL ?? this.#config.AI_MODEL,
     );
 
     return result.text;
@@ -210,19 +279,32 @@ export class Ai {
   }
 
   public async transcribe(path: string): Promise<string> {
-    if (!this.#config.AI_AUDIO_MODEL) {
+    const model = this.#config.AI_AUDIO_MODEL;
+
+    if (!model) {
       throw new Error("未配置语音转写模型");
     }
 
-    await reserveCall(
-      this.#config,
-      this.#store,
-      this.#config.AI_AUDIO_MODEL,
-      "audio",
+    await reserveCall(this.#config, this.#store, model.model, "audio");
+
+    const startedAt = performance.now();
+
+    this.#logger.info(
+      "%s 语音转写开始：model=%s file=%s",
+      logContext.getStore() ?? "",
+      model.model,
+      path,
     );
+
     const bytes = await readFile(path);
-    const text = await this.#client.audio.transcriptions.create({
-      model: this.#config.AI_AUDIO_MODEL,
+    const client = new OpenAI({
+      apiKey: model.apiKey,
+      baseURL: model.baseURL,
+      timeout: this.#config.AI_TIMEOUT_MS,
+      maxRetries: 0,
+    });
+    const text = await client.audio.transcriptions.create({
+      model: model.model,
       file: await OpenAI.toFile(bytes, path.split(/[\\/]/).at(-1)),
       response_format: "json",
     });
@@ -230,6 +312,13 @@ export class Ai {
     if (!text.text.trim()) {
       throw new Error("语音转写未返回文字");
     }
+
+    this.#logger.info(
+      "%s 语音转写完成：chars=%s 耗时=%s ms",
+      logContext.getStore() ?? "",
+      text.text.length,
+      Math.round(performance.now() - startedAt),
+    );
 
     return text.text;
   }

@@ -2,30 +2,34 @@ import type { AgentState, AgentTool } from "@earendil-works/pi-agent-core";
 import type { Static, TSchema } from "typebox";
 import { Type } from "typebox";
 
+import type { Config } from "../config.ts";
 import type { Store } from "../storage/store.ts";
 import type { Message, Topic } from "../types.ts";
+import { messageChunks } from "./messages.ts";
 import type { Notes } from "./notes.ts";
+import { selectSources, sourceScope } from "./sources.ts";
 
-const directive = Type.Union([
-  Type.Literal("auto"),
-  Type.Literal("send"),
-  Type.Literal("hold"),
-]);
+const directive = Type.Optional(
+  Type.Union([
+    Type.Literal("auto"),
+    Type.Literal("send"),
+    Type.Literal("hold"),
+  ]),
+);
 const topicId = Type.String({ minLength: 1 });
 const title = Type.Optional(Type.String({ minLength: 1, maxLength: 100 }));
 const object = <T extends Record<string, TSchema>>(properties: T) =>
   Type.Object(properties, { additionalProperties: false });
 const recordParameters = object({
-  scope: Type.Union([
-    object({ topicId }),
-    object({
-      sourceIds: Type.Array(Type.String({ pattern: "^m[1-9][0-9]*$" }), {
-        minItems: 1,
-      }),
-    }),
-    object({ minutes: Type.Integer({ minimum: 1, maximum: 1440 }) }),
-  ]),
+  scope: sourceScope,
   title,
+  focus: Type.Optional(
+    Type.String({
+      minLength: 1,
+      description:
+        "按当前用户要求筛选、整理的目标，例如所有对小栖的优化建议。后台逐段读取整个范围；省略时整理全部内容。",
+    }),
+  ),
   directive,
 });
 const topicParameters = object({ topicId });
@@ -36,7 +40,7 @@ export function recordingTools(
   notes: Notes,
   message: Message,
   isAdmin: boolean,
-  sourceIds: Set<string>,
+  config: Config,
 ): AgentState["tools"] {
   async function getTopic(id: string) {
     const topic = await store.topic(id);
@@ -75,17 +79,16 @@ export function recordingTools(
 
     if (note?.generation === topic.generation) {
       if (send) {
-        await store.deliveries.enqueue(
-          `requested:${message.id}:${topic.id}`,
-          message.groupId,
-          topic.id,
-          note.id,
-          "note",
-          note.markdown,
-        );
+        await store.deliveries.enqueue(`requested:${message.id}:${topic.id}`, {
+          kind: "note",
+          note,
+          repeat: true,
+        });
       }
 
-      return `「${topic.title}」已保存在本地，第 ${note.revision} 版。${send ? "已安排发送。" : ""}`;
+      return send
+        ? `「${topic.title}」第 ${note.revision} 版已加入发送队列。`
+        : `「${topic.title}」已保存在本地，第 ${note.revision} 版。`;
     }
 
     if (!topic.lastSourceId) {
@@ -99,63 +102,73 @@ export function recordingTools(
 
   return [
     tool(
-      "record",
-      "整理已有讨论。scope 选择一个范围：本群话题、指定原文 ID 或最近多少分钟。directive 表示发送、暂缓或自行判断。",
-      recordParameters,
-      async (args) => {
-        if ("topicId" in args.scope) {
-          const topic = await getTopic(args.scope.topicId);
-
-          if (args.directive !== "auto") {
-            await store.setDirective(topic.id, args.directive, message.id);
-          }
-
-          return arrange(topic, args.directive === "send");
-        }
-
-        const sources =
-          "sourceIds" in args.scope
-            ? await Promise.all(
-                [...new Set(args.scope.sourceIds)].map(async (id) => {
-                  if (!sourceIds.has(id)) {
-                    throw new Error("记录来源必须是已提供的本群成员原文");
-                  }
-
-                  const source = await store.message(Number(id.slice(1)));
-
-                  if (source.isBot) {
-                    throw new Error("记录来源必须是群成员的原文");
-                  }
-
-                  return source;
-                }),
-              )
-            : await store.window(
-                message.groupId,
-                message.sentAt - args.scope.minutes * 60_000,
-                message.id - 1,
-              );
-
-        if (sources.length === 0) {
-          return "这个时间范围内没有可整理的消息。群消息仍会继续保存。";
-        }
-
-        const topic = await store.createTopic(
-          message.groupId,
-          args.title ||
-            `讨论记录 ${new Date(message.sentAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}`,
-          "manual",
-          message.userId,
-          sources.map((source) => source.id),
-          message.receivedAt,
-          args.directive,
-          message.id,
+      "read_history",
+      "读取本地保存的本群成员原文，包括尚未归入话题的消息和 @ 消息。可按日期、多个话题、消息 ID 或全部历史读取。每次返回一页，长消息可能跨页；nextPage 不为空时还有后文。批量找某类内容并另建文档，直接调用 record 的 scope 和 focus，无需逐页读完。",
+      object({
+        scope: sourceScope,
+        page: Type.Optional(Type.Integer({ minimum: 0 })),
+      }),
+      async ({ scope, page = 0 }) => {
+        const sources = await selectSources(store, message, scope);
+        const pages = await messageChunks(
+          store,
+          sources,
+          Math.floor(config.AI_INPUT_CHARS / 4),
         );
 
-        await store.closeTopic(topic.id);
-        await notes.schedule(await store.topic(topic.id));
+        return JSON.stringify({
+          sourceCount: sources.length,
+          page,
+          nextPage: page + 1 < pages.length ? page + 1 : null,
+          messages: pages[page] ?? [],
+        });
+      },
+    ),
+    tool(
+      "record",
+      "从本群历史新建一份文档，可跨多个话题。scope 指定完整检索范围；focus 指定要找的内容，后台会逐段读取全部范围并整理相关观点，保留细节。无需先搜出现有话题或让用户挑消息 ID。title 可自行拟定。directive 省略为自行判断，send 为完成后发送，hold 为只保存。更新已有纪要用 update_record。",
+      recordParameters,
+      async (args) => {
+        const sources = await selectSources(store, message, args.scope);
 
-        return `已选中 ${sources.length} 条原文，正在整理。编号 ${topic.id.slice(0, 8)}。`;
+        if (sources.length === 0) {
+          return "这个范围内没有本地保存的群成员消息。";
+        }
+
+        const topic = await store.createRecording(message, {
+          title:
+            args.title ||
+            `讨论记录 ${new Date(message.sentAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}`,
+          messages: sources.map((source) => source.id),
+          focus: args.focus ?? "",
+          directive: args.directive ?? "auto",
+        });
+
+        await notes.schedule(topic, true);
+
+        return JSON.stringify({
+          topicId: topic.id,
+          title: topic.title,
+          sourceCount: sources.length,
+          focus: topic.focus,
+          status:
+            "已安排后台整理；此数量是检索范围的消息数，尚未筛选相关内容。纪要尚未完成，完成后会发送纪要或保存通知。",
+        });
+      },
+    ),
+    tool(
+      "update_record",
+      "按已有记录的原文和整理要求更新纪要，不创建新文档。最新版本已保存时直接复用；另建文档使用 record。",
+      object({ topicId, directive }),
+      async (args) => {
+        let topic = await getTopic(args.topicId);
+
+        if (args.directive !== undefined) {
+          await store.setDirective(topic.id, args.directive, message.id);
+          topic = await getTopic(topic.id);
+        }
+
+        return arrange(topic, topic.directive === "send");
       },
     ),
     tool(
@@ -172,31 +185,23 @@ export function recordingTools(
           return `你已有正在进行的记录：${existing.map((topic) => `「${topic.title}」`).join("、")}。先结束它，再开始新的。`;
         }
 
-        const following = (
-          await store.window(
-            message.groupId,
-            message.sentAt,
-            Number.MAX_SAFE_INTEGER,
-          )
-        ).filter((item) => item.id > message.id);
-        const topic = await store.createTopic(
-          message.groupId,
-          args.title || "连续讨论记录",
-          "manual",
-          message.userId,
-          following.map((item) => item.id),
-          message.receivedAt,
-          args.directive,
-          message.id,
-        );
+        const topic = await store.createRecording(message, {
+          title: args.title || "连续讨论记录",
+          messages: "following",
+          directive: args.directive ?? "auto",
+        });
 
         return `开始记录「${topic.title}」，编号 ${topic.id.slice(0, 8)}。聊完后 @ 我结束记录，我会整理纪要。`;
       },
     ),
     tool(
       "stop",
-      "结束连续记录并整理。未指定 topicId 时选择请求者的连续记录。只有发起人或管理员可以结束。",
-      object({ topicId: Type.Optional(topicId), directive }),
+      "结束连续记录并整理。用户要求连同更早的内容一起整理时，用 include 指定来源范围，并入同一个话题。未指定 topicId 时选择请求者的连续记录。只有发起人或管理员可以结束。",
+      object({
+        topicId: Type.Optional(topicId),
+        include: Type.Optional(sourceScope),
+        directive,
+      }),
       async (args) => {
         const owned = await store.manualTopics(message.groupId, message.userId);
         const topic = args.topicId ? await getTopic(args.topicId) : owned[0];
@@ -209,16 +214,21 @@ export function recordingTools(
           return "请记录的发起人或管理员结束这段记录。";
         }
 
-        if (args.directive !== "auto") {
+        const included = args.include
+          ? await selectSources(store, message, args.include)
+          : [];
+
+        if (args.directive !== undefined) {
           await store.setDirective(topic.id, args.directive, message.id);
         }
 
-        await store.closeTopic(topic.id);
-        await notes.schedule(await store.topic(topic.id));
+        const stopped = await store.stopRecording(
+          topic.id,
+          message.id,
+          included.map((source) => source.id),
+        );
 
-        return topic.lastSourceId
-          ? "这段记录已结束，正在整理纪要。"
-          : "这段记录已结束，里面还没有需要整理的消息。";
+        return `这段记录已结束。${await arrange(stopped, stopped.directive === "send")}`;
       },
     ),
     tool(
@@ -247,7 +257,7 @@ export function recordingTools(
     ),
     tool(
       "search",
-      "查找本群记录，返回标题、完整 ID 和整理状态。",
+      "按标题、纪要内容或编号查找本群已有记录，返回标题、简介、完整 ID 和整理状态。它不会搜索全部聊天；查原文用 read_history，跨历史收集内容另建文档用 record。向群发送全文时调用 send。",
       object({
         query: Type.String({ minLength: 1, maxLength: 200, pattern: "\\S" }),
       }),
@@ -256,14 +266,47 @@ export function recordingTools(
 
         return matches.length > 0
           ? JSON.stringify(
-              matches.map(({ id, title, state, revision }) => ({
-                id,
-                title,
-                state,
-                revision,
-              })),
+              matches.map(
+                ({ id, title, description, focus, state, revision }) => ({
+                  id,
+                  title,
+                  description,
+                  focus,
+                  state,
+                  revision,
+                }),
+              ),
             )
           : "本群没有找到匹配的记录。";
+      },
+    ),
+    tool(
+      "inspect",
+      "查看本群某份记录的实际来源：原文数量、首尾消息片段和纪要版本。回答记录范围和内容时使用，不凭话题名称猜测。片段不是完整原文。",
+      topicParameters,
+      async ({ topicId }) => {
+        const topic = await getTopic(topicId);
+        const sources = await store.topicMessages(topic.id);
+        const samples =
+          sources.length > 1 ? [sources[0]!, sources.at(-1)!] : sources;
+
+        return JSON.stringify({
+          id: topic.id,
+          title: topic.title,
+          description: topic.description,
+          focus: topic.focus,
+          state: topic.state,
+          revision: topic.revision,
+          sourceCount: sources.length,
+          needsUpdate: topic.generation !== topic.noteGeneration,
+          samples: samples.map((source) => ({
+            id: `m${source.id}`,
+            time: new Date(source.sentAt).toISOString(),
+            author: source.displayName,
+            excerpt: source.text.slice(0, 500),
+            recalledAt: source.recalledAt,
+          })),
+        });
       },
     ),
     tool(
@@ -274,12 +317,20 @@ export function recordingTools(
     ),
     tool(
       "retry",
-      "重试本群失败任务，需要管理员权限。",
+      "重试本群失败的后台识别、整理、附件和发送任务。不会重新执行旧的 @ 请求。需要管理员权限。",
       emptyParameters,
-      async () =>
-        isAdmin
-          ? `已重新安排本群 ${await store.jobs.retryFailed(message.groupId)} 个失败任务。`
-          : "只有群主、群管理员或配置中的管理员可以重试任务。",
+      async () => {
+        if (!isAdmin) {
+          return "只有群主、群管理员或配置中的管理员可以重试任务。";
+        }
+
+        const jobs = await store.jobs.retryFailed(message.groupId);
+        const deliveries = await store.deliveries.retryFailed(message.groupId);
+
+        return jobs + deliveries > 0
+          ? `已重新安排本群 ${jobs} 个后台任务、${deliveries} 个发送任务。`
+          : "没有待重试的后台或发送任务。若上次对话中断，请直接说明接下来要做什么。";
+      },
     ),
     tool(
       "automatic",

@@ -4,7 +4,7 @@ import type { OneBot } from "koishi-plugin-adapter-onebot";
 
 import type { Config } from "../config.ts";
 import type { Store } from "../storage/store.ts";
-import type { Asset, Segment } from "../types.ts";
+import type { Asset, Note, Segment } from "../types.ts";
 
 type ProtocolBot = Bot & { internal: OneBot.Internal };
 
@@ -38,6 +38,7 @@ export function createMessenger(config: Config, store: Store, ctx: Context) {
     messageId: string,
     text: string,
     segments: Segment[],
+    noteId?: number,
   ) {
     const now = Date.now();
 
@@ -55,6 +56,7 @@ export function createMessenger(config: Config, store: Store, ctx: Context) {
       isBot: true,
       addressed: false,
       role: "member",
+      ...(noteId === undefined ? {} : { noteId }),
     });
   }
 
@@ -70,9 +72,9 @@ export function createMessenger(config: Config, store: Store, ctx: Context) {
         await saveOutgoing(groupId, id, text, segments);
       }
     },
-    async sendNote(groupId: string, title: string, markdown: string) {
+    async sendNote(note: Note) {
       const bot = getBot();
-      const chunks = textParts(`${title}\n\n${markdown}`, 1800);
+      const chunks = textParts(note.markdown, 1800);
       const nodes = chunks.map((text) => ({
         type: "node",
         data: {
@@ -85,13 +87,14 @@ export function createMessenger(config: Config, store: Store, ctx: Context) {
       // The universal encoder trims node whitespace; preserve code with the adapter's native API.
       for (let position = 0; position < nodes.length; position += 50) {
         const part = nodes.slice(position, position + 50);
-        const id = await bot.internal.sendGroupForwardMsg(groupId, part);
+        const id = await bot.internal.sendGroupForwardMsg(note.groupId, part);
 
         await saveOutgoing(
-          groupId,
+          note.groupId,
           String(id),
           part.map((node) => node.data.content[0]!.data.text).join(""),
           [],
+          note.id,
         );
       }
     },

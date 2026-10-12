@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { mkdir, open, rename, rm, writeFile } from "node:fs/promises";
+import { createWriteStream } from "node:fs";
+import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { pipeline } from "node:stream/promises";
 
 import type { Ai } from "./agent/models.ts";
 import type { Config } from "./config.ts";
@@ -84,43 +86,26 @@ export async function collectAsset(
         )[mime] ?? ".bin";
       const target = join(directory, `${id}${suffix}`);
       const temporary = `${target}.${randomUUID()}.part`;
-      const file = await open(temporary, "wx", 0o600);
-      const reader = response.body.getReader();
-      let size = 0;
-
       try {
-        for (;;) {
-          const part = await reader.read();
+        await pipeline(
+          response.body,
+          async function* (chunks) {
+            let size = 0;
 
-          if (part.done) {
-            break;
-          }
+            for await (const chunk of chunks) {
+              size += chunk.byteLength;
+              if (size > config.MAX_ATTACHMENT_BYTES) {
+                throw new Error("附件超过配置的大小限制，下载已停止");
+              }
 
-          size += part.value.byteLength;
-          if (size > config.MAX_ATTACHMENT_BYTES) {
-            throw new Error("附件超过配置的大小限制，下载已停止");
-          }
-
-          let offset = 0;
-
-          while (offset < part.value.length) {
-            const written = await file.write(
-              part.value,
-              offset,
-              part.value.length - offset,
-            );
-
-            offset += written.bytesWritten;
-          }
-        }
-
-        await file.sync();
-        await file.close();
+              yield chunk;
+            }
+          },
+          createWriteStream(temporary, { flags: "wx", mode: 0o600 }),
+        );
         await rename(temporary, target);
         path = target;
       } catch (error) {
-        await reader.cancel().catch(() => {});
-        await file.close().catch(() => {});
         await rm(temporary, { force: true });
 
         throw error;

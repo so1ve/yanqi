@@ -1,7 +1,9 @@
-import { $ } from "koishi";
+import { Logger } from "koishi";
 
 import type { Job, JobKind, JobPayloads } from "../types.ts";
 import type { Database } from "./schema.ts";
+
+const logger = new Logger("yanqi:jobs");
 
 export async function enqueueJob<K extends JobKind>(
   db: Database,
@@ -13,14 +15,27 @@ export async function enqueueJob<K extends JobKind>(
   const [existing] = await db.get("jobs", { key });
 
   if (!existing) {
-    await db.create("jobs", { kind, key, payload, runAfter: now });
+    const job = await db.create("jobs", { kind, key, payload, runAfter: now });
+
+    logger.info("任务 #%s 入队：kind=%s key=%s", job.id, kind, key);
   } else if (
     kind === "summarize" &&
     "requested" in payload &&
     payload.requested &&
-    existing.state !== "done"
+    existing.state !== "running"
   ) {
-    await db.set("jobs", { id: existing.id }, { payload });
+    await db.set(
+      "jobs",
+      { id: existing.id },
+      {
+        payload,
+        state: "pending",
+        attempts: 0,
+        runAfter: now,
+        lastError: null,
+      },
+    );
+    logger.info("任务 #%s 重新安排：kind=%s key=%s", existing.id, kind, key);
   }
 }
 
@@ -54,23 +69,36 @@ export class JobQueue {
     return rows.length > 0;
   }
 
-  public claim(now: number): Promise<Job | null> {
+  public claim(kind: JobKind, now: number): Promise<Job | null> {
     return this.#db.transact(async (db) => {
-      const [job] = await db
-        .select("jobs", { state: "pending", runAfter: { $lte: now } })
-        .orderBy((row) =>
-          $.switch(
-            [
-              { case: $.eq(row.kind, "intent"), then: 0 },
-              { case: $.eq(row.kind, "asset"), then: 1 },
-              { case: $.eq(row.kind, "detect"), then: 2 },
-            ],
-            3,
-          ),
+      const pausedGroups = (
+        await db.get("groups", { aiEnabled: false }, ["id"])
+      ).map((group) => group.id);
+      const pausedTopics = (
+        await db.get(
+          "topics",
+          {
+            groupId: pausedGroups,
+            mode: "auto",
+          },
+          ["id"],
         )
-        .orderBy("id")
-        .limit(1)
-        .execute();
+      ).map((topic) => topic.id);
+      const [job] = await db.get(
+        "jobs",
+        {
+          kind,
+          state: "pending",
+          runAfter: { $lte: now },
+          $or: [
+            { kind: ["intent", "asset"] },
+            { "payload.groupId": { $nin: pausedGroups } },
+            { "kind": "summarize", "payload.requested": true },
+            { "kind": "summarize", "payload.topicId": { $nin: pausedTopics } },
+          ],
+        },
+        { sort: { id: "asc" }, limit: 1 },
+      );
 
       if (!job) {
         return null;
@@ -97,30 +125,39 @@ export class JobQueue {
     error: string,
     now: number,
     after?: number,
-  ): Promise<void> {
+  ): Promise<{ state: "failed" | "pending"; runAfter: number }> {
+    const state =
+      job.kind === "intent" || (after === undefined && job.attempts >= 5)
+        ? "failed"
+        : "pending";
+    const runAfter =
+      after ?? now + Math.min(300_000, 5000 * 2 ** Math.min(job.attempts, 6));
+
     await this.#db.transact((db) =>
       db.set(
         "jobs",
         { id: job.id },
         {
-          state:
-            job.kind === "intent" || (after === undefined && job.attempts >= 5)
-              ? "failed"
-              : "pending",
-          runAfter:
-            after ??
-            now + Math.min(300_000, 5000 * 2 ** Math.min(job.attempts, 6)),
+          state,
+          runAfter,
+          attempts: after === undefined ? job.attempts : job.attempts - 1,
           lastError: error,
         },
       ),
     );
+
+    return { state, runAfter };
   }
 
   public async retryFailed(groupId: string): Promise<number> {
     const result = await this.#db.transact((db) =>
       db.set(
         "jobs",
-        { "state": "failed", "payload.groupId": groupId },
+        {
+          "kind": { $ne: "intent" },
+          "state": "failed",
+          "payload.groupId": groupId,
+        },
         {
           state: "pending",
           attempts: 0,

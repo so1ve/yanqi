@@ -8,3 +8,5 @@
 !run.mjs
 !src/
 !src/**
+!skills/
+!skills/**

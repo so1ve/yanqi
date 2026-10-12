@@ -3,7 +3,23 @@ import { z } from "zod";
 const positive = (fallback: number) =>
   z.coerce.number().int().positive().default(fallback);
 
-const optionalModel = z.string().trim().default("");
+const model = z
+  .string()
+  .transform((value) => value.split(","))
+  .pipe(
+    z.tuple([
+      z.url({ protocol: /^https?$/ }),
+      z.string().min(1),
+      z.string().trim().min(1),
+    ]),
+  )
+  .transform(([baseURL, apiKey, model]) => ({ baseURL, apiKey, model }));
+
+const optionalModel = z
+  .union([z.literal("").transform(() => undefined), model])
+  .optional();
+
+export type ModelConfig = z.infer<typeof model>;
 
 const schema = z.object({
   BOT_QQ: z.string().regex(/^\d+$/),
@@ -29,10 +45,9 @@ const schema = z.object({
   ONEBOT_URL: z.url({ protocol: /^wss?$/ }).default("ws://127.0.0.1:3001"),
   ONEBOT_TOKEN: z.string().min(1),
   DATA_DIR: z.string().min(1).default("./data"),
+  LOG_LEVEL: z.enum(["info", "debug"]).default("info"),
   BOT_PERSONA_FILE: z.string().trim().default("./PERSONA.md"),
-  AI_BASE_URL: z.url(),
-  AI_API_KEY: z.string().min(1),
-  AI_MODEL: z.string().min(1),
+  AI_MODEL: model,
   AI_DETECT_MODEL: optionalModel,
   AI_INTENT_MODEL: optionalModel,
   AI_REPLY_MODEL: optionalModel,
@@ -41,7 +56,7 @@ const schema = z.object({
     .default("llm"),
   DECISION_URL: z.string().default(""),
   DECISION_API_KEY: z.string().default(""),
-  DECISION_MODEL: optionalModel,
+  DECISION_MODEL: z.string().trim().default(""),
   DECISION_CONFIDENCE: z.coerce.number().min(0).max(1).default(0.8),
   AI_RESPONSE_FORMAT: z
     .enum(["json_schema", "json_object"])

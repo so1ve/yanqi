@@ -51,9 +51,10 @@ export async function detectTopics(
         throw new Error("AI 选择了不属于当前群的话题");
       }
 
-      const assignment = assignments.get(proposed.id) ?? {
+      const assignment = {
         ...proposed,
-        messageIds: new Set<number>(),
+        messageIds:
+          assignments.get(proposed.id)?.messageIds ?? new Set<number>(),
       };
 
       for (const id of proposed.messageIds) {
@@ -65,7 +66,12 @@ export async function detectTopics(
       }
 
       assignments.set(proposed.id, assignment);
-      if (!topics.some((topic) => topic.id === proposed.id)) {
+      const topic = topics.find((topic) => topic.id === proposed.id);
+
+      if (topic) {
+        topic.title = proposed.title;
+        topic.description = proposed.description;
+      } else {
         topics.push({
           id: proposed.id,
           title: proposed.title,

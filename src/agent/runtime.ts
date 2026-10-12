@@ -2,16 +2,21 @@ import type { AgentState } from "@earendil-works/pi-agent-core";
 import { Agent } from "@earendil-works/pi-agent-core";
 import type { ImageContent, Model, UserMessage } from "@earendil-works/pi-ai";
 import { streamSimple } from "@earendil-works/pi-ai/api/openai-completions";
+import { Logger } from "koishi";
 import { z } from "zod";
 
-import type { Config } from "../config.ts";
+import type { Config, ModelConfig } from "../config.ts";
 import type { Store } from "../storage/store.ts";
+import { logContext, logDetail } from "../utils/logging.ts";
+import { logAgentEvents } from "./logging.ts";
 import { boundary, prompts } from "./prompts.ts";
 import { AiSizeError, reserveCall } from "./usage.ts";
 
 export class AgentRuntime {
   #config: Config;
   #store: Store;
+  #logger = new Logger("yanqi:ai");
+  #calls = 0;
 
   constructor(config: Config, store: Store) {
     this.#config = config;
@@ -40,8 +45,11 @@ export class AgentRuntime {
 
     try {
       json = JSON.parse(text);
-    } catch {
-      throw new Error(`${purpose} 未返回合法 JSON`);
+    } catch (error) {
+      throw new Error(
+        `${purpose} 未返回合法 JSON（model=${model.model}，${text.length} 字符）`,
+        { cause: error },
+      );
     }
 
     const parsed = schema.safeParse(json);
@@ -49,6 +57,7 @@ export class AgentRuntime {
     if (!parsed.success) {
       throw new Error(
         `${purpose} JSON 字段不符合约定：${parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("；")}`,
+        { cause: parsed.error },
       );
     }
 
@@ -59,17 +68,19 @@ export class AgentRuntime {
     purpose: string,
     instructions: string,
     input: unknown,
+    model = this.#config.AI_MODEL,
+    tools: AgentState["tools"] = [],
   ): Promise<string> {
     return this.#run(
       purpose,
       `${boundary}\n${instructions}`,
       { role: "user", content: JSON.stringify(input), timestamp: Date.now() },
-      this.#config.AI_MODEL,
-      [],
+      model,
+      tools,
     );
   }
 
-  public image(image: ImageContent, model: string): Promise<string> {
+  public image(image: ImageContent, model: ModelConfig): Promise<string> {
     return this.#run(
       "image",
       prompts.image,
@@ -83,18 +94,23 @@ export class AgentRuntime {
     purpose: string,
     instructions: string,
     input: UserMessage,
-    modelId: string,
+    endpoint: ModelConfig,
     tools: AgentState["tools"],
     schema?: z.ZodType,
   ): Promise<string> {
     const config = this.#config;
+    const modelId = endpoint.model;
+    const label = [logContext.getStore(), `AI #${++this.#calls}`, purpose]
+      .filter(Boolean)
+      .join(" ");
+    const startedAt = performance.now();
     const responseSchema = schema ? z.toJSONSchema(schema) : undefined;
     const model: Model<"openai-completions"> = {
       id: modelId,
       name: modelId,
       api: "openai-completions",
       provider: "yanqi",
-      baseUrl: config.AI_BASE_URL,
+      baseUrl: endpoint.baseURL,
       input: ["text", "image"],
       reasoning: false,
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
@@ -126,10 +142,17 @@ export class AgentRuntime {
           }
 
           await reserveCall(config, this.#store, modelId, purpose);
+          this.#logger.info(
+            "%s 第 %s 轮请求：model=%s messages=%s",
+            label,
+            turns,
+            modelId,
+            context.messages.length,
+          );
 
           return streamSimple(model, context, {
             ...options,
-            apiKey: config.AI_API_KEY,
+            apiKey: endpoint.apiKey,
             maxTokens: config.AI_MAX_OUTPUT_TOKENS,
             maxRetries: 0,
             timeoutMs: config.AI_TIMEOUT_MS,
@@ -160,13 +183,40 @@ export class AgentRuntime {
         : undefined,
     });
 
-    const timeout = setTimeout(() => agent.abort(), config.AI_TIMEOUT_MS);
+    logAgentEvents(agent, config, label);
+    this.#logger.debug(
+      "%s 输入：%s",
+      label,
+      logDetail(
+        typeof input.content === "string"
+          ? input.content
+          : input.content.map((part) =>
+              part.type === "image" ? `[图片 ${part.mimeType}]` : part.text,
+            ),
+        config,
+      ),
+    );
+
+    const timeout = setTimeout(() => {
+      this.#logger.debug(
+        "%s 达到 %s ms 超时限制，中止调用",
+        label,
+        config.AI_TIMEOUT_MS,
+      );
+      agent.abort();
+    }, config.AI_TIMEOUT_MS);
 
     timeout.unref();
     try {
       await agent.prompt(input);
     } finally {
       clearTimeout(timeout);
+      this.#logger.info(
+        "%s 会话结束：rounds=%s 耗时=%s ms",
+        label,
+        turns,
+        Math.round(performance.now() - startedAt),
+      );
     }
 
     if (failure) {
@@ -192,7 +242,8 @@ export class AgentRuntime {
       .map((part) => part.text)
       .join("");
 
-    if (!text.trim()) {
+    // 工具可以直接交付结果，不一定需要额外的文字答复。
+    if (!text.trim() && tools.length === 0) {
       throw new Error(`${purpose} 未返回文字`);
     }
 

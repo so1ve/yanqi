@@ -24,6 +24,6 @@ export const publicationSchema = z.object({
 
 export type Detection = z.infer<typeof detectionSchema>;
 
-export const voiceSchema = z
-  .object({ text: z.string().trim().min(1).max(3000) })
-  .strict();
+export const voiceSchema = z.object({
+  text: z.string().trim().min(1).max(3000),
+});

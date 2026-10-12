@@ -41,13 +41,13 @@ declare module "koishi" {
     groups: GroupRow;
     messages: Message;
     topics: Topic;
-    topic_messages: { topicId: string; messageId: number };
+    topic_messages: { topicId: string; messageId: number; generation: number };
     assets: Asset;
     notes: Note & { createdAt: number };
     jobs: JobRow;
     deliveries: Delivery & {
       key: string;
-      state: "pending" | "done";
+      state: "pending" | "done" | "failed";
       createdAt: number;
     };
     usage: {
@@ -93,6 +93,7 @@ export function defineModels(model: Database): void {
       role: "string",
       command: { type: "boolean", initial: false },
       recalledAt: { type: "integer", nullable: true },
+      noteId: { type: "integer", nullable: true },
     },
     {
       autoInc: true,
@@ -112,6 +113,7 @@ export function defineModels(model: Database): void {
       groupId: { type: "string" },
       title: "text",
       description: { type: "text", initial: "" },
+      focus: { type: "text", initial: "" },
       mode: "string",
       ownerId: { type: "string", nullable: true },
       state: { type: "string", initial: "active" },
@@ -141,6 +143,7 @@ export function defineModels(model: Database): void {
     {
       topicId: { type: "string" },
       messageId: { type: "integer" },
+      generation: { type: "integer", initial: 0 },
     },
     {
       primary: ["topicId", "messageId"],
@@ -177,6 +180,7 @@ export function defineModels(model: Database): void {
       sourceThrough: { type: "integer" },
       generation: "integer",
       markdown: "text",
+      sections: { type: "json", initial: [] },
       path: "text",
       createdAt: { type: "integer" },
     },

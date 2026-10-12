@@ -1,6 +1,27 @@
 import type { Store } from "../storage/store.ts";
 import type { ChatMessage, Message } from "../types.ts";
 
+async function messageText(store: Store, message: Message): Promise<string> {
+  if (message.noteId !== null) {
+    const note = await store.note(message.noteId);
+    const topic = await store.topic(note.topicId);
+
+    return `[已发送纪要：${topic.title}，话题 ID：${topic.id}，第 ${note.revision} 版]\n${topic.description}`;
+  }
+
+  const attachments = (await store.assets(message.id))
+    .map(
+      (asset) =>
+        `[${asset.kind}：${asset.state}]\n${asset.interpretation ?? asset.error ?? "尚未解析内容"}`,
+    )
+    .join("\n");
+  const segments = message.segments.filter(
+    (segment) => segment.type !== "text" && segment.type !== "reply",
+  );
+
+  return `${message.text}${segments.length > 0 ? `\n[消息片段] ${JSON.stringify(segments)}` : ""}${attachments ? `\n${attachments}` : ""}`;
+}
+
 export async function messageChunks(
   store: Store,
   messages: Message[],
@@ -11,16 +32,7 @@ export async function messageChunks(
   let size = 2;
 
   for (const message of messages) {
-    const attachments = (await store.assets(message.id))
-      .map(
-        (asset) =>
-          `[${asset.kind}：${asset.state}]\n${asset.interpretation ?? asset.error ?? "尚未解析内容"}`,
-      )
-      .join("\n");
-    const segments = message.segments.filter(
-      (segment) => segment.type !== "text" && segment.type !== "reply",
-    );
-    const text = `${message.recalledAt ? `[该消息已于 ${new Date(message.recalledAt).toISOString()} 撤回；以下为留存原文]\n` : ""}${message.text}${segments.length > 0 ? `\n[消息片段] ${JSON.stringify(segments)}` : ""}${attachments ? `\n${attachments}` : ""}`;
+    const text = `${message.recalledAt ? `[该消息已于 ${new Date(message.recalledAt).toISOString()} 撤回；以下为留存原文]\n` : ""}${await messageText(store, message)}`;
     const quote = message.replyTo
       ? await store.quoted(message.groupId, message.replyTo)
       : null;
@@ -91,29 +103,3 @@ export async function contextWithin(
 
   return result;
 }
-
-function fenced(text: string): string {
-  const runs = text.match(/`+/g) ?? [];
-  const fence = "`".repeat(Math.max(3, ...runs.map((run) => run.length + 1)));
-
-  return `${fence}\n${text}\n${fence}`;
-}
-
-export const transcript = async (
-  store: Store,
-  messages: Message[],
-): Promise<string> =>
-  (
-    await Promise.all(
-      messages.map(async (message) => {
-        const assets = (await store.assets(message.id))
-          .map(
-            (asset) =>
-              `- 附件 ${asset.id}（${asset.kind}）：${asset.state}${asset.path ? `；本地文件 ${asset.path}` : ""}${asset.error ? `；${asset.error}` : ""}`,
-          )
-          .join("\n");
-
-        return `### ${message.displayName} (${message.userId}) · ${new Date(message.sentAt).toISOString()}\n\n${message.recalledAt ? `已撤回：${new Date(message.recalledAt).toISOString()}。留存原文如下。\n\n` : ""}${fenced(message.text)}\n\n消息片段：\n\n${fenced(JSON.stringify(message.segments, null, 2))}${assets ? `\n\n${assets}` : ""}`;
-      }),
-    )
-  ).join("\n\n");
