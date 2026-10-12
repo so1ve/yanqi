@@ -13,7 +13,7 @@ import { createMessenger } from "./onebot/messenger.ts";
 import { detectTopics } from "./recording/detection.ts";
 import { Notes } from "./recording/notes.ts";
 import type { Store } from "./storage/store.ts";
-import type { Job, JobKind } from "./types.ts";
+import type { Delivery, Job, JobKind } from "./types.ts";
 import { failureMessage } from "./utils/errors.ts";
 import { logContext, logDetail } from "./utils/logging.ts";
 
@@ -24,7 +24,7 @@ export class Secretary {
   #ai: Ai;
   #notes: Notes;
   #logger: Logger;
-  #running = new Set<JobKind | "send">();
+  #running = new Set<JobKind | "send:text" | "send:note">();
 
   constructor(ctx: Context, config: Config, store: Store) {
     this.#config = config;
@@ -156,7 +156,8 @@ export class Secretary {
       "detect",
       "summarize",
       "asset",
-      "send",
+      "send:text",
+      "send:note",
     ] as const) {
       if (this.#running.has(kind)) {
         continue;
@@ -164,7 +165,11 @@ export class Secretary {
 
       this.#running.add(kind);
       const work =
-        kind === "send" ? this.#sendPending() : this.#processJobs(kind);
+        kind === "send:text"
+          ? this.#sendPending("text")
+          : kind === "send:note"
+            ? this.#sendPending("note")
+            : this.#processJobs(kind);
 
       void work
         .catch((error) => {
@@ -304,9 +309,9 @@ export class Secretary {
     }
   }
 
-  async #sendPending(): Promise<void> {
+  async #sendPending(kind: Delivery["kind"]): Promise<void> {
     while (this.#messenger.online) {
-      const delivery = await this.#store.deliveries.next();
+      const delivery = await this.#store.deliveries.next(kind);
 
       if (!delivery) {
         return;

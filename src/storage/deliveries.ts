@@ -74,11 +74,11 @@ export class DeliveryQueue {
     });
   }
 
-  public async next(): Promise<Delivery | null> {
+  public async next(kind: Delivery["kind"]): Promise<Delivery | null> {
     return this.#db.transact(async (db) => {
       const [delivery] = await db.get(
         "deliveries",
-        { state: "pending" },
+        { state: "pending", kind },
         { sort: { id: "asc" }, limit: 1 },
       );
 

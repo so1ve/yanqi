@@ -84,20 +84,22 @@ export class JobQueue {
           ["id"],
         )
       ).map((topic) => topic.id);
-      const [job] = await db.get(
+      const pending = await db.get(
         "jobs",
         {
           kind,
           state: "pending",
           runAfter: { $lte: now },
-          $or: [
-            { kind: ["intent", "asset"] },
-            { "payload.groupId": { $nin: pausedGroups } },
-            { "kind": "summarize", "payload.requested": true },
-            { "kind": "summarize", "payload.topicId": { $nin: pausedTopics } },
-          ],
         },
-        { sort: { id: "asc" }, limit: 1 },
+        { sort: { id: "asc" } },
+      );
+      const job = pending.find(
+        ({ payload }) =>
+          kind === "intent" ||
+          kind === "asset" ||
+          !pausedGroups.includes(payload.groupId) ||
+          ("topicId" in payload &&
+            (payload.requested || !pausedTopics.includes(payload.topicId))),
       );
 
       if (!job) {
