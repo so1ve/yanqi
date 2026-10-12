@@ -36,18 +36,25 @@ export function replyTool(
         throw new Error("这次请求已撤回");
       }
 
-      await store.deliveries.enqueue(`command:${message.id}`, {
+      const enqueued = await store.deliveries.enqueue(`command:${message.id}`, {
         kind: "text",
         groupId: message.groupId,
         content: text,
       });
 
-      if (waitForReply) {
+      if (enqueued && waitForReply) {
         await store.awaitReply(message);
       }
 
       return {
-        content: [{ type: "text", text: "回复已加入发送队列。" }],
+        content: [
+          {
+            type: "text",
+            text: enqueued
+              ? "回复已加入发送队列。"
+              : "本次请求已经回复过，不再重复发送。",
+          },
+        ],
         details: {},
       };
     },

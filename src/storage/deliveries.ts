@@ -16,28 +16,28 @@ export class DeliveryQueue {
     this.#db = db;
   }
 
-  public async enqueue(key: string, outgoing: Outgoing): Promise<void> {
-    await this.#db.transact(async (db) => {
+  public enqueue(key: string, outgoing: Outgoing): Promise<boolean> {
+    return this.#db.transact(async (db) => {
       const note = outgoing.kind === "text" ? null : outgoing.note;
       const repeat = outgoing.kind === "note" && outgoing.repeat;
-      const [existing] = await db.get(
-        "deliveries",
-        note
-          ? {
-              $or: [
-                { key },
-                {
-                  noteId: note.id,
-                  // 自动完成通知只发一次；用户主动要求时可以再次发送纪要。
-                  ...(repeat
-                    ? { kind: "note" as const, state: "pending" as const }
-                    : { state: { $in: ["pending", "done"] } }),
-                },
-              ],
-            }
-          : { key },
-        { limit: 1 },
-      );
+      let [existing] = await db.get("deliveries", { key });
+
+      if (note && outgoing.kind === "note") {
+        await db.set(
+          "deliveries",
+          { noteId: note.id, kind: "text", state: "pending" },
+          { state: "cancelled" },
+        );
+      }
+
+      if (!existing && note) {
+        existing = (await db.get("deliveries", { noteId: note.id })).find(
+          (item) =>
+            repeat
+              ? item.kind === "note" && item.state === "pending"
+              : item.state === "pending" || item.state === "done",
+        );
+      }
 
       if (!existing) {
         const delivery = await db.create("deliveries", {
@@ -64,14 +64,22 @@ export class DeliveryQueue {
           delivery.kind,
           delivery.noteId,
         );
+        return true;
       } else {
         this.#logger.debug(
           "忽略重复发送：key=%s existing=%s",
           key,
           existing.id,
         );
+        return false;
       }
     });
+  }
+
+  public async isPending(id: number): Promise<boolean> {
+    return (
+      (await this.#db.get("deliveries", { id, state: "pending" })).length > 0
+    );
   }
 
   public async next(kind: Delivery["kind"]): Promise<Delivery | null> {

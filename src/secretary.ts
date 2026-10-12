@@ -398,6 +398,9 @@ export class Secretary {
             delivery.id,
             logDetail(text, this.#config),
           );
+          // 改写期间，主动发送纪要可能已取代这条保存通知。
+          if (!(await this.#store.deliveries.isPending(delivery.id))) continue;
+
           await this.#messenger.sendText(delivery.groupId, text);
         }
 

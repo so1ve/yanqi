@@ -48,7 +48,7 @@ declare module "koishi" {
     jobs: JobRow;
     deliveries: Delivery & {
       key: string;
-      state: "pending" | "done" | "failed";
+      state: "pending" | "done" | "failed" | "cancelled";
       createdAt: number;
     };
     usage: {
