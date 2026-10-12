@@ -4,15 +4,15 @@ import { beijingTime } from "../utils/time.ts";
 
 async function messageText(store: Store, message: Message): Promise<string> {
   if (message.noteId !== null) {
-    const note = await store.note(message.noteId);
-    const topic = await store.topic(note.topicId);
+    const note = await store.notes.get(message.noteId);
+    const topic = await store.topics.get(note.topicId);
 
     return `[已发送纪要：${topic.title}，话题 ID：${topic.id}，第 ${note.revision} 版]\n${topic.description}`;
   }
 
   const attachments = (
     await Promise.all(
-      (await store.assets(message.id)).map(async (asset) => {
+      (await store.assets.forMessage(message.id)).map(async (asset) => {
         const job = await store.jobs.forAsset(asset.id);
 
         return `[附件 #${asset.id} ${asset.kind}；任务 #${job.id} ${job.state}；文件${asset.path ? "已保存" : "未保存"}]\n${asset.interpretation ?? asset.error ?? (job.state === "done" ? "任务已结束，但没有识别结果；可用 task 等待解析" : "内容尚未解析，用 task 等待后读取最新结果")}`;
@@ -49,7 +49,7 @@ export async function messageChunks(
   for (const message of messages) {
     const text = `${message.recalledAt ? `[该消息已于 ${beijingTime(message.recalledAt)} 撤回；以下为留存原文]\n` : ""}${await messageText(store, message)}`;
     const quote = message.replyTo
-      ? await store.quoted(message.groupId, message.replyTo)
+      ? await store.messages.quoted(message.groupId, message.replyTo)
       : null;
     const parts = Math.max(
       1,

@@ -1,73 +1,45 @@
-import assert from "node:assert/strict";
-
 import type { Context, Logger, Session } from "koishi";
 
-import { Ai } from "./agent/models.ts";
-import { handleRequest } from "./agent/requests.ts";
-import { AiSizeError, BudgetExceeded } from "./agent/usage.ts";
-import { collectAsset } from "./assets.ts";
+import { Ai } from "./agent/ai.ts";
 import type { Config } from "./config.ts";
+import { incomingMessage } from "./onebot/message.ts";
 import type { Messenger } from "./onebot/messenger.ts";
 import { createMessenger } from "./onebot/messenger.ts";
-import { detectTopics } from "./recording/detection.ts";
 import { Notes } from "./recording/notes.ts";
 import type { Store } from "./storage/store.ts";
-import type { Delivery, Job, JobKind } from "./types.ts";
-import { AiError, failureMessage } from "./utils/errors.ts";
-import { logContext, logDetail } from "./utils/logging.ts";
-import { beijingTime } from "./utils/time.ts";
+import { BackgroundTasks } from "./tasks/worker.ts";
+import { failureMessage } from "./utils/errors.ts";
+import { logDetail } from "./utils/logging.ts";
 
 export class Secretary {
   #config: Config;
   #store: Store;
   #messenger: Messenger;
-  #ai: Ai;
-  #notes: Notes;
+  #tasks: BackgroundTasks;
   #logger: Logger;
-  #running = new Map<JobKind | "send:text" | "send:note", number>();
 
   constructor(ctx: Context, config: Config, store: Store) {
     this.#config = config;
     this.#store = store;
-    this.#messenger = createMessenger(config, this.#store, ctx);
-    this.#ai = new Ai(config, this.#store);
-    this.#notes = new Notes(config, this.#store, this.#ai);
+    this.#messenger = createMessenger(config, store, ctx);
+    const ai = new Ai(config, store);
+    const notes = new Notes(config, store, ai);
+
+    this.#tasks = new BackgroundTasks(
+      config,
+      store,
+      ai,
+      notes,
+      this.#messenger,
+    );
     this.#logger = ctx.logger("yanqi");
   }
 
   public async handleMessage(session: Session): Promise<void> {
     try {
-      const raw = session.onebot!;
-
-      assert.ok(Array.isArray(raw.message), "请将 NapCat 消息格式设为 array");
-      const role = session.event.member?.roles;
-      const message = await this.#store.capture({
-        groupId: session.guildId!,
-        messageId: session.messageId!,
-        userId: session.userId!,
-        displayName: session.event.member?.nick || session.event.user!.name!,
-        sentAt: session.timestamp,
-        receivedAt: Date.now(),
-        text: session
-          .elements!.filter((element) => element.type === "text")
-          .map((element) => element.attrs.content)
-          .join(""),
-        segments: raw.message,
-        raw: session.event._data,
-        replyTo:
-          raw.message.find((segment) => segment.type === "reply")?.data.id ??
-          null,
-        isBot: session.userId === session.selfId,
-        addressed: session.elements!.some(
-          (element) =>
-            element.type === "at" && element.attrs.id === session.selfId,
-        ),
-        role: role?.some((item) => item.id === "owner")
-          ? "owner"
-          : role?.some((item) => item.id === "admin")
-            ? "admin"
-            : "member",
-      });
+      const message = await this.#store.messages.capture(
+        incomingMessage(session),
+      );
 
       if (message) {
         if (message.command) {
@@ -112,7 +84,7 @@ export class Secretary {
   }
 
   public async handleRecall(session: Session): Promise<void> {
-    await this.#store.recall(
+    await this.#store.messages.recall(
       session.guildId!,
       session.messageId!,
       session.onebot!.time * 1000,
@@ -129,13 +101,14 @@ export class Secretary {
 
     for (const groupId of this.#config.GROUP_IDS) {
       if (
-        (!this.#config.AUTO_REPLY && !(await this.#store.aiEnabled(groupId))) ||
+        (!this.#config.AUTO_REPLY &&
+          !(await this.#store.groups.automatic(groupId))) ||
         (await this.#store.jobs.hasDetection(groupId))
       ) {
         continue;
       }
 
-      const messages = await this.#store.nextDetection(
+      const messages = await this.#store.messages.nextDetection(
         groupId,
         this.#config.DETECT_BATCH_SIZE,
       );
@@ -158,272 +131,15 @@ export class Secretary {
       }
     }
 
-    for (const topic of await this.#store.readyTopics(
+    for (const topic of await this.#store.topics.ready(
       now,
       this.#config.TOPIC_IDLE_MS,
     )) {
-      await this.#notes.schedule(topic);
+      await this.#store.jobs.summarize(topic);
     }
   }
 
   public processPending(): void {
-    for (const kind of [
-      "intent",
-      "detect",
-      "summarize",
-      "asset",
-      "send:text",
-      "send:note",
-    ] as const) {
-      const concurrency = kind === "intent" ? 4 : kind === "asset" ? 2 : 1;
-
-      while ((this.#running.get(kind) ?? 0) < concurrency) {
-        this.#running.set(kind, (this.#running.get(kind) ?? 0) + 1);
-        const work =
-          kind === "send:text"
-            ? this.#sendPending("text")
-            : kind === "send:note"
-              ? this.#sendPending("note")
-              : this.#processJobs(kind);
-
-        void work
-          .catch((error) => {
-            this.#logger.warn(
-              "%s 队列处理失败：%s",
-              kind,
-              logDetail(failureMessage(error), this.#config),
-            );
-            this.#logger.debug(
-              "%s 队列异常：%s",
-              kind,
-              logDetail(error, this.#config),
-            );
-          })
-          .finally(() => this.#running.set(kind, this.#running.get(kind)! - 1));
-      }
-    }
-  }
-
-  async #processJobs(kind: JobKind): Promise<void> {
-    while (true) {
-      const job = await this.#store.jobs.claim(kind, Date.now());
-
-      if (!job) {
-        return;
-      }
-
-      await logContext.run(
-        {
-          task: `任务 #${job.id}`,
-          groupId: job.payload.groupId,
-          ...(job.kind === "intent"
-            ? { requestId: job.payload.messageId }
-            : {}),
-        },
-        () => this.#executeTask(job),
-      );
-      this.processPending();
-    }
-  }
-
-  async #executeTask(job: Job): Promise<void> {
-    const groupId = job.payload.groupId;
-
-    if (!this.#config.GROUP_IDS.includes(groupId)) {
-      await this.#store.jobs.done(job.id);
-      this.#logger.info("任务 #%s 跳过：群 %s 已不在配置中", job.id, groupId);
-
-      return;
-    }
-
-    const startedAt = performance.now();
-
-    this.#logger.info(
-      "任务 #%s 开始：kind=%s attempt=%s payload=%s",
-      job.id,
-      job.kind,
-      job.attempts,
-      JSON.stringify(job.payload),
-    );
-
-    try {
-      switch (job.kind) {
-        case "intent": {
-          await handleRequest(
-            job.payload.messageId,
-            this.#config,
-            this.#store,
-            this.#ai,
-            this.#notes,
-            () => this.processPending(),
-          );
-
-          break;
-        }
-
-        case "detect": {
-          await detectTopics(job, this.#config, this.#store, this.#ai);
-
-          break;
-        }
-
-        case "summarize": {
-          await this.#notes.generate(job);
-
-          break;
-        }
-
-        case "asset": {
-          await collectAsset(
-            job.payload.assetId,
-            this.#store,
-            this.#config,
-            this.#ai,
-            this.#messenger,
-            (progress) => this.#store.jobs.reportProgress(job.id, progress),
-          );
-
-          break;
-        }
-      }
-
-      await this.#store.jobs.done(job.id);
-      this.#logger.info(
-        "任务 #%s 完成：耗时=%s ms",
-        job.id,
-        Math.round(performance.now() - startedAt),
-      );
-    } catch (error) {
-      const message = logDetail(failureMessage(error), this.#config);
-      const retry = await this.#store.jobs.retry(
-        job,
-        message,
-        Date.now(),
-        error instanceof BudgetExceeded ? error.nextRunAt : undefined,
-      );
-
-      this.#logger.warn(
-        "任务 #%s 失败：kind=%s group=%s attempt=%s 耗时=%s ms %s；%s",
-        job.id,
-        job.kind,
-        groupId,
-        job.attempts,
-        Math.round(performance.now() - startedAt),
-        message,
-        retry.state === "failed"
-          ? "已标记失败"
-          : `重试时间=${beijingTime(retry.runAfter)}`,
-      );
-      this.#logger.debug(
-        "任务 #%s 异常：%s",
-        job.id,
-        logDetail(error, this.#config),
-      );
-      if (job.kind === "intent") {
-        await this.#store.deliveries.enqueue(
-          `command:${job.payload.messageId}`,
-          {
-            kind: "text",
-            groupId,
-            content:
-              error instanceof BudgetExceeded
-                ? error.message
-                : error instanceof AiError
-                  ? `这次对话在“${error.stage}”这一步失败了。`
-                  : error instanceof AiSizeError
-                    ? "AI 回复超出长度限制，这次对话未完成。"
-                    : "执行这次操作失败了，详细原因已记入日志。",
-          },
-        );
-      }
-    }
-  }
-
-  async #sendPending(kind: Delivery["kind"]): Promise<void> {
-    while (this.#messenger.online) {
-      const delivery = await this.#store.deliveries.next(kind);
-
-      if (!delivery) {
-        return;
-      }
-
-      if (!this.#config.GROUP_IDS.includes(delivery.groupId)) {
-        await this.#store.deliveries.done(delivery.id);
-        this.#logger.info(
-          "发送 #%s 跳过：群 %s 已不在配置中",
-          delivery.id,
-          delivery.groupId,
-        );
-
-        continue;
-      }
-
-      if (delivery.kind === "note" && delivery.topicId) {
-        const topic = await this.#store.topic(delivery.topicId);
-
-        if (topic.directive === "hold") {
-          await this.#store.deliveries.done(delivery.id);
-          this.#logger.info(
-            "发送 #%s 取消：topic=%s 已要求暂缓",
-            delivery.id,
-            topic.id,
-          );
-
-          continue;
-        }
-      }
-
-      const startedAt = performance.now();
-
-      this.#logger.info(
-        "发送 #%s 开始：group=%s kind=%s topic=%s note=%s",
-        delivery.id,
-        delivery.groupId,
-        delivery.kind,
-        delivery.topicId,
-        delivery.noteId,
-      );
-
-      try {
-        if (delivery.kind === "note") {
-          assert.ok(delivery.noteId !== null);
-          const note = await this.#store.note(delivery.noteId);
-
-          await this.#messenger.sendNote(note);
-        } else {
-          this.#logger.debug(
-            "发送 #%s 文字：%s",
-            delivery.id,
-            logDetail(delivery.content, this.#config),
-          );
-          if (!(await this.#store.deliveries.isPending(delivery.id))) {
-            continue;
-          }
-
-          await this.#messenger.sendText(delivery.groupId, delivery.content);
-        }
-
-        await this.#store.deliveries.done(delivery.id);
-        this.#logger.info(
-          "发送 #%s 完成：耗时=%s ms",
-          delivery.id,
-          Math.round(performance.now() - startedAt),
-        );
-      } catch (error) {
-        await this.#store.deliveries.fail(delivery.id);
-        this.#logger.warn(
-          "发送 #%s 失败：group=%s 耗时=%s ms %s",
-          delivery.id,
-          delivery.groupId,
-          Math.round(performance.now() - startedAt),
-          logDetail(failureMessage(error), this.#config),
-        );
-        this.#logger.debug(
-          "发送 #%s 异常：%s",
-          delivery.id,
-          logDetail(error, this.#config),
-        );
-      }
-    }
+    this.#tasks.run();
   }
 }

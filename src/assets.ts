@@ -4,7 +4,7 @@ import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
 
-import type { Ai } from "./agent/models.ts";
+import type { Ai } from "./agent/ai.ts";
 import type { Config } from "./config.ts";
 import type { Messenger } from "./onebot/messenger.ts";
 import type { Store } from "./storage/store.ts";
@@ -18,8 +18,8 @@ export async function collectAsset(
   messenger: Messenger,
   reportProgress: (progress: string) => Promise<void>,
 ): Promise<void> {
-  const asset = await store.asset(id);
-  const message = await store.message(asset.messageId);
+  const asset = await store.assets.get(id);
+  const message = await store.messages.get(asset.messageId);
   const directory = join(store.directory, "groups", message.groupId, "assets");
 
   await mkdir(directory, { recursive: true });
@@ -38,7 +38,13 @@ export async function collectAsset(
       });
       await rename(temporary, target);
       path = target;
-      await store.saveAsset(id, "saved", path, JSON.stringify(forwarded), null);
+      await store.assets.save(
+        id,
+        "saved",
+        path,
+        JSON.stringify(forwarded),
+        null,
+      );
       await reportProgress("合并转发内容已保存");
 
       return;
@@ -116,7 +122,7 @@ export async function collectAsset(
         throw error;
       }
 
-      await store.saveAsset(id, "saved", path, null, null);
+      await store.assets.save(id, "saved", path, null, null);
     }
 
     if (asset.kind === "image" && config.AI_VISION_MODEL) {
@@ -127,17 +133,23 @@ export async function collectAsset(
         mime = extension === "jpg" ? "image/jpeg" : `image/${extension}`;
       }
 
-      await store.saveAsset(
+      await store.assets.save(
         id,
         "saved",
         path,
-        await ai.understandImage(path, mime),
+        await ai.media.understandImage(path, mime),
         null,
       );
       await reportProgress("图片识别完成，结果已保存");
     } else if (asset.kind === "audio" && config.AI_AUDIO_MODEL) {
       await reportProgress(`正在转写语音，模型 ${config.AI_AUDIO_MODEL.model}`);
-      await store.saveAsset(id, "saved", path, await ai.transcribe(path), null);
+      await store.assets.save(
+        id,
+        "saved",
+        path,
+        await ai.media.transcribe(path),
+        null,
+      );
       await reportProgress("语音转写完成，结果已保存");
     } else {
       await reportProgress(
@@ -147,7 +159,7 @@ export async function collectAsset(
       );
     }
   } catch (error) {
-    await store.saveAsset(
+    await store.assets.save(
       id,
       path ? "saved" : "failed",
       path,

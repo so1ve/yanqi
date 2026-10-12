@@ -3,7 +3,7 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import { Logger } from "koishi";
 
-import type { Job, JobKind, JobPayloads } from "../types.ts";
+import type { Job, JobKind, JobPayloads, Topic } from "../types.ts";
 import type { Database } from "./schema.ts";
 
 const logger = new Logger("yanqi:jobs");
@@ -14,13 +14,15 @@ export async function enqueueJob<K extends JobKind>(
   key: string,
   payload: JobPayloads[K],
   now = Date.now(),
-): Promise<void> {
+): Promise<number> {
   const [existing] = await db.get("jobs", { key });
 
   if (!existing) {
     const job = await db.create("jobs", { kind, key, payload, runAfter: now });
 
     logger.info("任务 #%s 入队：kind=%s key=%s", job.id, kind, key);
+
+    return job.id;
   } else if (
     kind === "summarize" &&
     "requested" in payload &&
@@ -40,6 +42,8 @@ export async function enqueueJob<K extends JobKind>(
     );
     logger.info("任务 #%s 重新安排：kind=%s key=%s", existing.id, kind, key);
   }
+
+  return existing.id;
 }
 
 export class JobQueue {
@@ -55,8 +59,27 @@ export class JobQueue {
     key: string,
     payload: JobPayloads[K],
     now = Date.now(),
-  ): Promise<void> {
+  ): Promise<number> {
     return this.#db.transact((db) => enqueueJob(db, kind, key, payload, now));
+  }
+
+  public async summarize(
+    topic: Topic,
+    requested = false,
+  ): Promise<number | null> {
+    if (!topic.lastSourceId || topic.generation === topic.noteGeneration) {
+      return null;
+    }
+
+    return this.enqueue(
+      "summarize",
+      `summarize:${topic.id}:${topic.generation}`,
+      {
+        groupId: topic.groupId,
+        topicId: topic.id,
+        requested,
+      },
+    );
   }
 
   public async hasDetection(groupId: string): Promise<boolean> {
@@ -75,19 +98,21 @@ export class JobQueue {
 
   public claim(kind: JobKind, now: number): Promise<Job | null> {
     return this.#db.transact(async (db) => {
-      const pausedGroups = (
-        await db.get("groups", { aiEnabled: false }, ["id"])
-      ).map((group) => group.id);
-      const pausedTopics = (
-        await db.get(
-          "topics",
-          {
-            groupId: pausedGroups,
-            mode: "auto",
-          },
-          ["id"],
-        )
-      ).map((topic) => topic.id);
+      const pausedTopics =
+        kind === "summarize"
+          ? (
+              await db.get(
+                "topics",
+                {
+                  groupId: (
+                    await db.get("groups", { aiEnabled: false }, ["id"])
+                  ).map((group) => group.id),
+                  mode: "auto",
+                },
+                ["id"],
+              )
+            ).map((topic) => topic.id)
+          : [];
       const pending = await db.get(
         "jobs",
         {
@@ -137,9 +162,7 @@ export class JobQueue {
         }
 
         return (
-          kind === "asset" ||
-          kind === "detect" ||
-          !pausedGroups.includes(payload.groupId) ||
+          kind !== "summarize" ||
           ("topicId" in payload &&
             (payload.requested || !pausedTopics.includes(payload.topicId)))
         );

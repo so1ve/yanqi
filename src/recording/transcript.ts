@@ -47,7 +47,7 @@ export async function transcript(
       details.push(`回复消息 ${message.replyTo}`);
     }
 
-    const assets = await store.assets(message.id);
+    const assets = await store.assets.forMessage(message.id);
 
     for (const asset of assets) {
       const name = assetNames[asset.kind];

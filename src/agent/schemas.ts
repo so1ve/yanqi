@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { MAX_REPLY_CHARS } from "./prompts.ts";
+import { MAX_REPLY_CHARS } from "./prompts/common.ts";
 
 export const detectionSchema = z.object({
   topics: z.array(

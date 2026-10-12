@@ -10,7 +10,7 @@ import type { Store } from "../storage/store.ts";
 import { AiError } from "../utils/errors.ts";
 import { logContext, logDetail } from "../utils/logging.ts";
 import { logAgentEvents } from "./logging.ts";
-import { boundary, prompts } from "./prompts.ts";
+import { boundary } from "./prompts/common.ts";
 import { AiSizeError, reserveCall } from "./usage.ts";
 
 export class AgentRuntime {
@@ -83,10 +83,14 @@ export class AgentRuntime {
     );
   }
 
-  public image(image: ImageContent, model: ModelConfig): Promise<string> {
+  public image(
+    image: ImageContent,
+    model: ModelConfig,
+    instructions: string,
+  ): Promise<string> {
     return this.#run(
       "image",
-      prompts.image,
+      `${boundary}\n${instructions}`,
       { role: "user", content: [image], timestamp: Date.now() },
       model,
       [],
@@ -232,8 +236,8 @@ export class AgentRuntime {
         (message) => message.role === "assistant",
       );
 
-      await this.#store
-        .recordUsage(
+      await this.#store.usage
+        .record(
           calls.map((id, index) => {
             const message = messages[index];
             const usage = message?.usage.totalTokens ? message.usage : null;

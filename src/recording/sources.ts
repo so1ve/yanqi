@@ -74,7 +74,7 @@ export async function selectSources(
   if ("sourceIds" in scope) {
     sources = await Promise.all(
       [...new Set(scope.sourceIds)].map((id) =>
-        store.message(Number(id.slice(1))),
+        store.messages.get(Number(id.slice(1))),
       ),
     );
 
@@ -92,13 +92,13 @@ export async function selectSources(
     sources = [];
 
     for (const id of new Set(scope.topicIds)) {
-      const topic = await store.topic(id);
+      const topic = await store.topics.get(id);
 
       if (topic.groupId !== request.groupId) {
         throw new Error("只能读取本群话题");
       }
 
-      sources.push(...(await store.topicMessages(topic.id, request.id - 1)));
+      sources.push(...(await store.topics.messages(topic.id, request.id - 1)));
     }
   } else {
     let from: number | undefined;
@@ -123,7 +123,12 @@ export async function selectSources(
       }
     }
 
-    sources = await store.history(request.groupId, request.id - 1, from, to);
+    sources = await store.messages.history(
+      request.groupId,
+      request.id - 1,
+      from,
+      to,
+    );
 
     if ("sinceFirstMessageBy" in scope) {
       const first = sources.findIndex(

@@ -33,7 +33,7 @@ export async function reserveCall(
         value.apiKey === model.apiKey &&
         value.baseURL === model.baseURL,
     )?.[0] ?? "DECISION_API_KEY";
-  const id = await store.reserveCall(
+  const id = await store.usage.reserve(
     day,
     model.model,
     purpose,

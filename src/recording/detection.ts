@@ -1,4 +1,4 @@
-import type { Ai } from "../agent/models.ts";
+import type { Ai } from "../agent/ai.ts";
 import type { Config } from "../config.ts";
 import type { Store } from "../storage/store.ts";
 import type { Job } from "../types.ts";
@@ -11,18 +11,18 @@ export async function detectTopics(
   ai: Ai,
 ): Promise<void> {
   const groupId = job.payload.groupId;
-  const recording = await store.aiEnabled(groupId);
+  const recording = await store.groups.automatic(groupId);
   const messages = await Promise.all(
-    job.payload.messageIds.map((id) => store.message(id)),
+    job.payload.messageIds.map((id) => store.messages.get(id)),
   );
   const topics = (
-    await store.automaticTopics(groupId, Date.now() - config.TOPIC_REOPEN_MS)
+    await store.topics.automatic(groupId, Date.now() - config.TOPIC_REOPEN_MS)
   )
     .slice(0, 15)
     .map(({ id, title, description }) => ({ id, title, description }));
   const context = await contextWithin(
     store,
-    await store.conversation(groupId, 20, messages[0]!.id - 1),
+    await store.messages.conversation(groupId, 20, messages[0]!.id - 1),
     Math.floor(config.AI_INPUT_CHARS / 6),
   );
   const chunks = await messageChunks(
@@ -43,11 +43,11 @@ export async function detectTopics(
   for (const chunk of chunks) {
     const observation =
       config.AUTO_REPLY || (recording && config.AI_DETECT_MODEL)
-        ? await ai.observe(chunk, context)
+        ? await ai.recording.observe(chunk, context)
         : null;
 
     if (config.AUTO_REPLY && observation) {
-      await store.requestReplies(
+      await store.messages.requestReplies(
         groupId,
         observation.replyIds.map((id) => Number(id.slice(1))),
       );
@@ -69,7 +69,7 @@ export async function detectTopics(
     const selectedContext = selected
       ? context.filter((message) => selected.has(message.id))
       : context.filter((message) => !message.isBot);
-    const result = await ai.detect(messages, selectedContext, topics);
+    const result = await ai.recording.detect(messages, selectedContext, topics);
     const known = new Set(
       [...messages, ...selectedContext].map((item) => item.id),
     );
@@ -112,7 +112,7 @@ export async function detectTopics(
     }
   }
 
-  await store.commitDetection(
+  await store.topics.commitDetection(
     groupId,
     messages.at(-1)!.id,
     [...assignments.values()].map((assignment) => ({

@@ -135,6 +135,12 @@ export class DeliveryQueue {
     );
   }
 
+  public async cancel(id: number): Promise<void> {
+    await this.#db.transact((db) =>
+      db.set("deliveries", { id, state: "pending" }, { state: "cancelled" }),
+    );
+  }
+
   public async fail(id: number): Promise<void> {
     await this.#db.transact((db) =>
       db.set("deliveries", { id }, { state: "failed" }),

@@ -1,14 +1,22 @@
+import { Logger } from "koishi";
 import OpenAI from "openai";
 import { z } from "zod";
 
 import type { Config } from "../config.ts";
+import type { Store } from "../storage/store.ts";
+import { failureMessage } from "../utils/errors.ts";
+import { logContext, logDetail } from "../utils/logging.ts";
+import { BudgetExceeded, reserveCall } from "./usage.ts";
 
 export class DecisionProvider {
   #config: Config;
+  #store: Store;
+  #logger = new Logger("yanqi:ai");
   #client: OpenAI | null;
 
-  constructor(config: Config) {
+  constructor(config: Config, store: Store) {
     this.#config = config;
+    this.#store = store;
     this.#client =
       config.DECISION_PROVIDER === "openai" ||
       config.DECISION_PROVIDER === "vercel"
@@ -21,7 +29,7 @@ export class DecisionProvider {
         : null;
   }
 
-  public async evaluate(
+  async #evaluate(
     input: string,
     instructions: string,
     criteria: Record<string, string>,
@@ -79,5 +87,97 @@ export class DecisionProvider {
       .parse(body);
 
     return result.answers.action;
+  }
+
+  public async choose(
+    purpose: string,
+    instructions: string,
+    state: unknown,
+    criteria: Record<string, string>,
+  ): Promise<string | null> {
+    if (this.#config.DECISION_PROVIDER === "llm") {
+      return null;
+    }
+
+    const input = JSON.stringify(state);
+    const label = [logContext.getStore()?.task, purpose]
+      .filter(Boolean)
+      .join(" ");
+
+    if (input.length > this.#config.AI_INPUT_CHARS) {
+      this.#logger.debug(
+        "%s 决策输入过长（%s 字符），由 Agent 继续判断",
+        label,
+        input.length,
+      );
+
+      return null;
+    }
+
+    const startedAt = performance.now();
+
+    this.#logger.info(
+      "%s 独立决策开始：provider=%s model=%s chars=%s",
+      label,
+      this.#config.DECISION_PROVIDER,
+      this.#config.DECISION_MODEL,
+      input.length,
+    );
+
+    try {
+      await reserveCall(
+        this.#config,
+        this.#store,
+        {
+          model: this.#config.DECISION_MODEL,
+          baseURL: this.#config.DECISION_URL,
+          apiKey: this.#config.DECISION_API_KEY,
+        },
+        `decision:${purpose}`,
+      );
+      const answer = await this.#evaluate(input, instructions, criteria);
+
+      const parsed = z
+        .object({
+          type: z.literal("choice"),
+          choice: z.string(),
+          confidence: z.number().min(0).max(1),
+        })
+        .parse(answer);
+
+      if (!Object.hasOwn(criteria, parsed.choice)) {
+        throw new Error("决策服务返回了未提供的选项");
+      }
+
+      const accepted = parsed.confidence >= this.#config.DECISION_CONFIDENCE;
+
+      this.#logger.info(
+        "%s 独立决策完成：choice=%s confidence=%s accepted=%s 耗时=%s ms",
+        label,
+        parsed.choice,
+        parsed.confidence,
+        accepted,
+        Math.round(performance.now() - startedAt),
+      );
+
+      return accepted ? parsed.choice : null;
+    } catch (error) {
+      if (error instanceof BudgetExceeded) {
+        throw error;
+      }
+
+      this.#logger.warn(
+        "%s 独立决策失败，改由 Agent 判断：%s",
+        label,
+        logDetail(failureMessage(error), this.#config),
+      );
+      this.#logger.debug(
+        "%s 决策异常：%s",
+        label,
+        logDetail(error, this.#config),
+      );
+
+      return null;
+    }
   }
 }
