@@ -5,15 +5,25 @@ import type { OneBot } from "koishi-plugin-adapter-onebot";
 import type { Config } from "../config.ts";
 import type { Store } from "../storage/store.ts";
 import type { Asset, Note, Segment } from "../types.ts";
+import { renderQQ } from "./render.ts";
 
 type ProtocolBot = Bot & { internal: OneBot.Internal };
 
 function textParts(text: string, length: number): string[] {
   const chars = [...text];
   const result: string[] = [];
+  let position = 0;
 
-  for (let position = 0; position < chars.length; position += length) {
-    result.push(chars.slice(position, position + length).join(""));
+  while (position < chars.length) {
+    const chunk = chars.slice(position, position + length);
+    const newline = chunk.lastIndexOf("\n");
+    const size =
+      position + length < chars.length && newline >= 0
+        ? newline + 1
+        : chunk.length;
+
+    result.push(chunk.slice(0, size).join(""));
+    position += size;
   }
 
   return result;
@@ -70,6 +80,12 @@ export function createMessenger(config: Config, store: Store, ctx: Context) {
       }
     },
     async sendText(groupId: string, text: string) {
+      text = renderQQ(text);
+
+      if (!text.trim()) {
+        return;
+      }
+
       const segments = [{ type: "text", data: { text } }];
       const ids = await getBot().sendMessage(groupId, h.text(text));
 
@@ -79,7 +95,7 @@ export function createMessenger(config: Config, store: Store, ctx: Context) {
     },
     async sendNote(note: Note) {
       const bot = getBot();
-      const chunks = textParts(note.markdown, 1800);
+      const chunks = textParts(renderQQ(note.markdown), 1800);
       const nodes = chunks.map((text) => ({
         type: "node",
         data: {
