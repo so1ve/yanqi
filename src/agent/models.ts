@@ -211,11 +211,12 @@ export class Ai {
     topic: Topic,
     recording: { revision: number; sources: number },
     context: ChatMessage[],
+    request: ChatMessage[],
   ): Promise<boolean> {
     const decisionHint = await this.#choose(
       "publish",
       prompts.publishChoice,
-      { topic, recording, context },
+      { topic, recording, context, request },
       {
         send: "用户需要这份纪要，或发送有助于当前话题的讨论",
         hold: "用户要求暂缓，讨论仍在继续，或发送对当前上下文没有帮助",
@@ -240,6 +241,7 @@ export class Ai {
         },
         recording,
         context,
+        request,
         decisionHint,
       },
     );

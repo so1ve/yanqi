@@ -330,22 +330,14 @@ export class Notes {
     let publish = topic.directive === "send";
 
     if (topic.directive === "auto") {
-      const directiveMessage =
+      const request =
         topic.directiveMessageId === null
           ? []
           : [await this.#store.message(topic.directiveMessageId)];
       const context = await contextWithin(
         this.#store,
-        [
-          ...new Map(
-            [
-              ...sources.slice(-10),
-              ...(await this.#store.recent(topic.groupId, 30)),
-              ...directiveMessage,
-            ].map((message) => [message.id, message]),
-          ).values(),
-        ].sort((a, b) => a.id - b.id),
-        Math.floor(this.#config.AI_INPUT_CHARS * 0.65),
+        sources.filter((message) => !message.command).slice(-10),
+        Math.floor(this.#config.AI_INPUT_CHARS / 3),
       );
 
       publish = await this.#ai.shouldPublish(
@@ -355,6 +347,11 @@ export class Notes {
           sources: sources.length,
         },
         context,
+        await contextWithin(
+          this.#store,
+          request,
+          Math.floor(this.#config.AI_INPUT_CHARS / 6),
+        ),
       );
       topic = await this.#store.topic(topicId);
       if (topic.directive !== "auto") {

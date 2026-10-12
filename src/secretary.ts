@@ -372,7 +372,11 @@ export class Secretary {
         } else {
           let text = delivery.content;
           const recentReplies = (
-            await this.#store.conversation(delivery.groupId, 12)
+            await this.#store.conversation(
+              delivery.groupId,
+              12,
+              Number.MAX_SAFE_INTEGER,
+            )
           )
             .filter((message) => message.isBot && message.noteId === null)
             .slice(-3)
