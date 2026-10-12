@@ -28,7 +28,6 @@ const schema = Type.Object({
   DECISION_URL: Type.String({ default: "" }),
   DECISION_API_KEY: Type.String({ default: "" }),
   DECISION_MODEL: Type.String({ default: "" }),
-  DECISION_CONFIDENCE: Type.Number({ minimum: 0, maximum: 1, default: 0.8 }),
   AI_RESPONSE_FORMAT: Type.Enum(["json_schema", "json_object"], {
     default: "json_object",
   }),

@@ -36,11 +36,11 @@ AI 只有调用 `reply` 才能向群里说话；会话中的普通文本和分�
 
 排查问题时设 `LOG_LEVEL=debug`，查看 `docker compose logs -f --no-log-prefix yanqi`。任务、群号、请求消息编号和 AI 调用编号会关联模型请求、工具调用与结果；每轮还会记录用量行号、提供商、输入字符数和耗时。`LOG_DETAIL_CHARS` 控制参数、结果和异常片段的长度，默认 4000；配置中的密钥会隐藏。
 
-`DECISION_PROVIDER` 指定未 @ 消息的入口决策模型。同一批消息共用上下文，逐条判断是否需要处理记录请求；明确通过的交给主 Agent，明确忽略的不再调用对话模型。低于 `DECISION_CONFIDENCE`、接口失败或输入超过预算时，用 `AI_MODEL` 补判尚无结论的消息。设为 `llm` 时直接由它判断。@ 请求直接通过决策并标记 🐳。用户请求的记录范围由主 Agent 确定，入口模型只决定是否接收请求。
+`DECISION_PROVIDER` 指定未 @ 消息的入口决策模型。同一批消息共用上下文，逐条判断是否明确要求记录，或提到了群聊记录事务。分类为 `related` 时交给主 Agent，`unrelated` 时直接结束；置信度只记录在日志中，不再用额外阈值否决模型的分类。选择独立服务后不会自动回退到普通模型，调用失败由任务日志报告。只有明确设置 `DECISION_PROVIDER=llm` 才使用 `AI_MODEL` 做入口判断。@ 请求直接通过决策并标记 🐳。
 
 话题识别、主 Agent、纪要整理和保存通知统一使用 `AI_MODEL`。自动话题识别判断哪些原文值得归档，与用户的记录请求分开运行。
 
-`AUTO_REPLY=true` 时，获准交互成员的新消息收集一秒后进入记录请求识别队列，实际启动还受 `WORK_INTERVAL_MS` 轮询和排队影响。模型按语义判断用户是否在请机器人记录、整理、转写或调整记录，不匹配固定称呼或关键词；寒暄、只叫名字、成员之间的对话不会因此唤起主 Agent。记录范围尚不清楚也会交给主 Agent 处理。暂停自动归档、话题识别失败都不会阻塞这个入口；失败或重启后不重放旧请求。设为 `false` 可关闭未 @ 请求的识别，@、引用和追问后的回答继续有效。沿用 `AUTO_REPLY` 配置名，已有 `.env` 不需要改动。
+`AUTO_REPLY=true` 时，获准交互成员的新消息收集一秒后进入记录相关性判断，实际启动还受 `WORK_INTERVAL_MS` 轮询和排队影响。入口按语义识别记录、纪要、转写以及查询、修改、发送已有记录等事务，不匹配固定称呼或关键词。普通闲聊、技术讨论本身或代码中的日志、数据库记录不会因此唤起主 Agent。入口只判断相关性，是否需要操作、请求对象和记录范围由主 Agent 结合完整上下文确定；提到记录不等于授权新建纪要。暂停自动归档、话题识别失败都不会阻塞这个入口；失败或重启后不重放旧请求。设为 `false` 可关闭未 @ 消息的识别，@、引用和追问后的回答继续有效。
 
 主 Agent 收到“帮我记一下”后，先判断用户指的是哪段讨论。近期上下文不足时，调用 `read(action=context)` 向前翻聊天，找到讨论开头和结束处，再用消息起止 ID 指定完整范围；长消息的完整原文可用 `read(action=history)` 读取。不会把当前看到的片段当作全部讨论，也不默认缩成最近五分钟。范围确定后，后台处理原文、附件转写和摘要；只要求整理已有讨论时立即安排 `record`，只有需要持续记录后续发言时才使用 `follow`。
 
@@ -105,7 +105,6 @@ DECISION_PROVIDER=clef
 DECISION_URL=https://api.cloudflare.com/client/v4/accounts/YOUR_ACCOUNT_ID/ai/run/@cf/cloudflare/clef
 DECISION_API_KEY=
 DECISION_MODEL=clef
-DECISION_CONFIDENCE=0.8
 ```
 
 在 Cloudflare 控制台进入 **Workers AI → Use REST API → Create a Workers AI API Token**。把生成的 Token 填入 `DECISION_API_KEY`，不加 `Bearer ` 前缀；把同页 **Get Account ID** 的账号 ID 替换到地址的 `YOUR_ACCOUNT_ID`。若自行创建 Token，需给该账号授予 **Workers AI – Read** 和 **Workers AI – Edit** 权限，详见 [Cloudflare REST API 配置说明](https://developers.cloudflare.com/workers-ai/get-started/rest-api/)。`DECISION_MODEL` 填 `clef`，完整模型路径只出现在 URL 中。补齐 Token 和账号 ID 后再启动。
