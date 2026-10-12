@@ -3,7 +3,11 @@ import { inspect } from "node:util";
 
 import type { Config } from "../config.ts";
 
-export const logContext = new AsyncLocalStorage<string>();
+export const logContext = new AsyncLocalStorage<{
+  task: string;
+  groupId: string;
+  requestId?: number;
+}>();
 
 export function logDetail(value: unknown, config: Config): string {
   let text =

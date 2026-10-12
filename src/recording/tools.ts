@@ -5,7 +5,7 @@ import { Type } from "typebox";
 import type { Config } from "../config.ts";
 import type { Store } from "../storage/store.ts";
 import type { Message, Topic } from "../types.ts";
-import { beijingTime } from "../utils/time.ts";
+import { beijingDate, beijingTime } from "../utils/time.ts";
 import { messageChunks } from "./messages.ts";
 import type { Notes } from "./notes.ts";
 import { selectSources, sourceScope } from "./sources.ts";
@@ -102,6 +102,12 @@ export function recordingTools(
   }
 
   return [
+    tool(
+      "usage",
+      "查询本群今天的 AI 调用次数、输入/输出 token 和缓存用量，按提供商、配置项、模型和用途汇总。未上报的用量不等于零，费用以提供商账单为准。",
+      emptyParameters,
+      () => store.usage(message.groupId, beijingDate(message.sentAt)),
+    ),
     tool(
       "read_note",
       "读取本群已有纪要的一页正文，供核实细节、回答具体问题。直接发送全文必须调用 send，不要逐页读出再用 reply 重写。",

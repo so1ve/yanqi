@@ -1,5 +1,6 @@
-import type { Config } from "../config.ts";
+import type { Config, ModelConfig } from "../config.ts";
 import type { Store } from "../storage/store.ts";
+import { logContext } from "../utils/logging.ts";
 import { beijingDate } from "../utils/time.ts";
 
 export class AiSizeError extends Error {}
@@ -16,20 +17,39 @@ export class BudgetExceeded extends Error {
 export async function reserveCall(
   config: Config,
   store: Store,
-  model: string,
+  model: ModelConfig,
   purpose: string,
-): Promise<void> {
+): Promise<number> {
   const now = Date.now();
   const day = beijingDate(now);
-  const allowed = await store.reserveCall(
+  const context = logContext.getStore();
+  const account =
+    Object.entries(config).find(
+      ([key, value]) =>
+        key.endsWith("_MODEL") &&
+        typeof value === "object" &&
+        value !== null &&
+        "apiKey" in value &&
+        value.apiKey === model.apiKey &&
+        value.baseURL === model.baseURL,
+    )?.[0] ?? "DECISION_API_KEY";
+  const id = await store.reserveCall(
     day,
-    model,
+    model.model,
     purpose,
     config.AI_DAILY_CALL_LIMIT,
     now,
+    {
+      provider: new URL(model.baseURL).origin,
+      account,
+      groupId: context?.groupId ?? null,
+      task: context?.task ?? null,
+    },
   );
 
-  if (!allowed) {
+  if (id === null) {
     throw new BudgetExceeded(day);
   }
+
+  return id;
 }

@@ -17,7 +17,18 @@ async function messageText(store: Store, message: Message): Promise<string> {
     )
     .join("\n");
   const segments = message.segments.filter(
-    (segment) => segment.type !== "text" && segment.type !== "reply",
+    (segment) =>
+      ![
+        "text",
+        "reply",
+        "at",
+        "image",
+        "record",
+        "audio",
+        "video",
+        "file",
+        "forward",
+      ].includes(segment.type),
   );
 
   return `${message.text}${segments.length > 0 ? `\n[消息片段] ${JSON.stringify(segments)}` : ""}${attachments ? `\n${attachments}` : ""}`;

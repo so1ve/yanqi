@@ -58,7 +58,9 @@ export class Ai {
     }
 
     const input = JSON.stringify(state);
-    const label = [logContext.getStore(), purpose].filter(Boolean).join(" ");
+    const label = [logContext.getStore()?.task, purpose]
+      .filter(Boolean)
+      .join(" ");
 
     if (input.length > this.#config.AI_INPUT_CHARS) {
       this.#logger.debug(
@@ -84,7 +86,11 @@ export class Ai {
       await reserveCall(
         this.#config,
         this.#store,
-        this.#config.DECISION_MODEL,
+        {
+          model: this.#config.DECISION_MODEL,
+          baseURL: this.#config.DECISION_URL,
+          apiKey: this.#config.DECISION_API_KEY,
+        },
         `decision:${purpose}`,
       );
       const answer = await this.#decisions.evaluate(
@@ -288,13 +294,13 @@ export class Ai {
       throw new Error("未配置语音转写模型");
     }
 
-    await reserveCall(this.#config, this.#store, model.model, "audio");
+    await reserveCall(this.#config, this.#store, model, "audio");
 
     const startedAt = performance.now();
 
     this.#logger.info(
       "%s 语音转写开始：model=%s file=%s",
-      logContext.getStore() ?? "",
+      logContext.getStore()?.task ?? "",
       model.model,
       path,
     );
@@ -318,7 +324,7 @@ export class Ai {
 
     this.#logger.info(
       "%s 语音转写完成：chars=%s 耗时=%s ms",
-      logContext.getStore() ?? "",
+      logContext.getStore()?.task ?? "",
       text.text.length,
       Math.round(performance.now() - startedAt),
     );

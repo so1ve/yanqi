@@ -209,7 +209,16 @@ export class Secretary {
         return;
       }
 
-      await logContext.run(`任务 #${job.id}`, () => this.#executeTask(job));
+      await logContext.run(
+        {
+          task: `任务 #${job.id}`,
+          groupId: job.payload.groupId,
+          ...(job.kind === "intent"
+            ? { requestId: job.payload.messageId }
+            : {}),
+        },
+        () => this.#executeTask(job),
+      );
       this.processPending();
     }
   }
@@ -384,8 +393,9 @@ export class Secretary {
             .map((message) => message.text.slice(0, MAX_REPLY_CHARS));
 
           try {
-            text = await logContext.run(`发送 #${delivery.id}`, () =>
-              this.#ai.voice(delivery.content, recentReplies),
+            text = await logContext.run(
+              { task: `发送 #${delivery.id}`, groupId: delivery.groupId },
+              () => this.#ai.voice(delivery.content, recentReplies),
             );
           } catch (error) {
             if (text.length > MAX_REPLY_CHARS) {

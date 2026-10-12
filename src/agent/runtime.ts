@@ -100,7 +100,7 @@ export class AgentRuntime {
   ): Promise<string> {
     const config = this.#config;
     const modelId = endpoint.model;
-    const label = [logContext.getStore(), `AI #${++this.#calls}`, purpose]
+    const label = [logContext.getStore()?.task, `AI #${++this.#calls}`, purpose]
       .filter(Boolean)
       .join(" ");
     const startedAt = performance.now();
@@ -125,6 +125,7 @@ export class AgentRuntime {
       },
     };
     let turns = 0;
+    const calls: number[] = [];
     let failure: Error | undefined;
     const agent = new Agent({
       initialState: {
@@ -141,7 +142,7 @@ export class AgentRuntime {
             throw new Error(`${purpose} agent 已达到单次请求的 8 轮调用上限`);
           }
 
-          await reserveCall(config, this.#store, modelId, purpose);
+          calls.push(await reserveCall(config, this.#store, endpoint, purpose));
           this.#logger.info(
             "%s 第 %s 轮请求：model=%s messages=%s",
             label,
@@ -211,6 +212,36 @@ export class AgentRuntime {
       await agent.prompt(input);
     } finally {
       clearTimeout(timeout);
+      const messages = agent.state.messages.filter(
+        (message) => message.role === "assistant",
+      );
+
+      await this.#store
+        .recordUsage(
+          calls.map((id, index) => {
+            const message = messages[index];
+            const usage = message?.usage.totalTokens ? message.usage : null;
+
+            return {
+              id,
+              input: usage?.input ?? null,
+              output: usage?.output ?? null,
+              cacheRead: usage?.cacheRead ?? null,
+              cacheWrite: usage?.cacheWrite ?? null,
+              durationMs:
+                message?.durationMs === undefined
+                  ? null
+                  : Math.round(message.durationMs),
+            };
+          }),
+        )
+        .catch((error) =>
+          this.#logger.warn(
+            "%s 用量保存失败：%s",
+            label,
+            logDetail(error, config),
+          ),
+        );
       this.#logger.info(
         "%s 会话结束：rounds=%s 耗时=%s ms",
         label,

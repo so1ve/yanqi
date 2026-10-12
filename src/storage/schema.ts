@@ -57,6 +57,15 @@ declare module "koishi" {
       day: string;
       model: string;
       purpose: string;
+      provider: string;
+      account: string;
+      groupId: string | null;
+      task: string | null;
+      input: number | null;
+      output: number | null;
+      cacheRead: number | null;
+      cacheWrite: number | null;
+      durationMs: number | null;
     };
     memories: MemoryRow;
   }
@@ -234,6 +243,15 @@ export function defineModels(model: Database): void {
       day: "string",
       model: "string",
       purpose: "string",
+      provider: { type: "text", initial: "" },
+      account: { type: "string", initial: "" },
+      groupId: { type: "string", nullable: true },
+      task: { type: "string", nullable: true },
+      input: { type: "integer", nullable: true },
+      output: { type: "integer", nullable: true },
+      cacheRead: { type: "integer", nullable: true },
+      cacheWrite: { type: "integer", nullable: true },
+      durationMs: { type: "integer", nullable: true },
     },
     { autoInc: true },
   );
