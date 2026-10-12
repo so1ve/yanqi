@@ -371,10 +371,16 @@ export class Secretary {
           await this.#messenger.sendNote(note);
         } else {
           let text = delivery.content;
+          const recentReplies = (
+            await this.#store.conversation(delivery.groupId, 12)
+          )
+            .filter((message) => message.isBot && message.noteId === null)
+            .slice(-3)
+            .map((message) => message.text.slice(0, MAX_REPLY_CHARS));
 
           try {
             text = await logContext.run(`发送 #${delivery.id}`, () =>
-              this.#ai.voice(delivery.content),
+              this.#ai.voice(delivery.content, recentReplies),
             );
           } catch (error) {
             if (text.length > MAX_REPLY_CHARS) {

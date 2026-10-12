@@ -247,12 +247,15 @@ export class Ai {
     return result.publish;
   }
 
-  public async voice(message: string): Promise<string> {
+  public async voice(
+    message: string,
+    recentReplies: string[] = [],
+  ): Promise<string> {
     const result = await this.#runtime.json(
       "voice",
       voiceSchema,
       this.#voicePrompt,
-      { message },
+      { message, recentReplies },
       this.#config.AI_REPLY_MODEL ?? this.#config.AI_MODEL,
     );
 
