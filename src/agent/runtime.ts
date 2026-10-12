@@ -100,7 +100,14 @@ export class AgentRuntime {
   ): Promise<string> {
     const config = this.#config;
     const modelId = endpoint.model;
-    const label = [logContext.getStore()?.task, `AI #${++this.#calls}`, purpose]
+    const task = logContext.getStore();
+    const label = [
+      task?.task,
+      task && `group=${task.groupId}`,
+      task?.requestId && `request=m${task.requestId}`,
+      `AI #${++this.#calls}`,
+      purpose,
+    ]
       .filter(Boolean)
       .join(" ");
     const startedAt = performance.now();
@@ -144,11 +151,15 @@ export class AgentRuntime {
 
           calls.push(await reserveCall(config, this.#store, endpoint, purpose));
           this.#logger.info(
-            "%s 第 %s 轮请求：model=%s messages=%s",
+            "%s 第 %s 轮请求：usage=%s provider=%s model=%s messages=%s chars=%s tools=%s",
             label,
             turns,
+            calls.at(-1),
+            new URL(endpoint.baseURL).origin,
             modelId,
             context.messages.length,
+            JSON.stringify(context.messages).length,
+            tools.length,
           );
 
           return streamSimple(model, context, {

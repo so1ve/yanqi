@@ -44,7 +44,7 @@ export function logDetail(value: unknown, config: Config): string {
     }
   }
 
-  return text.length > 2000
-    ? `${text.slice(0, 2000)}…（共 ${text.length} 字符，已截断）`
+  return text.length > config.LOG_DETAIL_CHARS
+    ? `${text.slice(0, config.LOG_DETAIL_CHARS)}…（共 ${text.length} 字符，已截断）`
     : text;
 }

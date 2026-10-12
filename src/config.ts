@@ -47,6 +47,7 @@ const schema = z.object({
   ACK_EMOJI_ID: z.string().regex(/^\d*$/).default("128064"),
   DATA_DIR: z.string().min(1).default("./data"),
   LOG_LEVEL: z.enum(["info", "debug"]).default("info"),
+  LOG_DETAIL_CHARS: positive(4000),
   BOT_PERSONA_FILE: z.string().trim().default("./PERSONA.md"),
   AI_MODEL: model,
   AI_DETECT_MODEL: optionalModel,
