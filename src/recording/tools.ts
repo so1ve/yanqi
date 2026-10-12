@@ -407,7 +407,7 @@ export function recordingTools(
     ),
     tool(
       "status",
-      "查询本群记录数量、自动整理开关及任务状态。",
+      "查询本群记录数量、自动整理开关，以及具体任务的对象、类型、进度、失败原因和下次重试时间。单个附件请直接用其任务 ID 调用 task。",
       emptyParameters,
       () => store.status(message.groupId),
     ),

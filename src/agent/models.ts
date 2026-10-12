@@ -11,8 +11,9 @@ import type { Store } from "../storage/store.ts";
 import type { ChatMessage, Topic } from "../types.ts";
 import { failureMessage } from "../utils/errors.ts";
 import { logContext, logDetail } from "../utils/logging.ts";
+import { beijingTime } from "../utils/time.ts";
 import { DecisionProvider } from "./decisions.ts";
-import { prompts } from "./prompts.ts";
+import { MAX_REPLY_CHARS, prompts } from "./prompts.ts";
 import { AgentRuntime } from "./runtime.ts";
 import type { Detection } from "./schemas.ts";
 import { detectionSchema, publicationSchema, voiceSchema } from "./schemas.ts";
@@ -278,19 +279,39 @@ export class Ai {
     return this.#runtime.text("summary_merge", prompts.merge, { sections });
   }
 
-  public async shouldPublish(
+  public async choosePublication(
     topic: Topic,
-    recording: { revision: number; sources: number },
+    recording: { revision: number; sources: number; requested: boolean },
     context: ChatMessage[],
     request: ChatMessage[],
-  ): Promise<boolean> {
+    recent: ChatMessage[],
+  ): Promise<"send" | "notify" | "silent"> {
+    const input = {
+      topic: {
+        id: topic.id,
+        title: topic.title,
+        description: topic.description,
+        focus: topic.focus,
+        directive: topic.directive,
+        directiveMessageId:
+          topic.directiveMessageId === null
+            ? null
+            : `m${topic.directiveMessageId}`,
+      },
+      recording,
+      context,
+      request,
+      recent,
+      now: beijingTime(Date.now()),
+    };
     const decisionHint = await this.#choose(
       "publish",
       prompts.publishChoice,
-      { topic, recording, context, request },
+      input,
       {
         send: "用户需要这份纪要，或发送有助于当前话题的讨论",
-        hold: "用户要求暂缓，讨论仍在继续，或发送对当前上下文没有帮助",
+        notify: "用户正在等保存结果，或简短告知新记录有助于当前讨论；不发全文",
+        silent: "补整理旧聊天、后台更新或当前已无须通知，只保存在本地",
       },
     );
 
@@ -298,41 +319,42 @@ export class Ai {
       "publication",
       publicationSchema,
       prompts.publication,
-      {
-        topic: {
-          id: topic.id,
-          title: topic.title,
-          description: topic.description,
-          focus: topic.focus,
-          directive: topic.directive,
-          directiveMessageId:
-            topic.directiveMessageId === null
-              ? null
-              : `m${topic.directiveMessageId}`,
-        },
-        recording,
-        context,
-        request,
-        decisionHint,
-      },
+      { ...input, decisionHint },
     );
 
-    return result.publish;
+    return result.action;
   }
 
-  public async voice(
-    message: string,
-    recentReplies: string[] = [],
-  ): Promise<string> {
-    const result = await this.#runtime.json(
-      "voice",
-      voiceSchema,
-      this.#voicePrompt,
-      { message, recentReplies },
-      this.#config.AI_REPLY_MODEL ?? this.#config.AI_MODEL,
-    );
+  public async voice(groupId: string, message: string): Promise<string> {
+    const recentReplies = (
+      await this.#store.conversation(groupId, 12, Number.MAX_SAFE_INTEGER)
+    )
+      .filter((item) => item.isBot && item.noteId === null)
+      .slice(-3)
+      .map((item) => item.text.slice(0, MAX_REPLY_CHARS));
 
-    return result.text;
+    try {
+      const result = await this.#runtime.json(
+        "voice",
+        voiceSchema,
+        this.#voicePrompt,
+        { message, recentReplies },
+        this.#config.AI_REPLY_MODEL ?? this.#config.AI_MODEL,
+      );
+
+      return result.text;
+    } catch (error) {
+      if (message.length > MAX_REPLY_CHARS) {
+        throw error;
+      }
+
+      this.#logger.warn(
+        "回复改写失败，使用原答复：%s",
+        logDetail(failureMessage(error), this.#config),
+      );
+
+      return message;
+    }
   }
 
   public async understandImage(path: string, mime: string): Promise<string> {

@@ -330,9 +330,13 @@ export class Notes {
 
     // 整理期间仍能处理群请求，发送要求可能已经改变。
     topic = await this.#store.topic(topicId);
-    let publish = topic.directive === "send";
+    let action: "send" | "notify" | "silent" =
+      topic.directive === "send" ? "send" : "notify";
 
-    if (topic.directive === "auto") {
+    if (
+      topic.directive === "auto" ||
+      (topic.directive === "hold" && !requested)
+    ) {
       const request =
         topic.directiveMessageId === null
           ? []
@@ -343,11 +347,22 @@ export class Notes {
         Math.floor(this.#config.AI_INPUT_CHARS / 3),
       );
 
-      publish = await this.#ai.shouldPublish(
+      const recent = await contextWithin(
+        this.#store,
+        await this.#store.conversation(
+          topic.groupId,
+          20,
+          Number.MAX_SAFE_INTEGER,
+        ),
+        Math.floor(this.#config.AI_INPUT_CHARS / 3),
+      );
+
+      action = await this.#ai.choosePublication(
         topic,
         {
           revision: note.revision,
           sources: sources.length,
+          requested,
         },
         context,
         await contextWithin(
@@ -355,10 +370,13 @@ export class Notes {
           request,
           Math.floor(this.#config.AI_INPUT_CHARS / 6),
         ),
+        recent,
       );
       topic = await this.#store.topic(topicId);
-      if (topic.directive !== "auto") {
-        publish = topic.directive === "send";
+      if (topic.directive === "send") {
+        action = "send";
+      } else if (topic.directive === "hold" && action === "send") {
+        action = requested ? "notify" : "silent";
       }
     }
 
@@ -375,22 +393,25 @@ export class Notes {
     }
 
     this.#logger.info(
-      "纪要 #%s 发布决定：directive=%s publish=%s",
+      "纪要 #%s 发布决定：directive=%s action=%s",
       note.id,
       topic.directive,
-      publish,
+      action,
     );
 
-    if (publish) {
+    if (action === "send") {
       await this.#store.deliveries.enqueue(`auto-note:${note.id}`, {
         kind: "note",
         note,
       });
-    } else {
+    } else if (action === "notify") {
       await this.#store.deliveries.enqueue(`ack:${note.id}`, {
         kind: "saved",
         note,
-        title: topic.title,
+        content: await this.#ai.voice(
+          topic.groupId,
+          `「${topic.title}」第 ${note.revision} 版已保存。`,
+        ),
       });
     }
   }

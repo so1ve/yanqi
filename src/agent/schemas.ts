@@ -23,7 +23,7 @@ export const detectionSchema = z.object({
 });
 
 export const publicationSchema = z.object({
-  publish: z.boolean(),
+  action: z.enum(["send", "notify", "silent"]),
 });
 
 export type Detection = z.infer<typeof detectionSchema>;

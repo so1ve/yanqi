@@ -44,7 +44,7 @@ const schema = z.object({
     .pipe(z.array(z.string().regex(/^\d+$/))),
   ONEBOT_URL: z.url({ protocol: /^wss?$/ }).default("ws://127.0.0.1:3001"),
   ONEBOT_TOKEN: z.string().min(1),
-  ACK_EMOJI_ID: z.string().regex(/^\d*$/).default("128064"),
+  ACK_EMOJI_ID: z.string().regex(/^\d*$/).default("128051"),
   DATA_DIR: z.string().min(1).default("./data"),
   LOG_LEVEL: z.enum(["info", "debug"]).default("info"),
   LOG_DETAIL_CHARS: positive(4000),

@@ -1,3 +1,6 @@
+import assert from "node:assert/strict";
+import { setTimeout as delay } from "node:timers/promises";
+
 import { Logger } from "koishi";
 
 import type { Job, JobKind, JobPayloads } from "../types.ts";
@@ -41,6 +44,7 @@ export async function enqueueJob<K extends JobKind>(
 
 export class JobQueue {
   #db: Database;
+  #waiting = new Set<number>();
 
   constructor(db: Database) {
     this.#db = db;
@@ -93,15 +97,53 @@ export class JobQueue {
         },
         { sort: { id: "asc" } },
       );
-      const job = pending.find(
-        ({ payload }) =>
-          kind === "intent" ||
+
+      // 等待工具所需的任务优先，其他任务仍按入队顺序处理。
+      pending.sort(
+        (a, b) =>
+          Number(this.#waiting.has(b.id)) - Number(this.#waiting.has(a.id)),
+      );
+      const busyRequests =
+        kind === "intent"
+          ? await db.get("messages", {
+              id: (
+                await db.get("jobs", { kind: "intent", state: "running" })
+              ).map(
+                ({ payload }) => (payload as JobPayloads["intent"]).messageId,
+              ),
+            })
+          : [];
+      const requests =
+        kind === "intent"
+          ? await db.get("messages", {
+              id: pending.map(
+                ({ payload }) => (payload as JobPayloads["intent"]).messageId,
+              ),
+            })
+          : [];
+      const job = pending.find(({ payload }) => {
+        if (kind === "intent" && "messageId" in payload) {
+          const request = requests.find(
+            (message) => message.id === payload.messageId,
+          );
+
+          assert.ok(request);
+
+          return !busyRequests.some(
+            (message) =>
+              message.groupId === request.groupId &&
+              message.userId === request.userId,
+          );
+        }
+
+        return (
           kind === "asset" ||
           kind === "detect" ||
           !pausedGroups.includes(payload.groupId) ||
           ("topicId" in payload &&
-            (payload.requested || !pausedTopics.includes(payload.topicId))),
-      );
+            (payload.requested || !pausedTopics.includes(payload.topicId)))
+        );
+      });
 
       if (!job) {
         return null;
@@ -117,6 +159,96 @@ export class JobQueue {
     });
   }
 
+  public async get(groupId: string, id: number) {
+    const [job] = await this.#db.get("jobs", {
+      id,
+      "payload.groupId": groupId,
+    });
+
+    if (!job) {
+      throw new Error(`本群没有任务 #${id}`);
+    }
+
+    return job;
+  }
+
+  public async forAsset(assetId: number) {
+    const [job] = await this.#db.get("jobs", {
+      "kind": "asset",
+      "payload.assetId": assetId,
+    });
+
+    assert.ok(job, `附件 #${assetId} 缺少处理任务`);
+
+    return job;
+  }
+
+  public forGroup(groupId: string) {
+    return this.#db.get(
+      "jobs",
+      {
+        "payload.groupId": groupId,
+        "state": { $ne: "done" },
+      },
+      { sort: { id: "desc" }, limit: 20 },
+    );
+  }
+
+  public async restart(groupId: string, id: number): Promise<void> {
+    await this.#db.transact((db) =>
+      db.set(
+        "jobs",
+        {
+          id,
+          "payload.groupId": groupId,
+          "$or": [{ state: "failed" }, { state: "done" }],
+          "kind": { $ne: "intent" },
+        },
+        {
+          state: "pending",
+          attempts: 0,
+          runAfter: Date.now(),
+          lastError: null,
+          progress: null,
+        },
+      ),
+    );
+  }
+
+  public async wait(
+    groupId: string,
+    id: number,
+    timeoutMs: number,
+    signal?: AbortSignal,
+  ) {
+    const deadline = Date.now() + timeoutMs;
+
+    this.#waiting.add(id);
+    try {
+      while (true) {
+        signal?.throwIfAborted();
+        const job = await this.get(groupId, id);
+
+        if (job.kind === "intent") {
+          throw new Error("不能等待对话任务，请等待附件或纪要任务");
+        }
+
+        if (
+          job.state === "done" ||
+          job.state === "failed" ||
+          Date.now() >= deadline ||
+          (job.state === "pending" && job.runAfter > deadline)
+        ) {
+          return job;
+        }
+
+        await delay(200, undefined, { signal });
+      }
+    } finally {
+      this.#waiting.delete(id);
+    }
+  }
+
   public async done(id: number): Promise<void> {
     await this.#db.transact((db) =>
       db.set("jobs", { id }, { state: "done", lastError: null }),
@@ -125,6 +257,7 @@ export class JobQueue {
 
   public async reportProgress(id: number, progress: string): Promise<void> {
     await this.#db.transact((db) => db.set("jobs", { id }, { progress }));
+    logger.info("任务 #%s 进度：%s", id, progress);
   }
 
   public forTopic(topicId: string) {

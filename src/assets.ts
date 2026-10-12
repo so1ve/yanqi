@@ -16,6 +16,7 @@ export async function collectAsset(
   config: Config,
   ai: Ai,
   messenger: Messenger,
+  reportProgress: (progress: string) => Promise<void>,
 ): Promise<void> {
   const asset = await store.asset(id);
   const message = await store.message(asset.messageId);
@@ -27,6 +28,7 @@ export async function collectAsset(
 
   try {
     if (asset.kind === "forward") {
+      await reportProgress(`正在读取合并转发，附件 #${id}`);
       const forwarded = await messenger.getForward(asset.reference);
       const target = join(directory, `${id}.json`);
       const temporary = `${target}.${randomUUID()}.part`;
@@ -37,11 +39,13 @@ export async function collectAsset(
       await rename(temporary, target);
       path = target;
       await store.saveAsset(id, "saved", path, JSON.stringify(forwarded), null);
+      await reportProgress("合并转发内容已保存");
 
       return;
     }
 
     if (!path) {
+      await reportProgress(`正在下载${asset.kind}附件 #${id}`);
       const url = /^https?:\/\//i.test(asset.reference)
         ? asset.reference
         : await messenger.getAsset(
@@ -116,6 +120,7 @@ export async function collectAsset(
     }
 
     if (asset.kind === "image" && config.AI_VISION_MODEL) {
+      await reportProgress(`正在识图，模型 ${config.AI_VISION_MODEL.model}`);
       if (!mime.startsWith("image/")) {
         const extension = path.split(".").at(-1);
 
@@ -129,8 +134,17 @@ export async function collectAsset(
         await ai.understandImage(path, mime),
         null,
       );
+      await reportProgress("图片识别完成，结果已保存");
     } else if (asset.kind === "audio" && config.AI_AUDIO_MODEL) {
+      await reportProgress(`正在转写语音，模型 ${config.AI_AUDIO_MODEL.model}`);
       await store.saveAsset(id, "saved", path, await ai.transcribe(path), null);
+      await reportProgress("语音转写完成，结果已保存");
+    } else {
+      await reportProgress(
+        asset.kind === "image" || asset.kind === "audio"
+          ? "文件已保存；未配置对应模型，未解析内容"
+          : "附件文件已保存，不支持解析此文件类型",
+      );
     }
   } catch (error) {
     await store.saveAsset(

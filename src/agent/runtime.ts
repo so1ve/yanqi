@@ -137,6 +137,7 @@ export class AgentRuntime {
     let turns = 0;
     const calls: number[] = [];
     let failure: Error | undefined;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
     const agent = new Agent({
       initialState: {
         model,
@@ -156,6 +157,8 @@ export class AgentRuntime {
           }
 
           calls.push(await reserveCall(config, this.#store, endpoint, purpose));
+          timeout = setTimeout(() => agent.abort(), config.AI_TIMEOUT_MS);
+          timeout.unref();
           this.#logger.info(
             "%s 第 %s 轮请求：usage=%s provider=%s model=%s messages=%s chars=%s tools=%s",
             label,
@@ -202,6 +205,12 @@ export class AgentRuntime {
     });
 
     logAgentEvents(agent, config, label);
+    // 只限制每轮模型请求；等待后台任务由工具自己的期限控制。
+    agent.subscribe((event) => {
+      if (event.type === "message_end" && event.message.role === "assistant") {
+        clearTimeout(timeout);
+      }
+    });
     this.#logger.debug(
       "%s 输入：%s",
       label,
@@ -215,16 +224,6 @@ export class AgentRuntime {
       ),
     );
 
-    const timeout = setTimeout(() => {
-      this.#logger.debug(
-        "%s 达到 %s ms 超时限制，中止调用",
-        label,
-        config.AI_TIMEOUT_MS,
-      );
-      agent.abort();
-    }, config.AI_TIMEOUT_MS);
-
-    timeout.unref();
     try {
       await agent.prompt(input);
     } finally {

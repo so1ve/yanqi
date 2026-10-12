@@ -10,12 +10,15 @@ async function messageText(store: Store, message: Message): Promise<string> {
     return `[已发送纪要：${topic.title}，话题 ID：${topic.id}，第 ${note.revision} 版]\n${topic.description}`;
   }
 
-  const attachments = (await store.assets(message.id))
-    .map(
-      (asset) =>
-        `[${asset.kind}：${asset.state}]\n${asset.interpretation ?? asset.error ?? "尚未解析内容"}`,
+  const attachments = (
+    await Promise.all(
+      (await store.assets(message.id)).map(async (asset) => {
+        const job = await store.jobs.forAsset(asset.id);
+
+        return `[附件 #${asset.id} ${asset.kind}；任务 #${job.id} ${job.state}；文件${asset.path ? "已保存" : "未保存"}]\n${asset.interpretation ?? asset.error ?? (job.state === "done" ? "任务已结束，但没有识别结果；可用 task 等待解析" : "内容尚未解析，用 task 等待后读取最新结果")}`;
+      }),
     )
-    .join("\n");
+  ).join("\n");
   const segments = message.segments.filter(
     (segment) =>
       ![

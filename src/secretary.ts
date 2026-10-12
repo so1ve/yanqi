@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import type { Context, Logger, Session } from "koishi";
 
 import { Ai } from "./agent/models.ts";
-import { MAX_REPLY_CHARS } from "./agent/prompts.ts";
 import { handleRequest } from "./agent/requests.ts";
 import { AiSizeError, BudgetExceeded } from "./agent/usage.ts";
 import { collectAsset } from "./assets.ts";
@@ -25,7 +24,7 @@ export class Secretary {
   #ai: Ai;
   #notes: Notes;
   #logger: Logger;
-  #running = new Set<JobKind | "send:text" | "send:note">();
+  #running = new Map<JobKind | "send:text" | "send:note", number>();
 
   constructor(ctx: Context, config: Config, store: Store) {
     this.#config = config;
@@ -176,32 +175,32 @@ export class Secretary {
       "send:text",
       "send:note",
     ] as const) {
-      if (this.#running.has(kind)) {
-        continue;
+      const concurrency = kind === "intent" ? 4 : kind === "asset" ? 2 : 1;
+
+      while ((this.#running.get(kind) ?? 0) < concurrency) {
+        this.#running.set(kind, (this.#running.get(kind) ?? 0) + 1);
+        const work =
+          kind === "send:text"
+            ? this.#sendPending("text")
+            : kind === "send:note"
+              ? this.#sendPending("note")
+              : this.#processJobs(kind);
+
+        void work
+          .catch((error) => {
+            this.#logger.warn(
+              "%s 队列处理失败：%s",
+              kind,
+              logDetail(failureMessage(error), this.#config),
+            );
+            this.#logger.debug(
+              "%s 队列异常：%s",
+              kind,
+              logDetail(error, this.#config),
+            );
+          })
+          .finally(() => this.#running.set(kind, this.#running.get(kind)! - 1));
       }
-
-      this.#running.add(kind);
-      const work =
-        kind === "send:text"
-          ? this.#sendPending("text")
-          : kind === "send:note"
-            ? this.#sendPending("note")
-            : this.#processJobs(kind);
-
-      void work
-        .catch((error) => {
-          this.#logger.warn(
-            "%s 队列处理失败：%s",
-            kind,
-            logDetail(failureMessage(error), this.#config),
-          );
-          this.#logger.debug(
-            "%s 队列异常：%s",
-            kind,
-            logDetail(error, this.#config),
-          );
-        })
-        .finally(() => this.#running.delete(kind));
     }
   }
 
@@ -256,6 +255,7 @@ export class Secretary {
             this.#store,
             this.#ai,
             this.#notes,
+            () => this.processPending(),
           );
 
           break;
@@ -280,6 +280,7 @@ export class Secretary {
             this.#config,
             this.#ai,
             this.#messenger,
+            (progress) => this.#store.jobs.reportProgress(job.id, progress),
           );
 
           break;
@@ -390,51 +391,16 @@ export class Secretary {
 
           await this.#messenger.sendNote(note);
         } else {
-          let text = delivery.content;
-          const recentReplies = (
-            await this.#store.conversation(
-              delivery.groupId,
-              12,
-              Number.MAX_SAFE_INTEGER,
-            )
-          )
-            .filter((message) => message.isBot && message.noteId === null)
-            .slice(-3)
-            .map((message) => message.text.slice(0, MAX_REPLY_CHARS));
-
-          try {
-            text = await logContext.run(
-              { task: `发送 #${delivery.id}`, groupId: delivery.groupId },
-              () => this.#ai.voice(delivery.content, recentReplies),
-            );
-          } catch (error) {
-            if (text.length > MAX_REPLY_CHARS) {
-              throw error;
-            }
-
-            this.#logger.warn(
-              "发送 #%s 回复改写失败，使用原答复：%s",
-              delivery.id,
-              logDetail(failureMessage(error), this.#config),
-            );
-            this.#logger.debug(
-              "发送 #%s 改写异常：%s",
-              delivery.id,
-              logDetail(error, this.#config),
-            );
-          }
-
           this.#logger.debug(
             "发送 #%s 文字：%s",
             delivery.id,
-            logDetail(text, this.#config),
+            logDetail(delivery.content, this.#config),
           );
-          // 改写期间，主动发送纪要可能已取代这条保存通知。
           if (!(await this.#store.deliveries.isPending(delivery.id))) {
             continue;
           }
 
-          await this.#messenger.sendText(delivery.groupId, text);
+          await this.#messenger.sendText(delivery.groupId, delivery.content);
         }
 
         await this.#store.deliveries.done(delivery.id);

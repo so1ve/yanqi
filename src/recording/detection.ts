@@ -119,6 +119,5 @@ export async function detectTopics(
       ...assignment,
       messageIds: [...assignment.messageIds],
     })),
-    Date.now(),
   );
 }

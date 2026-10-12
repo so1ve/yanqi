@@ -1,3 +1,5 @@
+import { setTimeout as delay } from "node:timers/promises";
+
 import { Logger } from "koishi";
 
 import type { Delivery, Note } from "../types.ts";
@@ -6,7 +8,7 @@ import type { Database } from "./schema.ts";
 type Outgoing =
   | { kind: "text"; groupId: string; content: string }
   | { kind: "note"; note: Note; repeat?: boolean }
-  | { kind: "saved"; note: Note; title: string };
+  | { kind: "saved"; note: Note; content: string };
 
 export class DeliveryQueue {
   #db: Database;
@@ -59,7 +61,7 @@ export class DeliveryQueue {
             outgoing.kind === "text"
               ? outgoing.content
               : outgoing.kind === "saved"
-                ? `「${outgoing.title}」第 ${outgoing.note.revision} 版已保存。`
+                ? outgoing.content
                 : "",
           createdAt: Date.now(),
         });
@@ -82,6 +84,25 @@ export class DeliveryQueue {
     return (
       (await this.#db.get("deliveries", { id, state: "pending" })).length > 0
     );
+  }
+
+  public async wait(key: string, signal?: AbortSignal) {
+    const deadline = Date.now() + 40_000;
+
+    while (true) {
+      signal?.throwIfAborted();
+      const [delivery] = await this.#db.get("deliveries", { key });
+
+      if (!delivery) {
+        throw new Error("回复尚未提交发送");
+      }
+
+      if (delivery.state !== "pending" || Date.now() >= deadline) {
+        return delivery.state;
+      }
+
+      await delay(100, undefined, { signal });
+    }
   }
 
   public forNote(noteId: number) {

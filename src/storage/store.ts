@@ -6,6 +6,7 @@ import { $ } from "koishi";
 
 import { Memories } from "../agent/memory.ts";
 import type { Asset, IncomingMessage, Message, Note, Topic } from "../types.ts";
+import { beijingTime } from "../utils/time.ts";
 import { DeliveryQueue } from "./deliveries.ts";
 import { JobQueue, enqueueJob } from "./jobs.ts";
 import type { Database } from "./schema.ts";
@@ -444,7 +445,7 @@ export class Store {
         generation: topic.generation + added + 1,
       });
       topic.lastSourceId = Math.max(topic.lastSourceId, id);
-      topic.lastActiveAt = Math.max(topic.lastActiveAt, source.receivedAt);
+      topic.lastActiveAt = Math.max(topic.lastActiveAt, source.sentAt);
       added++;
     }
 
@@ -470,7 +471,6 @@ export class Store {
       description: string;
       messageIds: number[];
     }[],
-    now: number,
   ): Promise<void> {
     await this.#db.transact(async (db) => {
       for (const assignment of assignments) {
@@ -485,7 +485,7 @@ export class Store {
             title: assignment.title,
             mode: "auto",
             ownerId: null,
-            lastActiveAt: now,
+            lastActiveAt: 0,
           });
         } else {
           const [topic] = await db.get("topics", { id });
@@ -946,6 +946,52 @@ export class Store {
     });
   }
 
+  public async taskStatus(groupId: string, id: number) {
+    const job = await this.jobs.get(groupId, id);
+    const { payload } = job;
+    const asset =
+      "assetId" in payload ? await this.asset(payload.assetId) : null;
+    const topic =
+      "topicId" in payload ? await this.topic(payload.topicId) : null;
+    const note = topic ? await this.latestNote(topic.id) : null;
+
+    return {
+      id: job.id,
+      kind: job.kind,
+      description: asset
+        ? `消息 m${asset.messageId} 的${asset.kind}附件 #${asset.id}`
+        : topic
+          ? `整理「${topic.title}」`
+          : job.kind === "detect"
+            ? "自动识别群里的讨论话题"
+            : "处理群成员的对话请求",
+      state: job.state,
+      attempts: job.attempts,
+      progress: job.progress,
+      error: job.lastError,
+      retryAt:
+        job.state === "pending" && job.lastError
+          ? beijingTime(job.runAfter)
+          : null,
+      source: payload,
+      result: asset
+        ? {
+            assetId: asset.id,
+            messageId: `m${asset.messageId}`,
+            fileSaved: asset.path !== null,
+            interpretation: asset.interpretation,
+            error: asset.error,
+            note:
+              job.state === "done" && !asset.interpretation
+                ? "文件已保存，但没有内容识别结果；图片或语音需配置对应模型才能解析。"
+                : null,
+          }
+        : note
+          ? { noteId: note.id, revision: note.revision, path: note.path }
+          : null,
+    };
+  }
+
   public async status(groupId: string): Promise<string> {
     const messages = await this.#db.eval("messages", (row) => $.count(row.id), {
       groupId,
@@ -984,6 +1030,21 @@ export class Store {
       },
     );
 
-    return `本群已保存 ${messages} 条成员原文、${documents} 份纪要（共 ${notes} 个版本）。自动整理${(await this.aiEnabled(groupId)) ? "开启" : "关闭"}。\n处理中或等待中的任务 ${pending}，待发送 ${pendingDeliveries}，可重试的后台任务 ${failed}，发送失败 ${failedDeliveries}。`;
+    const tasks = await this.jobs.forGroup(groupId);
+
+    return JSON.stringify({
+      messages,
+      documents,
+      versions: notes,
+      automatic: await this.aiEnabled(groupId),
+      pendingTasks: pending,
+      failedTasks: failed,
+      pendingDeliveries,
+      failedDeliveries,
+      tasks: await Promise.all(
+        tasks.map((task) => this.taskStatus(groupId, task.id)),
+      ),
+      note: "任务列表最多展示最近 20 个未完成任务。只能依据具体任务判断失败对象；不能把话题识别失败当作图片识别失败。",
+    });
   }
 }

@@ -6,6 +6,7 @@ import type { Store } from "../storage/store.ts";
 import { beijingDate, beijingTime } from "../utils/time.ts";
 import type { Ai } from "./models.ts";
 import { replyTool } from "./reply.ts";
+import { taskTool } from "./tasks.ts";
 
 export async function handleRequest(
   messageId: number,
@@ -13,6 +14,7 @@ export async function handleRequest(
   store: Store,
   ai: Ai,
   notes: Notes,
+  processPending: () => void,
 ): Promise<void> {
   const message = await store.message(messageId);
 
@@ -85,7 +87,8 @@ export async function handleRequest(
       today: beijingDate(message.sentAt),
     },
     [
-      replyTool(store, message),
+      replyTool(store, message, ai, processPending),
+      taskTool(store, message, config, isAdmin, processPending),
       ...recordingTools(store, notes, message, isAdmin, config),
       ...store.memories.tools(message),
     ],
