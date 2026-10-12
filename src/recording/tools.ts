@@ -116,8 +116,9 @@ export function recordingTools(
         const topic = await getTopic(topicId);
         const note = await store.latestNote(topic.id);
 
-        if (!note)
+        if (!note) {
           return "这份纪要尚未保存；查看进度用 inspect，读取原文用 read_history。";
+        }
 
         const size = Math.floor(config.AI_INPUT_CHARS / 4);
 
@@ -210,7 +211,7 @@ export function recordingTools(
             ...(sources
               ? { messageIds: sources.map((source) => source.id) }
               : {}),
-            ...(args.focus !== undefined ? { focus: args.focus } : {}),
+            ...(args.focus === undefined ? {} : { focus: args.focus }),
           });
         }
 

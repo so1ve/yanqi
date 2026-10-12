@@ -130,7 +130,7 @@ export class Secretary {
 
     for (const groupId of this.#config.GROUP_IDS) {
       if (
-        !(await this.#store.aiEnabled(groupId)) ||
+        (!this.#config.AUTO_REPLY && !(await this.#store.aiEnabled(groupId))) ||
         (await this.#store.jobs.hasDetection(groupId))
       ) {
         continue;
@@ -144,7 +144,11 @@ export class Secretary {
       if (
         messages.length > 0 &&
         (messages.length >= this.#config.DETECT_BATCH_SIZE ||
-          messages[0]!.receivedAt + this.#config.DETECT_INTERVAL_MS <= now)
+          messages[0]!.receivedAt +
+            (this.#config.AUTO_REPLY
+              ? Math.min(3000, this.#config.DETECT_INTERVAL_MS)
+              : this.#config.DETECT_INTERVAL_MS) <=
+            now)
       ) {
         await this.#store.jobs.enqueue(
           "detect",
@@ -426,7 +430,9 @@ export class Secretary {
             logDetail(text, this.#config),
           );
           // 改写期间，主动发送纪要可能已取代这条保存通知。
-          if (!(await this.#store.deliveries.isPending(delivery.id))) continue;
+          if (!(await this.#store.deliveries.isPending(delivery.id))) {
+            continue;
+          }
 
           await this.#messenger.sendText(delivery.groupId, text);
         }

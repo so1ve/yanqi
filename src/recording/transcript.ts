@@ -77,9 +77,9 @@ export async function transcript(
       }
 
       if (segment.type === "at") {
-        details.push(`@${segment.data.qq}`);
+        details.push(`@${String(segment.data.qq)}`);
       } else if (segment.type === "face") {
-        details.push(`表情 ${segment.data.id}`);
+        details.push(`表情 ${String(segment.data.id)}`);
       } else {
         details.push(`${segment.type}：${JSON.stringify(segment.data)}`);
       }

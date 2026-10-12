@@ -152,6 +152,7 @@ export class Notes {
             index + offset + 1,
             chunks.length,
           );
+
           return {
             messageIds: [
               ...new Set(chunk.map((message) => Number(message.id.slice(1)))),
@@ -192,7 +193,9 @@ export class Notes {
     let batch: string[] = [];
 
     const merge = async () => {
-      if (batch.length === 0) return;
+      if (batch.length === 0) {
+        return;
+      }
 
       chapters.push(
         batch.length === 1 ? batch[0]! : await this.#ai.merge(batch),
@@ -229,7 +232,14 @@ export class Notes {
       topic.lastSourceId,
     );
 
-    if (note?.generation !== generation) {
+    if (note?.generation === generation) {
+      this.#logger.debug(
+        "复用纪要 #%s：topic=%s revision=%s",
+        note.id,
+        topic.id,
+        note.revision,
+      );
+    } else {
       this.#logger.info(
         "开始整理：topic=%s sources=%s focused=%s",
         topic.id,
@@ -315,13 +325,6 @@ export class Notes {
         note.revision,
         sources.length,
         note.path,
-      );
-    } else {
-      this.#logger.debug(
-        "复用纪要 #%s：topic=%s revision=%s",
-        note.id,
-        topic.id,
-        note.revision,
       );
     }
 

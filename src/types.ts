@@ -97,6 +97,7 @@ export interface ChatMessage {
   author: string;
   userId: string;
   isBot: boolean;
+  command: boolean;
   mentions: string[];
   time: string;
   text: string;

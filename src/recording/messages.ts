@@ -19,15 +19,15 @@ async function messageText(store: Store, message: Message): Promise<string> {
   const segments = message.segments.filter(
     (segment) =>
       ![
-        "text",
-        "reply",
         "at",
-        "image",
-        "record",
         "audio",
-        "video",
         "file",
         "forward",
+        "image",
+        "record",
+        "reply",
+        "text",
+        "video",
       ].includes(segment.type),
   );
 
@@ -60,6 +60,7 @@ export async function messageChunks(
         author: message.displayName,
         userId: message.userId,
         isBot: message.isBot,
+        command: message.command,
         mentions: message.segments
           .filter((segment) => segment.type === "at")
           .map((segment) => String(segment.data.qq)),

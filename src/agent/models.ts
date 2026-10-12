@@ -35,6 +35,7 @@ export class Ai {
     const persona = config.BOT_PERSONA_FILE
       ? readFileSync(config.BOT_PERSONA_FILE, "utf8").trim()
       : "";
+
     if (config.BOT_PERSONA_FILE && !persona) {
       throw new Error("BOT_PERSONA_FILE 指定的人设文件不能为空");
     }
@@ -162,32 +163,53 @@ export class Ai {
     );
   }
 
-  public async preclassify(
+  public async observe(
     messages: ChatMessage[],
     context: ChatMessage[],
-  ): Promise<string[]> {
+  ): Promise<{ messageIds: string[]; replyIds: string[] }> {
+    const replyIds = [
+      ...new Set(
+        messages
+          .filter((message) => !message.command && !message.isBot)
+          .map((message) => message.id),
+      ),
+    ];
     const result = await this.#runtime.json(
-      "preclassify",
+      "observe",
       z.object({
         messageIds: z.array(
           z.enum([
-            ...new Set([...messages, ...context].map((message) => message.id)),
+            ...new Set(
+              [...messages, ...context]
+                .filter((message) => !message.isBot)
+                .map((message) => message.id),
+            ),
           ]),
         ),
+        replyIds:
+          replyIds.length > 0
+            ? z.array(z.enum(replyIds))
+            : z.array(z.string()).max(0),
       }),
-      prompts.preclassify,
-      { messages, context },
+      prompts.observe,
+      {
+        messages,
+        context,
+        self: { userId: this.#config.BOT_QQ, names: ["言栖", "小栖"] },
+      },
       this.#config.AI_DETECT_MODEL ?? this.#config.AI_MODEL,
     );
 
-    return result.messageIds;
+    return result;
   }
 
   public async relevantContext(
     request: ChatMessage[],
     context: ChatMessage[],
   ): Promise<ChatMessage[]> {
-    if (!this.#config.AI_DETECT_MODEL || context.length === 0) return context;
+    if (!this.#config.AI_DETECT_MODEL || context.length === 0) {
+      return context;
+    }
 
     const result = await this.#runtime.json(
       "context_filter",

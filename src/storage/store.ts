@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 
+import type { Tables } from "koishi";
 import { $ } from "koishi";
 
 import { Memories } from "../agent/memory.ts";
@@ -8,7 +9,6 @@ import type { Asset, IncomingMessage, Message, Note, Topic } from "../types.ts";
 import { DeliveryQueue } from "./deliveries.ts";
 import { JobQueue, enqueueJob } from "./jobs.ts";
 import type { Database } from "./schema.ts";
-import type { Tables } from "koishi";
 
 export class Store {
   #db: Database;
@@ -222,7 +222,7 @@ export class Store {
     await this.#db.transact(async (db) => {
       const [message] = await db.get("messages", { groupId, messageId });
 
-      if (!message || message.recalledAt !== null) {
+      if (message?.recalledAt !== null) {
         return;
       }
 
@@ -288,9 +288,36 @@ export class Store {
 
     return this.#db.get(
       "messages",
-      { groupId, id: { $gt: group.cursor }, isBot: false, command: false },
+      { groupId, id: { $gt: group.cursor }, isBot: false },
       { sort: { id: "asc" }, limit },
     );
+  }
+
+  public async requestReplies(
+    groupId: string,
+    messageIds: number[],
+  ): Promise<void> {
+    if (messageIds.length === 0) {
+      return;
+    }
+
+    await this.#db.transact(async (db) => {
+      const messages = await db.get("messages", {
+        groupId,
+        id: messageIds,
+        isBot: false,
+        command: false,
+        recalledAt: { $exists: false },
+      });
+
+      for (const message of messages) {
+        await db.set("messages", { id: message.id }, { command: true });
+        await enqueueJob(db, "intent", `intent:${message.id}`, {
+          groupId,
+          messageId: message.id,
+        });
+      }
+    });
   }
 
   public async setAI(groupId: string, enabled: boolean): Promise<void> {
@@ -569,6 +596,7 @@ export class Store {
         topic.directive = directive;
         topic.directiveMessageId = through;
       }
+
       await db.set(
         "topics",
         { id: topicId },
@@ -855,8 +883,9 @@ export class Store {
       "id" | "input" | "output" | "cacheRead" | "cacheWrite" | "durationMs"
     >[],
   ): Promise<void> {
-    if (calls.length)
+    if (calls.length > 0) {
       await this.#db.transact((db) => db.upsert("usage", calls));
+    }
   }
 
   public async usage(groupId: string, day: string): Promise<string> {

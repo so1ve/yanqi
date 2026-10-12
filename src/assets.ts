@@ -86,6 +86,7 @@ export async function collectAsset(
         )[mime] ?? ".bin";
       const target = join(directory, `${id}${suffix}`);
       const temporary = `${target}.${randomUUID()}.part`;
+
       try {
         await pipeline(
           response.body,

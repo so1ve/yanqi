@@ -97,6 +97,7 @@ export class JobQueue {
         ({ payload }) =>
           kind === "intent" ||
           kind === "asset" ||
+          kind === "detect" ||
           !pausedGroups.includes(payload.groupId) ||
           ("topicId" in payload &&
             (payload.requested || !pausedTopics.includes(payload.topicId))),

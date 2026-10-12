@@ -130,7 +130,7 @@ export async function selectSources(
         (source) => source.userId === scope.sinceFirstMessageBy,
       );
 
-      sources = first < 0 ? [] : sources.slice(first);
+      sources = first === -1 ? [] : sources.slice(first);
     }
   }
 

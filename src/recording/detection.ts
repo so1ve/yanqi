@@ -11,6 +11,7 @@ export async function detectTopics(
   ai: Ai,
 ): Promise<void> {
   const groupId = job.payload.groupId;
+  const recording = await store.aiEnabled(groupId);
   const messages = await Promise.all(
     job.payload.messageIds.map((id) => store.message(id)),
   );
@@ -21,7 +22,7 @@ export async function detectTopics(
     .map(({ id, title, description }) => ({ id, title, description }));
   const context = await contextWithin(
     store,
-    await store.recent(groupId, 20, messages[0]!.id - 1),
+    await store.conversation(groupId, 20, messages[0]!.id - 1),
     Math.floor(config.AI_INPUT_CHARS / 6),
   );
   const chunks = await messageChunks(
@@ -40,22 +41,38 @@ export async function detectTopics(
   >();
 
   for (const chunk of chunks) {
-    const selected = config.AI_DETECT_MODEL
-      ? new Set(await ai.preclassify(chunk, context))
-      : null;
+    const observation =
+      config.AUTO_REPLY || (recording && config.AI_DETECT_MODEL)
+        ? await ai.observe(chunk, context)
+        : null;
+
+    if (config.AUTO_REPLY && observation) {
+      await store.requestReplies(
+        groupId,
+        observation.replyIds.map((id) => Number(id.slice(1))),
+      );
+    }
+
+    if (!recording) {
+      continue;
+    }
+
+    const selected = observation ? new Set(observation.messageIds) : null;
     const messages = selected
       ? chunk.filter((message) => selected.has(message.id))
       : chunk;
-    if (messages.length === 0) continue;
 
-    const result = await ai.detect(
-      messages,
-      selected
-        ? context.filter((message) => selected.has(message.id))
-        : context,
-      topics,
+    if (messages.length === 0) {
+      continue;
+    }
+
+    const selectedContext = selected
+      ? context.filter((message) => selected.has(message.id))
+      : context.filter((message) => !message.isBot);
+    const result = await ai.detect(messages, selectedContext, topics);
+    const known = new Set(
+      [...messages, ...selectedContext].map((item) => item.id),
     );
-    const known = new Set([...chunk, ...context].map((item) => item.id));
 
     for (const proposed of result.topics) {
       if (

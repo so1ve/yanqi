@@ -39,7 +39,15 @@ export class DeliveryQueue {
         );
       }
 
-      if (!existing) {
+      if (existing) {
+        this.#logger.debug(
+          "忽略重复发送：key=%s existing=%s",
+          key,
+          existing.id,
+        );
+
+        return false;
+      } else {
         const delivery = await db.create("deliveries", {
           key,
           kind: outgoing.kind === "saved" ? "text" : outgoing.kind,
@@ -64,14 +72,8 @@ export class DeliveryQueue {
           delivery.kind,
           delivery.noteId,
         );
+
         return true;
-      } else {
-        this.#logger.debug(
-          "忽略重复发送：key=%s existing=%s",
-          key,
-          existing.id,
-        );
-        return false;
       }
     });
   }

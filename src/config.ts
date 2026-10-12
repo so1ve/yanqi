@@ -68,6 +68,10 @@ const schema = z.object({
   AI_INPUT_CHARS: z.coerce.number().int().min(4000).default(24_000),
   AI_DAILY_CALL_LIMIT: positive(2000),
   DETECT_INTERVAL_MS: positive(30_000),
+  AUTO_REPLY: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((value) => value === "true"),
   DETECT_BATCH_SIZE: positive(20),
   TOPIC_IDLE_MS: positive(600_000),
   TOPIC_REOPEN_MS: positive(86_400_000),
