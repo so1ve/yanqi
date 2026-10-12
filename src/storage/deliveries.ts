@@ -51,7 +51,7 @@ export class DeliveryQueue {
             outgoing.kind === "text"
               ? outgoing.content
               : outgoing.kind === "saved"
-                ? `「${outgoing.title}」第 ${outgoing.note.revision} 版已保存到本地，纪要和原始记录都已写入文件。`
+                ? `「${outgoing.title}」第 ${outgoing.note.revision} 版已保存。`
                 : "",
           createdAt: Date.now(),
         });

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { Context, Logger, Session } from "koishi";
 
 import { Ai } from "./agent/models.ts";
+import { MAX_REPLY_CHARS } from "./agent/prompts.ts";
 import { handleRequest } from "./agent/requests.ts";
 import { BudgetExceeded } from "./agent/usage.ts";
 import { collectAsset } from "./assets.ts";
@@ -362,6 +363,10 @@ export class Secretary {
               this.#ai.voice(delivery.content),
             );
           } catch (error) {
+            if (text.length > MAX_REPLY_CHARS) {
+              throw error;
+            }
+
             this.#logger.warn(
               "发送 #%s 回复改写失败，使用原答复：%s",
               delivery.id,

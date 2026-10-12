@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { MAX_REPLY_CHARS } from "./prompts.ts";
+
 export const detectionSchema = z.object({
   topics: z.array(
     z.object({
@@ -13,7 +15,9 @@ export const detectionSchema = z.object({
       messageIds: z
         .array(z.string())
         .min(1)
-        .describe("属于该话题的消息 ID，只能从输入的 messages 和 context 中选择"),
+        .describe(
+          "属于该话题的消息 ID，只能从输入的 messages 和 context 中选择",
+        ),
     }),
   ),
 });
@@ -25,5 +29,5 @@ export const publicationSchema = z.object({
 export type Detection = z.infer<typeof detectionSchema>;
 
 export const voiceSchema = z.object({
-  text: z.string().trim().min(1).max(3000),
+  text: z.string().trim().min(1).max(MAX_REPLY_CHARS),
 });

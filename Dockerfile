@@ -13,7 +13,6 @@ RUN pnpm install --prod --frozen-lockfile --ignore-scripts
 
 COPY tsconfig.json PERSONA.md run.mjs ./
 COPY src ./src
-COPY skills ./skills
 
 ENV NODE_ENV=production
 

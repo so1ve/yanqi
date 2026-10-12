@@ -39,14 +39,8 @@ export class Ai {
       throw new Error("BOT_PERSONA_FILE 指定的人设文件不能为空");
     }
 
-    const writingSkill = readFileSync(
-      "./skills/speak-plainly/SKILL.md",
-      "utf8",
-    );
-
     this.#voicePrompt = [
       prompts.voice,
-      `写作要求（用于本次 QQ 群回复，保持原答复的语言）：\n${writingSkill}`,
       persona && `角色设定（仅用于表达）：\n${persona}`,
     ]
       .filter(Boolean)
