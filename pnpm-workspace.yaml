@@ -1,0 +1,14 @@
+minimumReleaseAge: 0
+shellEmulator: true
+
+overrides:
+  typescript: "catalog:"
+
+allowBuilds:
+  "@google/genai": false
+  esbuild: false
+  protobufjs: false
+  unrs-resolver: false
+
+catalog:
+  typescript: npm:typescript-native-bridge@6.0.3-bridge.18.tsgo.7.0.2

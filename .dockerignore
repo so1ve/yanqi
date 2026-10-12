@@ -1,0 +1,9 @@
+*
+!Dockerfile
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!tsconfig.json
+!PERSONA.md
+!src/
+!src/**

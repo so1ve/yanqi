@@ -1,0 +1,9 @@
+node_modules/
+.devenv/
+.direnv/
+data/
+.env
+*.log
+pnpm-lock.yaml
+devenv.lock
+test/.tmp-*/

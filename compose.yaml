@@ -1,0 +1,38 @@
+services:
+  napcat:
+    image: mlikiowa/napcat-docker:latest
+    restart: unless-stopped
+    environment:
+      ACCOUNT: ${BOT_QQ}
+      NAPCAT_QUICK_PASSWORD_MD5: ${NAPCAT_QUICK_PASSWORD_MD5:-}
+      ONEBOT_TOKEN: ${ONEBOT_TOKEN}
+      NAPCAT_UID: ${NAPCAT_UID:-1000}
+      NAPCAT_GID: ${NAPCAT_GID:-1000}
+    entrypoint:
+      - bash
+      - -ec
+      - |
+        jq --arg token "$$ONEBOT_TOKEN" \
+          '.network.websocketServers[0] |= (.token = $$token | .reportSelfMessage = true)' \
+          /app/templates/ws.json \
+          > "/app/napcat/config/onebot11_$$ACCOUNT.json"
+        exec bash /app/entrypoint.sh
+    ports:
+      - "127.0.0.1:6099:6099"
+    volumes:
+      - ${DATA_DIR:-./data}/napcat/config:/app/napcat/config
+      - ${DATA_DIR:-./data}/napcat/qq:/app/.config/QQ
+
+  yanqi:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      - napcat
+    env_file: .env
+    environment:
+      ONEBOT_URL: ws://napcat:3001
+      DATA_DIR: /app/data
+      BOT_PERSONA_FILE: ${BOT_PERSONA_FILE:+/app/PERSONA.md}
+    volumes:
+      - ${DATA_DIR:-./data}:/app/data
+      - ${BOT_PERSONA_FILE:-./PERSONA.md}:/app/PERSONA.md:ro
