@@ -162,6 +162,49 @@ export class Ai {
     );
   }
 
+  public async preclassify(
+    messages: ChatMessage[],
+    context: ChatMessage[],
+  ): Promise<string[]> {
+    const result = await this.#runtime.json(
+      "preclassify",
+      z.object({
+        messageIds: z.array(
+          z.enum([
+            ...new Set([...messages, ...context].map((message) => message.id)),
+          ]),
+        ),
+      }),
+      prompts.preclassify,
+      { messages, context },
+      this.#config.AI_DETECT_MODEL ?? this.#config.AI_MODEL,
+    );
+
+    return result.messageIds;
+  }
+
+  public async relevantContext(
+    request: ChatMessage[],
+    context: ChatMessage[],
+  ): Promise<ChatMessage[]> {
+    if (!this.#config.AI_DETECT_MODEL || context.length === 0) return context;
+
+    const result = await this.#runtime.json(
+      "context_filter",
+      z.object({
+        messageIds: z.array(
+          z.enum([...new Set(context.map((message) => message.id))]),
+        ),
+      }),
+      prompts.contextFilter,
+      { request, context },
+      this.#config.AI_DETECT_MODEL,
+    );
+    const keep = new Set(result.messageIds);
+
+    return context.filter((message) => keep.has(message.id));
+  }
+
   public detect(
     messages: ChatMessage[],
     context: ChatMessage[],

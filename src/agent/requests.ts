@@ -54,7 +54,7 @@ export async function handleRequest(
         },
       },
       quoted,
-      context,
+      context: await ai.relevantContext(request, context),
       topics: (await store.topics(message.groupId, 15)).map(
         ({
           id,

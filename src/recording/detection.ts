@@ -40,7 +40,21 @@ export async function detectTopics(
   >();
 
   for (const chunk of chunks) {
-    const result = await ai.detect(chunk, context, topics);
+    const selected = config.AI_DETECT_MODEL
+      ? new Set(await ai.preclassify(chunk, context))
+      : null;
+    const messages = selected
+      ? chunk.filter((message) => selected.has(message.id))
+      : chunk;
+    if (messages.length === 0) continue;
+
+    const result = await ai.detect(
+      messages,
+      selected
+        ? context.filter((message) => selected.has(message.id))
+        : context,
+      topics,
+    );
     const known = new Set([...chunk, ...context].map((item) => item.id));
 
     for (const proposed of result.topics) {
