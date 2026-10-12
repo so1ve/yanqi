@@ -70,6 +70,18 @@ export class Secretary {
       });
 
       if (message) {
+        if (message.command) {
+          void this.#messenger
+            .acknowledge(message.groupId, message.messageId)
+            .catch((error) =>
+              this.#logger.warn(
+                "收到请求的表情回应失败：m%s %s",
+                message.id,
+                logDetail(failureMessage(error), this.#config),
+              ),
+            );
+        }
+
         this.#logger[message.command ? "info" : "debug"](
           "消息 m%s 已保存：group=%s qqMessage=%s user=%s addressed=%s bot=%s chars=%s",
           message.id,

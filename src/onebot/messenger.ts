@@ -64,6 +64,11 @@ export function createMessenger(config: Config, store: Store, ctx: Context) {
     get online(): boolean {
       return ctx.bots.find((bot) => bot.selfId === config.BOT_QQ)?.status === 1;
     },
+    async acknowledge(groupId: string, messageId: string) {
+      if (config.ACK_EMOJI_ID) {
+        await getBot().createReaction(groupId, messageId, config.ACK_EMOJI_ID);
+      }
+    },
     async sendText(groupId: string, text: string) {
       const segments = [{ type: "text", data: { text } }];
       const ids = await getBot().sendMessage(groupId, h.text(text));
