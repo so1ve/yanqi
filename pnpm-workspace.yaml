@@ -1,12 +1,15 @@
 minimumReleaseAge: 0
 shellEmulator: true
 
+packages:
+  - packages/*
+  - apps/*
 overrides:
   typescript: "catalog:"
 
 allowBuilds:
   "@google/genai": false
-  esbuild: false
+  esbuild: true
   protobufjs: false
   unrs-resolver: false
 

@@ -3,7 +3,14 @@ import { so1ve } from "@so1ve/eslint-config";
 export default so1ve(
   {
     test: false,
-    ignores: ["**/.devenv/**", "**/.direnv/**"],
+    vue: true,
+    ignores: [
+      "**/.devenv/**",
+      "**/.direnv/**",
+      "**/.nuxt/**",
+      "**/.output/**",
+      "data/**",
+    ],
     typescript: {
       overrides: {
         // Empty names, titles and URLs intentionally fall back to another string.

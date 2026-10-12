@@ -4,7 +4,12 @@
 !pnpm-lock.yaml
 !pnpm-workspace.yaml
 !tsconfig.json
-!PERSONA.md
-!run.mjs
-!src/
-!src/**
+!packages/
+!packages/**
+!apps/
+!apps/**
+!docker/
+!docker/**
+**/node_modules
+**/.nuxt
+**/.output

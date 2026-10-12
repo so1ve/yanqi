@@ -1,0 +1,215 @@
+import type { Static } from "typebox";
+import { Type } from "typebox";
+import * as Value from "typebox/value";
+
+import { defaultPersona } from "./agent/prompts/persona.ts";
+
+const positive = (fallback: number) =>
+  Type.Integer({
+    minimum: 1,
+    maximum: Number.MAX_SAFE_INTEGER,
+    default: fallback,
+  });
+const qq = Type.String({ pattern: "^\\d+$" });
+const modelSchema = Type.Object(
+  {
+    baseURL: Type.String({ default: "" }),
+    apiKey: Type.String({ default: "" }),
+    model: Type.String({ default: "" }),
+  },
+  { default: {}, additionalProperties: false },
+);
+const optionalModel = Type.Union([modelSchema, Type.Null()], { default: null });
+
+export const configSchema = Type.Object(
+  {
+    BOT_QQ: Type.String({ pattern: "^\\d*$", default: "" }),
+    GROUP_IDS: Type.Array(qq, { default: [] }),
+    ADMIN_IDS: Type.Array(qq, { default: [] }),
+    GROUP_ADMINS: Type.Record(qq, Type.Array(qq), { default: {} }),
+    ONEBOT_URL: Type.String({ default: "ws://127.0.0.1:3001" }),
+    ONEBOT_TOKEN: Type.String({ default: "" }),
+    ACK_EMOJI_ID: Type.String({ pattern: "^\\d*$", default: "128051" }),
+    DATA_DIR: Type.String({ minLength: 1, default: "./data" }),
+    LOG_LEVEL: Type.Enum(["info", "debug"], { default: "info" }),
+    LOG_DETAIL_CHARS: positive(4000),
+    BOT_PERSONA: Type.String({ default: defaultPersona }),
+    AI_MODEL: modelSchema,
+    DECISION_PROVIDER: Type.Enum(["llm", "openai", "vercel", "jev", "clef"], {
+      default: "llm",
+    }),
+    DECISION_URL: Type.String({ default: "" }),
+    DECISION_API_KEY: Type.String({ default: "" }),
+    DECISION_MODEL: Type.String({ default: "" }),
+    AI_RESPONSE_FORMAT: Type.Enum(["json_schema", "json_object"], {
+      default: "json_object",
+    }),
+    AI_TIMEOUT_MS: positive(120_000),
+    AI_MAX_OUTPUT_TOKENS: positive(8192),
+    AI_THINKING_TIMEOUT_MS: positive(300_000),
+    AI_THINKING_MAX_OUTPUT_TOKENS: positive(32_768),
+    AI_INPUT_CHARS: Type.Integer({
+      minimum: 4000,
+      maximum: Number.MAX_SAFE_INTEGER,
+      default: 24_000,
+    }),
+    AI_DAILY_CALL_LIMIT: positive(2000),
+    DETECT_INTERVAL_MS: positive(30_000),
+    AUTO_REPLY: Type.Boolean({ default: true }),
+    DETECT_BATCH_SIZE: positive(20),
+    TOPIC_IDLE_MS: positive(600_000),
+    TOPIC_REOPEN_MS: positive(86_400_000),
+    WORK_INTERVAL_MS: positive(1000),
+    MAX_ATTACHMENT_BYTES: positive(52_428_800),
+    AI_VISION_MODEL: optionalModel,
+    AI_AUDIO_MODEL: optionalModel,
+  },
+  { additionalProperties: false },
+);
+
+const modelParameters = Type.Tuple([
+  Type.String(),
+  Type.String({ minLength: 1 }),
+  Type.String({ minLength: 1 }),
+]);
+
+function readURL(value: string, protocols: string[], field: string): string {
+  if (!URL.canParse(value) || !protocols.includes(new URL(value).protocol)) {
+    throw new Error(
+      `配置错误：${field} 需要有效的 ${protocols.join(" / ")} 地址`,
+    );
+  }
+
+  return value;
+}
+
+function readModel(value: string, field: string) {
+  const parts = value.split(",");
+
+  parts[2] = parts[2]?.trim() ?? "";
+
+  if (!Value.Check(modelParameters, parts)) {
+    throw new Error(`配置错误：${field} 需要填写 BASE_URL,API_KEY,MODEL`);
+  }
+
+  const [baseURL, apiKey, model] = parts;
+
+  return {
+    baseURL: readURL(baseURL, ["http:", "https:"], field),
+    apiKey,
+    model,
+  };
+}
+
+const readOptionalModel = (value: string | undefined, field: string) =>
+  value ? readModel(value, field) : null;
+
+export type ModelConfig = Static<typeof modelSchema>;
+export type Config = Static<typeof configSchema>;
+
+export function parseConfig(input: unknown): Config {
+  const config = Value.Default(configSchema, structuredClone(input));
+
+  if (!Value.Check(configSchema, config)) {
+    throw new Error(
+      `配置错误：${Value.Errors(configSchema, config)
+        .map((error) => `${error.instancePath} ${error.message}`)
+        .join("；")}`,
+    );
+  }
+
+  readURL(config.ONEBOT_URL, ["ws:", "wss:"], "ONEBOT_URL");
+  for (const key of [
+    "AI_MODEL",
+    "AI_VISION_MODEL",
+    "AI_AUDIO_MODEL",
+  ] as const) {
+    if (config[key]?.baseURL) {
+      readURL(config[key].baseURL, ["http:", "https:"], key);
+    }
+  }
+
+  if (config.DECISION_URL) {
+    readURL(config.DECISION_URL, ["http:", "https:"], "DECISION_URL");
+  }
+
+  return config;
+}
+
+export function assertConfigured(config: Config): void {
+  if (!config.BOT_QQ || !config.ONEBOT_TOKEN) {
+    throw new Error("请先填写 QQ 账号和 NapCat 连接凭据");
+  }
+
+  if (config.GROUP_IDS.length === 0) {
+    throw new Error("请至少启用一个记录群");
+  }
+
+  if (
+    !config.AI_MODEL.baseURL ||
+    !config.AI_MODEL.apiKey ||
+    !config.AI_MODEL.model
+  ) {
+    throw new Error("请先配置主模型的地址、密钥和模型名称");
+  }
+
+  for (const key of ["AI_VISION_MODEL", "AI_AUDIO_MODEL"] as const) {
+    const model = config[key];
+
+    if (model && (!model.baseURL || !model.apiKey || !model.model)) {
+      throw new Error(`请完整填写 ${key} 的地址、密钥和模型名称`);
+    }
+  }
+
+  if (
+    config.DECISION_PROVIDER !== "llm" &&
+    (!config.DECISION_URL || !config.DECISION_API_KEY || !config.DECISION_MODEL)
+  ) {
+    throw new Error("请完整填写决策提供商的地址、密钥和模型名称");
+  }
+}
+
+export function readConfig(env: NodeJS.ProcessEnv = process.env) {
+  const input: Record<string, unknown> = {};
+
+  for (const [key, field] of Object.entries(configSchema.properties)) {
+    if (
+      [
+        "AI_AUDIO_MODEL",
+        "AI_MODEL",
+        "AI_VISION_MODEL",
+        "GROUP_ADMINS",
+      ].includes(key)
+    ) {
+      continue;
+    }
+
+    const value = env[key];
+
+    input[key] =
+      value !== undefined && (Type.IsNumber(field) || Type.IsInteger(field))
+        ? Number(value)
+        : value !== undefined && Type.IsBoolean(field)
+          ? value === "true"
+          : value;
+  }
+
+  for (const key of ["GROUP_IDS", "ADMIN_IDS"]) {
+    input[key] = env[key]
+      ?.split(",")
+      .map((id) => id.trim())
+      .filter(Boolean);
+  }
+
+  input.AI_MODEL = env.AI_MODEL ? readModel(env.AI_MODEL, "AI_MODEL") : {};
+  input.AI_VISION_MODEL = readOptionalModel(
+    env.AI_VISION_MODEL,
+    "AI_VISION_MODEL",
+  );
+  input.AI_AUDIO_MODEL = readOptionalModel(
+    env.AI_AUDIO_MODEL,
+    "AI_AUDIO_MODEL",
+  );
+
+  return parseConfig(input);
+}

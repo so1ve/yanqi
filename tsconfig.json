@@ -11,5 +11,5 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["src/**/*.ts"]
+  "include": ["apps/api/src/**/*.ts", "packages/bot/src/**/*.ts"]
 }
