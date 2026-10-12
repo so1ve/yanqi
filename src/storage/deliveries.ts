@@ -82,6 +82,18 @@ export class DeliveryQueue {
     );
   }
 
+  public forNote(noteId: number) {
+    return this.#db.get(
+      "deliveries",
+      { noteId },
+      {
+        fields: ["id", "kind", "state", "createdAt"],
+        sort: { id: "desc" },
+        limit: 5,
+      },
+    );
+  }
+
   public async next(kind: Delivery["kind"]): Promise<Delivery | null> {
     return this.#db.transact(async (db) => {
       const [delivery] = await db.get(

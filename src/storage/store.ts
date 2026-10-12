@@ -798,9 +798,14 @@ export class Store {
   public async status(groupId: string): Promise<string> {
     const messages = await this.#db.eval("messages", (row) => $.count(row.id), {
       groupId,
+      isBot: false,
     });
     const notes = await this.#db.eval("notes", (row) => $.count(row.id), {
       groupId,
+    });
+    const documents = await this.#db.eval("topics", (row) => $.count(row.id), {
+      groupId,
+      revision: { $gt: 0 },
     });
     const failed = await this.#db.eval("jobs", (row) => $.count(row.id), {
       "kind": { $ne: "intent" },
@@ -828,6 +833,6 @@ export class Store {
       },
     );
 
-    return `本群已保存 ${messages} 条消息（含机器人回复）、${notes} 版纪要。自动整理${(await this.aiEnabled(groupId)) ? "开启" : "关闭"}。\n处理中或等待中的任务 ${pending}，待发送 ${pendingDeliveries}，可重试的后台任务 ${failed}，发送失败 ${failedDeliveries}。`;
+    return `本群已保存 ${messages} 条成员原文、${documents} 份纪要（共 ${notes} 个版本）。自动整理${(await this.aiEnabled(groupId)) ? "开启" : "关闭"}。\n处理中或等待中的任务 ${pending}，待发送 ${pendingDeliveries}，可重试的后台任务 ${failed}，发送失败 ${failedDeliveries}。`;
   }
 }

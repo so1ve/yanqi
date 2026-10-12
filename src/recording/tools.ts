@@ -343,6 +343,7 @@ export function recordingTools(
       async ({ topicId }) => {
         const topic = await getTopic(topicId);
         const sources = await store.topicMessages(topic.id);
+        const note = await store.latestNote(topic.id);
         const samples =
           sources.length > 1 ? [sources[0]!, sources.at(-1)!] : sources;
 
@@ -352,8 +353,20 @@ export function recordingTools(
           description: topic.description,
           focus: topic.focus,
           state: topic.state,
-          revision: topic.revision,
-          sourceCount: sources.length,
+          currentSourceCount: sources.length,
+          savedVersion: note
+            ? {
+                revision: note.revision,
+                path: note.path,
+                scannedSourceCount:
+                  note.sections.length > 0
+                    ? new Set(
+                        note.sections.flatMap((section) => section.messageIds),
+                      ).size
+                    : null,
+                deliveries: await store.deliveries.forNote(note.id),
+              }
+            : null,
           needsUpdate: topic.generation !== topic.noteGeneration,
           tasks: await store.jobs.forTopic(topic.id),
           samples: samples.map((source) => ({
