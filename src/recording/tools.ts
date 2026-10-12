@@ -158,10 +158,32 @@ export function recordingTools(
     ),
     tool(
       "update_record",
-      "按已有记录的原文和整理要求更新纪要，不创建新文档。最新版本已保存时直接复用；另建文档使用 record。",
-      object({ topicId, directive }),
+      "更新已有文档。可用 scope 替换为全部历史、多个话题或任意支持的范围，用 focus 更改选材要求；省略时沿用原值。最新版本已保存且范围、要求未变时直接复用；另建文档使用 record。",
+      object({
+        topicId,
+        scope: Type.Optional(sourceScope),
+        focus: Type.Optional(Type.String()),
+        directive,
+      }),
       async (args) => {
         let topic = await getTopic(args.topicId);
+
+        if (args.scope !== undefined || args.focus !== undefined) {
+          const sources = args.scope
+            ? await selectSources(store, message, args.scope)
+            : undefined;
+
+          if (sources?.length === 0) {
+            return "这个范围内没有本地保存的群成员消息，原文档未改动。";
+          }
+
+          topic = await store.reviseRecording(topic.id, {
+            ...(sources
+              ? { messageIds: sources.map((source) => source.id) }
+              : {}),
+            ...(args.focus !== undefined ? { focus: args.focus } : {}),
+          });
+        }
 
         if (args.directive !== undefined) {
           await store.setDirective(topic.id, args.directive, message.id);

@@ -521,6 +521,39 @@ export class Store {
     });
   }
 
+  public reviseRecording(
+    topicId: string,
+    changes: { messageIds?: number[]; focus?: string },
+  ): Promise<Topic> {
+    return this.#db.transact(async (db) => {
+      const [topic] = await db.get("topics", { id: topicId });
+
+      assert.ok(topic);
+      if (changes.messageIds !== undefined) {
+        await db.remove("topic_messages", { topicId });
+        await db.set("topics", { id: topicId }, { lastSourceId: 0 });
+        await this.#link(db, topicId, changes.messageIds);
+      }
+
+      if (changes.focus !== undefined && changes.focus !== topic.focus) {
+        const [current] = await db.get("topics", { id: topicId });
+        const generation = current!.generation + 1;
+
+        await db.set(
+          "topics",
+          { id: topicId },
+          { focus: changes.focus, generation },
+        );
+        // 选材要求改变后，旧段落不能继续复用。
+        await db.set("topic_messages", { topicId }, { generation });
+      }
+
+      const [updated] = await db.get("topics", { id: topicId });
+
+      return updated!;
+    });
+  }
+
   public async setDirective(
     topicId: string,
     directive: Topic["directive"],
