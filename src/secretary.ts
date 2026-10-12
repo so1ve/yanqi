@@ -254,10 +254,7 @@ export class Secretary {
         }
 
         case "summarize": {
-          await this.#notes.generate(
-            job.payload.topicId,
-            job.payload.requested,
-          );
+          await this.#notes.generate(job);
 
           break;
         }

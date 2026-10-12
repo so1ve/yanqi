@@ -355,6 +355,7 @@ export function recordingTools(
           revision: topic.revision,
           sourceCount: sources.length,
           needsUpdate: topic.generation !== topic.noteGeneration,
+          tasks: await store.jobs.forTopic(topic.id),
           samples: samples.map((source) => ({
             id: `m${source.id}`,
             time: new Date(source.sentAt).toISOString(),

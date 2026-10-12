@@ -122,6 +122,22 @@ export class JobQueue {
     );
   }
 
+  public async reportProgress(id: number, progress: string): Promise<void> {
+    await this.#db.transact((db) => db.set("jobs", { id }, { progress }));
+  }
+
+  public forTopic(topicId: string) {
+    return this.#db.get(
+      "jobs",
+      { "kind": "summarize", "payload.topicId": topicId },
+      {
+        fields: ["id", "state", "progress", "lastError", "runAfter"],
+        sort: { id: "desc" },
+        limit: 3,
+      },
+    );
+  }
+
   public async retry(
     job: Job,
     error: string,

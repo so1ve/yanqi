@@ -8,7 +8,7 @@ import type { Ai } from "../agent/models.ts";
 import { AiSizeError } from "../agent/usage.ts";
 import type { Config } from "../config.ts";
 import type { Store } from "../storage/store.ts";
-import type { ChatMessage, Message, Note, Topic } from "../types.ts";
+import type { ChatMessage, Job, Message, Note, Topic } from "../types.ts";
 import { contextWithin, messageChunks } from "./messages.ts";
 import { transcript } from "./transcript.ts";
 
@@ -94,7 +94,11 @@ export class Notes {
     topic: Topic,
     sources: Message[],
     previous: Note | null,
-  ): AsyncGenerator<Note["sections"]> {
+  ): AsyncGenerator<{
+    sections: Note["sections"];
+    completed: number;
+    total: number;
+  }> {
     const sourceIds = new Set(sources.map((message) => message.id));
     const changed = await this.#store.changedTopicMessages(
       topic.id,
@@ -131,12 +135,12 @@ export class Notes {
       );
     };
 
-    yield sections;
-
     const recorded = new Set(sections.flatMap((section) => section.messageIds));
     const added = sources.filter((message) => !recorded.has(message.id));
     const additions: Note["sections"] = [];
     const chunks = await messageChunks(this.#store, added, budget);
+
+    yield { sections, completed: 0, total: chunks.length };
 
     // 每段只依赖原文，可以同时整理；按原文顺序写入，最多同时调用两次 AI。
     for (let index = 0; index < chunks.length; index += 2) {
@@ -169,9 +173,13 @@ export class Notes {
         additions.push(result.value);
       }
 
-      yield [...sections, ...additions].sort(
-        (a, b) => a.messageIds[0]! - b.messageIds[0]!,
-      );
+      yield {
+        sections: [...sections, ...additions].sort(
+          (a, b) => a.messageIds[0]! - b.messageIds[0]!,
+        ),
+        completed: Math.min(index + 2, chunks.length),
+        total: chunks.length,
+      };
     }
   }
 
@@ -206,7 +214,8 @@ export class Notes {
     return chapters.join("\n\n");
   }
 
-  public async generate(topicId: string, requested: boolean): Promise<void> {
+  public async generate(job: Job<"summarize">): Promise<void> {
+    const { topicId, requested } = job.payload;
     let topic = await this.#store.topic(topicId);
     const generation = topic.generation;
 
@@ -251,7 +260,12 @@ export class Notes {
       let sections: Note["sections"] = [];
       let content = "";
 
-      for await (sections of this.#summarizeSections(topic, sources, note)) {
+      for await (const progress of this.#summarizeSections(
+        topic,
+        sources,
+        note,
+      )) {
+        sections = progress.sections;
         content = sections
           .map((section) => section.content)
           .filter(Boolean)
@@ -259,6 +273,10 @@ export class Notes {
         await writeMarkdown(
           path,
           `${header}\n\n> 草稿：纪要尚未完成，以下是已整理的部分。\n\n${content}\n\n${footer}`,
+        );
+        await this.#store.jobs.reportProgress(
+          job.id,
+          `已提取 ${progress.completed}/${progress.total} 批；草稿：${path}`,
         );
         this.#logger.info(
           "纪要草稿已更新：topic=%s sections=%s file=%s",
@@ -268,6 +286,10 @@ export class Notes {
         );
       }
 
+      await this.#store.jobs.reportProgress(
+        job.id,
+        `正在合并相关观点；草稿：${path}`,
+      );
       content = await this.#compose(sections);
       const markdown = `${header}\n\n${content || "在这些已保存的讨论中，没有找到与整理要求相关的内容。"}\n\n${footer}`;
 
@@ -280,6 +302,10 @@ export class Notes {
         sections,
         path,
         Date.now(),
+      );
+      await this.#store.jobs.reportProgress(
+        job.id,
+        `第 ${note.revision} 版已保存：${path}`,
       );
       this.#logger.info(
         "纪要 #%s 已保存：group=%s topic=%s revision=%s sources=%s file=%s",

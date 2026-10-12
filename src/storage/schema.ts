@@ -25,6 +25,7 @@ interface JobRow {
   state: "pending" | "running" | "done" | "failed";
   runAfter: number;
   lastError: string | null;
+  progress: string | null;
 }
 
 interface MemoryRow {
@@ -203,6 +204,7 @@ export function defineModels(model: Database): void {
       attempts: { type: "integer", initial: 0 },
       runAfter: { type: "integer" },
       lastError: { type: "text", nullable: true },
+      progress: { type: "text", nullable: true },
     },
     { autoInc: true, unique: ["key"], indexes: [["state", "runAfter"]] },
   );
