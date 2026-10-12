@@ -29,13 +29,12 @@ export const detectionSchema = Type.Object(
 );
 
 export const publicationSchema = Type.Object(
-  { action: Type.Enum(["send", "notify", "silent"], { type: "string" }) },
+  {
+    action: Type.Enum(["send", "notify", "silent"], { type: "string" }),
+    text: Type.String({ description: "notify 时填写保存通知，否则留空" }),
+  },
   { additionalProperties: false },
 );
 
 export type Detection = Static<typeof detectionSchema>;
-
-export const voiceSchema = Type.Object(
-  { text: Type.String({ minLength: 1, pattern: "\\S" }) },
-  { additionalProperties: false },
-);
+export type Publication = Static<typeof publicationSchema>;

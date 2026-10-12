@@ -22,9 +22,6 @@ const schema = Type.Object({
   LOG_DETAIL_CHARS: positive(4000),
   BOT_PERSONA_FILE: Type.String({ default: "./PERSONA.md" }),
   AI_MODEL: Type.String({ minLength: 1 }),
-  AI_DETECT_MODEL: optionalModel,
-  AI_INTENT_MODEL: optionalModel,
-  AI_REPLY_MODEL: optionalModel,
   DECISION_PROVIDER: Type.Enum(["llm", "openai", "vercel", "jev", "clef"], {
     default: "llm",
   }),
@@ -142,15 +139,6 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env) {
     DECISION_MODEL: config.DECISION_MODEL.trim(),
     AUTO_REPLY: config.AUTO_REPLY === "true",
     AI_MODEL: readModel(config.AI_MODEL, "AI_MODEL"),
-    AI_DETECT_MODEL: readOptionalModel(
-      config.AI_DETECT_MODEL,
-      "AI_DETECT_MODEL",
-    ),
-    AI_INTENT_MODEL: readOptionalModel(
-      config.AI_INTENT_MODEL,
-      "AI_INTENT_MODEL",
-    ),
-    AI_REPLY_MODEL: readOptionalModel(config.AI_REPLY_MODEL, "AI_REPLY_MODEL"),
     AI_VISION_MODEL: readOptionalModel(
       config.AI_VISION_MODEL,
       "AI_VISION_MODEL",

@@ -1,23 +1,19 @@
 import { Type } from "typebox";
 
-import type { Config } from "../config.ts";
 import type { ChatMessage, Topic } from "../types.ts";
 import { beijingTime } from "../utils/time.ts";
-import type { Decisions } from "./decisions/index.ts";
 import { prompts } from "./prompts/recording.ts";
 import type { AgentRuntime } from "./runtime.ts";
-import type { Detection } from "./schemas.ts";
-import { detectionSchema } from "./schemas.ts";
+import type { Detection, Publication } from "./schemas.ts";
+import { detectionSchema, publicationSchema } from "./schemas.ts";
 
 export class RecordingAI {
-  #config: Config;
   #runtime: AgentRuntime;
-  #decisions: Decisions;
+  #persona: string;
 
-  constructor(config: Config, runtime: AgentRuntime, decisions: Decisions) {
-    this.#config = config;
+  constructor(runtime: AgentRuntime, persona: string) {
     this.#runtime = runtime;
-    this.#decisions = decisions;
+    this.#persona = persona;
   }
 
   public detect(
@@ -25,13 +21,11 @@ export class RecordingAI {
     context: ChatMessage[],
     topics: Pick<Topic, "id" | "title" | "description">[],
   ): Promise<Detection> {
-    return this.#runtime.json(
-      "detect",
-      detectionSchema,
-      prompts.detect,
-      { messages, context, topics },
-      this.#config.AI_DETECT_MODEL ?? this.#config.AI_MODEL,
-    );
+    return this.#runtime.json("detect", detectionSchema, prompts.detect, {
+      messages,
+      context,
+      topics,
+    });
   }
 
   public async summarize(
@@ -80,7 +74,7 @@ export class RecordingAI {
     context: ChatMessage[],
     request: ChatMessage[],
     recent: ChatMessage[],
-  ): Promise<"send" | "notify" | "silent"> {
+  ): Promise<Publication> {
     const input = {
       topic: {
         id: topic.id,
@@ -100,6 +94,11 @@ export class RecordingAI {
       now: beijingTime(Date.now()),
     };
 
-    return this.#decisions.choosePublication(input);
+    return this.#runtime.json(
+      "publication",
+      publicationSchema,
+      `${prompts.publication}\n${this.#persona}`,
+      input,
+    );
   }
 }

@@ -63,10 +63,13 @@ export async function handleRequest(
         userId: config.BOT_QQ,
         names: ["言栖", "小栖", "栖", "bot"],
         models: {
-          conversation: (config.AI_INTENT_MODEL ?? config.AI_MODEL).model,
-          notification: (config.AI_REPLY_MODEL ?? config.AI_MODEL).model,
-          recording: config.AI_MODEL.model,
+          text: config.AI_MODEL.model,
+          decision:
+            config.DECISION_PROVIDER === "llm"
+              ? config.AI_MODEL.model
+              : config.DECISION_MODEL,
           vision: config.AI_VISION_MODEL?.model ?? null,
+          audio: config.AI_AUDIO_MODEL?.model ?? null,
         },
       },
       quoted,

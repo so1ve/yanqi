@@ -8,12 +8,11 @@ import type { ChatMessage } from "../../types.ts";
 import { failureMessage } from "../../utils/errors.ts";
 import { logContext, logDetail } from "../../utils/logging.ts";
 import { prompts as conversationPrompts } from "../prompts/conversation.ts";
-import { prompts } from "../prompts/recording.ts";
 import type { AgentRuntime } from "../runtime.ts";
 import { BudgetExceeded, reserveCall } from "../usage.ts";
 import { createClefDecision } from "./clef.ts";
 import { createJevDecision } from "./jev.ts";
-import { choosePublication, recordingRequests } from "./llm.ts";
+import { recordingRequests } from "./llm.ts";
 import { createOpenAIDecision } from "./openai.ts";
 import type { DecisionRequest, EvaluateDecision } from "./types.ts";
 
@@ -48,26 +47,6 @@ export class Decisions {
     this.#store = store;
     this.#runtime = runtime;
     this.#evaluate = createIndependentDecision(config);
-  }
-
-  public async choosePublication(input: Record<string, unknown>) {
-    const choices = await this.#choices("publish", input, {
-      action: {
-        instructions: prompts.publishChoice,
-        criteria: {
-          send: "用户需要这份纪要，或发送有助于当前话题的讨论",
-          notify:
-            "用户正在等保存结果，或简短告知新记录有助于当前讨论；不发全文",
-          silent: "补整理旧聊天、后台更新或当前已无须通知，只保存在本地",
-        },
-      },
-    });
-
-    return choosePublication(
-      this.#runtime,
-      input,
-      choices.get("action") ?? null,
-    );
   }
 
   public async recordingRequests(
@@ -109,12 +88,7 @@ export class Decisions {
       const undecided = candidates.filter((id) => !choices.has(id));
       const fallback =
         undecided.length > 0
-          ? await recordingRequests(
-              this.#config,
-              this.#runtime,
-              input,
-              undecided,
-            )
+          ? await recordingRequests(this.#runtime, input, undecided)
           : [];
 
       selected.push(

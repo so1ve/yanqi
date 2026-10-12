@@ -20,11 +20,9 @@ export async function publishNote(
   let topic = await store.topics.get(note.topicId);
   let action: "send" | "notify" | "silent" =
     topic.directive === "send" ? "send" : "notify";
+  let notification = `「${topic.title}」第 ${note.revision} 版已保存。`;
 
-  if (
-    topic.directive === "auto" ||
-    (topic.directive === "hold" && !requested)
-  ) {
+  if (topic.directive !== "send") {
     const request =
       topic.directiveMessageId === null
         ? []
@@ -45,7 +43,7 @@ export async function publishNote(
       Math.floor(config.AI_INPUT_CHARS / 3),
     );
 
-    action = await ai.recording.choosePublication(
+    const publication = await ai.recording.choosePublication(
       topic,
       {
         revision: note.revision,
@@ -60,11 +58,21 @@ export async function publishNote(
       ),
       recent,
     );
+
+    action = publication.action;
+    if (publication.action === "notify") {
+      notification = publication.text.trim() || notification;
+    }
+
     topic = await store.topics.get(note.topicId);
     if (topic.directive === "send") {
       action = "send";
-    } else if (topic.directive === "hold" && action === "send") {
-      action = requested ? "notify" : "silent";
+    } else if (topic.directive === "hold") {
+      if (requested) {
+        action = "notify";
+      } else if (action === "send") {
+        action = "silent";
+      }
     }
   }
 
@@ -96,10 +104,7 @@ export async function publishNote(
     await store.deliveries.enqueue(`ack:${note.id}`, {
       kind: "saved",
       note,
-      content: await ai.dialog.voice(
-        topic.groupId,
-        `「${topic.title}」第 ${note.revision} 版已保存。`,
-      ),
+      content: notification,
     });
   }
 }

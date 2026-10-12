@@ -32,9 +32,6 @@ export function logDetail(value: unknown, config: Config): string {
 
   for (const secret of [
     config.AI_MODEL.apiKey,
-    config.AI_DETECT_MODEL?.apiKey,
-    config.AI_INTENT_MODEL?.apiKey,
-    config.AI_REPLY_MODEL?.apiKey,
     config.AI_VISION_MODEL?.apiKey,
     config.AI_AUDIO_MODEL?.apiKey,
     config.DECISION_API_KEY,
