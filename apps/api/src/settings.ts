@@ -1,5 +1,5 @@
 import type { Config, Yanqi } from "@yanqi/bot";
-import { configSchema, parseConfig } from "@yanqi/bot";
+import { assertConfigured, configSchema, parseConfig } from "@yanqi/bot";
 import type { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import { Type } from "typebox";
@@ -57,7 +57,14 @@ export function registerSettings(
         }),
       }),
     );
-    const config = parseConfig(input.config);
+    let config: Config;
+
+    try {
+      config = parseConfig(input.config);
+    } catch (error) {
+      throw new HTTPException(400, { message: (error as Error).message });
+    }
+
     const current = bot.config;
 
     config.DATA_DIR = current.DATA_DIR;
@@ -95,6 +102,14 @@ export function registerSettings(
       throw new HTTPException(400, {
         message: "NapCat 管理地址需要使用 http 或 https",
       });
+    }
+
+    if (bot.running || input.autostart) {
+      try {
+        assertConfigured(config);
+      } catch (error) {
+        throw new HTTPException(400, { message: (error as Error).message });
+      }
     }
 
     await bot.configure(config);

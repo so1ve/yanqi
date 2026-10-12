@@ -8,6 +8,9 @@ export default defineNuxtConfig({
   devtools: { enabled: false },
   css: ["~/assets/main.css"],
   vite: {
+    optimizeDeps: {
+      include: ["naive-ui", "@vicons/tabler", "dompurify", "marked"],
+    },
     plugins: [
       Components({ dirs: [], dts: false, resolvers: [NaiveUiResolver()] }),
     ],

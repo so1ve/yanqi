@@ -1,5 +1,5 @@
 import { serve } from "@hono/node-server";
-import { Yanqi, readConfig } from "@yanqi/bot";
+import { Yanqi, assertConfigured, readConfig } from "@yanqi/bot";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { HTTPException } from "hono/http-exception";
@@ -60,6 +60,12 @@ async function main(): Promise<void> {
     }),
   );
   app.post("/api/bot/start", async (ctx) => {
+    try {
+      assertConfigured(bot.config);
+    } catch (error) {
+      throw new HTTPException(400, { message: (error as Error).message });
+    }
+
     await bot.start();
 
     return ctx.json({ running: true });

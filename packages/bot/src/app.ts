@@ -96,14 +96,23 @@ export class Yanqi {
       }
 
       await this.#stop();
-      this.#connection?.dispose();
-      this.#connection = null;
-      await this.#app.lifecycle.flush();
+      const reconnect =
+        !this.#connection ||
+        config.BOT_QQ !== this.#config.BOT_QQ ||
+        config.ONEBOT_URL !== this.#config.ONEBOT_URL ||
+        config.ONEBOT_TOKEN !== this.#config.ONEBOT_TOKEN;
+
+      if (reconnect) {
+        this.#connection?.dispose();
+        this.#connection = null;
+        await this.#app.lifecycle.flush();
+      }
+
       this.#config = structuredClone(config);
       this.#store = this.#createStore();
       this.#logger.level =
         config.LOG_LEVEL === "debug" ? Logger.DEBUG : Logger.INFO;
-      if (config.BOT_QQ && config.ONEBOT_TOKEN) {
+      if (reconnect && config.BOT_QQ && config.ONEBOT_TOKEN) {
         this.#connection = this.#app.plugin(OneBotBot, {
           ...Adapter.WsClientConfig(),
           protocol: "ws",
@@ -137,6 +146,11 @@ export class Yanqi {
   public close(): Promise<void> {
     return this.#change(async () => {
       await this.#stop();
+      // OneBot 关闭时仍需要 Koishi 的共享服务。
+      await Promise.all(this.#app.bots.map((bot) => bot.stop()));
+      this.#connection?.dispose();
+      this.#connection = null;
+      await this.#app.lifecycle.flush();
       await this.#app.stop();
     });
   }

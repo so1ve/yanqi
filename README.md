@@ -2,7 +2,7 @@
 
 言栖是用普通 QQ 账号工作的群聊书记，昵称“小栖”。它把收到的群消息保存到本地，用 AI 整理技术讨论、排错、方案比较和头脑风暴。
 
-只有 `ADMIN_IDS` 中的成员、当前群的群主和群管理员可以与小栖交互。权限在消息入口处理，@、引用回复、追问后的回答和未 @ 的记录请求都遵守这条规则。其他成员的消息和附件照常保存、参与整理，但不会触发对话或 🐳 回应。进入 Agent 的请求统一视为已授权，工具不再区分管理员和普通成员。
+全局管理员、本群授权名单、当前群的群主和群管理员可以与小栖交互。权限在消息入口处理，@、引用回复、追问后的回答和未 @ 的记录请求都遵守这条规则。其他成员的消息和附件照常保存、参与整理，但不会触发对话或 🐳 回应。进入 Agent 的请求统一视为已授权，工具不再区分管理员和普通成员。
 
 平时，小栖按批次判断哪些讨论或独立观点值得记录。也可以直接说“小栖，帮我记一下”，不必 @；入口模型只识别记录请求，不主动接闲聊。识别后交给主 Agent，由它结合引用和上下文确定记录范围，再安排整理。@ 它时，还可以查询或发送已有纪要。
 
@@ -32,7 +32,7 @@ AI 的结构化回复先按标准 JSON 解析，失败时用 [jsonrepair](https:
 
 使用 DeepSeek 官方接口时，分段整理、按主题选材和合并纪要通过 SDK 启用 `high` 思考；普通对话、话题识别、保存通知和图片识别关闭思考。思考任务单独使用 `AI_THINKING_MAX_OUTPUT_TOKENS`（默认 32768）和 `AI_THINKING_TIMEOUT_MS`（默认 300000，即 5 分钟）；其他任务沿用 `AI_MAX_OUTPUT_TOKENS` 和 `AI_TIMEOUT_MS`。其他提供商继续使用服务自身的思考设置。
 
-输出 token 上限包含思考内容、正文和工具参数，不是 QQ 回复字数限制。请求日志显示思考档位、输出上限和超时，返回日志分别显示正文字符数、思考字符数和工具调用数，便于定位截断原因。纪要超出输出上限时，继续按现有逻辑拆小批次处理。
+输出 token 上限包含思考内容、正文和工具参数，不是 QQ 回复字数限制。请求日志显示思考档位、输出上限和超时，返回日志分别显示正文字符数、思考字符数、工具名称及参数字符数，便于定位截断原因。纪要超出输出上限时，继续按现有逻辑拆小批次处理。
 
 AI 只有调用 `reply` 才能向群里说话；会话中的普通文本和分析不会转发。直接与它交流时可以回应，但不主动延长闲聊。选范围、调用工具、决定是否发送等内部过程不应播报。
 
@@ -84,15 +84,54 @@ AI 只有调用 `reply` 才能向群里说话；会话中的普通文本和分�
 
 决策提供者分别放在 `agent/decisions/llm.ts`、`openai.ts`、`jev.ts` 和 `clef.ts`。OpenAI 与 Vercel 共用 SDK 协议实现，Clef 复用 JEV 请求格式并解析 Workers AI 的响应封装。独立服务负责未 @ 消息的入口判断，未启用时直接使用 `AI_MODEL`。
 
+## 管理台
+
+管理台采用 Nuxt + Naive UI，独立 API 使用 Hono。后端通过 `@yanqi/bot` 调用机器人，不启动子进程，也不解析终端输出。
+
+- **启停**：顶部按钮控制消息处理与 AI 任务。停止后 NapCat 仍保持连接，可查群成员、查看和编辑记录。重新启动会继续未完成的后台任务，旧对话不会重放。
+- **群与成员**：从 NapCat 同步群列表和群成员，按群启用消息记录、自动归档，勾选额外授权成员。群主、QQ 群管理员和全局名单自动获准。
+- **纪要**：搜索、阅读 Markdown、查看完整原文、切换历史版本、编辑并保存新版、导出、重新整理、发送到群。删除纪要前需停止机器人；删除不影响原始消息。
+- **原始消息**：按群搜索聊天，查看撤回状态、图片和语音的识别结果，下载附件、重试解析。
+- **后台任务**：查看处理对象、进度、错误和发送状态，重试失败任务、取消排队任务。停止机器人可中断当前 AI 请求。
+- **记忆与用量**：查看和编辑每个群的成员记忆；按日期、模型和用途查看 token。提供商未上报的用量单独标记。
+- **运行日志**：查看最近 1000 条日志，按等级和内容筛选，暂停刷新、导出。完整历史仍由容器日志保留。
+- **设置**：编辑连接、主模型、视觉、语音、决策提供商、人设、额度与超时。设置后端启动时是否自动运行机器人。
+
+管理台发起的整理默认只保存，点击“发送到群”才会发送。群聊内发起的记录仍遵循原有发布决定。
+
+配置与登录信息保存在 `DATA_DIR/management.sqlite`；群记录仍使用 `DATA_DIR/yanqi.sqlite`。首次启动导入已有 `.env`，之后由管理台保存的配置生效。修改模型或群权限不再需要改 `.env`。API 不返回已保存的密钥，输入框留空保留原值；更换模型服务地址时需要填写对应密钥。
+
+以下参数仍由部署环境管理：`DATA_DIR`、`API_HOST`、`API_PORT`、`WEB_ORIGIN`、Compose 端口、时区、日志颜色，以及 NapCat 容器的 QQ 登录参数。管理台的 OneBot Token 用于连接已有 NapCat，不会替你修改 NapCat 服务端的 Token。
+
 ## 用 Docker 启动
 
-安装 Docker 和 Docker Compose。已有 `.env` 就直接使用；没有时，先复制配置示例：
+安装 Docker 和 Docker Compose。已有 `.env` 可直接使用；没有时复制示例：
 
 ```sh
 cp .env.example .env
 ```
 
-填写机器人 QQ 号 `BOT_QQ`、记录群 `GROUP_IDS`、`ONEBOT_TOKEN`，以及 `AI_MODEL`。`ADMIN_IDS` 用逗号分隔可额外交互的 QQ 号；留空时只允许各群群主和群管理员交互。每个模型配置都使用 `BASE_URL,API_KEY,MODEL`，逗号之间不加空格，可以分别使用不同服务：
+填写 `BOT_QQ` 和较长的随机 `ONEBOT_TOKEN`。这两个参数也用于配置 NapCat。模型和记录群可以稍后在页面填写。然后启动三个服务：
+
+```sh
+docker compose up -d --build
+docker compose logs yanqi
+```
+
+打开 [言栖管理台](http://127.0.0.1:3210)。首次登录填写后端日志中的安装码，并设置管理密码。然后：
+
+1. 在 [NapCat 管理页](http://127.0.0.1:6099/webui) 完成 QQ 登录；登录 Token 从 `docker compose logs napcat` 获取。
+2. 在言栖“设置”中检查连接，填写主模型；视觉、语音可分别使用其他提供商。
+3. 在“群与成员”同步群列表，启用需要记录的群，选择可交互的成员。
+4. 点击“启动机器人”。需要重启服务后自动运行时，在设置中打开自动启动。
+
+前端通过同源 `/api` 访问后端，API 和 NapCat WebSocket 只在容器网络内使用。默认只向本机开放管理台 `3210` 和 NapCat `6099`。需要更改管理台端口时设置 `WEB_PORT`；部署到反向代理后时，填写 `WEB_ORIGIN=https://你的域名`，用于来源校验及 HTTPS 会话 Cookie。
+
+Compose 将言栖的初始 OneBot 地址设为 `ws://napcat:3001`。两边初始共用 `ONEBOT_TOKEN`，NapCat 消息格式设为 `array`。管理台保存的连接设置会在后续启动时继续使用。切换 QQ 账号时，需要同时在 NapCat 登录该账号，并更新言栖中的 QQ 号。
+
+可在 `.env` 中填写 `NAPCAT_QUICK_PASSWORD_MD5`，使用 QQ 密码的 32 位 MD5 尝试自动登录。NapCat 优先使用保存的登录状态；需要验证码或新设备验证时仍在 NapCat 页面完成。WebUI 登录 Token 与 OneBot Token 是两种凭据。参见 [NapCat 登录说明](https://github.com/NapNeko/NapCat-Docker#登录)。
+
+如果希望从 `.env` 导入模型，每项使用 `BASE_URL,API_KEY,MODEL`，逗号之间不加空格：
 
 ```dotenv
 AI_MODEL=https://text.example/v1,text-api-key,text-model
@@ -100,55 +139,54 @@ AI_VISION_MODEL=https://vision.example/v1,vision-api-key,vision-model
 AI_AUDIO_MODEL=https://audio.example/v1,audio-api-key,audio-model
 ```
 
-文字任务统一使用 `AI_MODEL`；`AI_VISION_MODEL` 和 `AI_AUDIO_MODEL` 留空时不解析对应附件。图片服务需要支持图片输入，音频服务需要支持 OpenAI 兼容的 `/audio/transcriptions`。独立决策服务使用 `DECISION_*` 配置。
+视觉服务需要支持图片输入，语音服务需要支持 OpenAI 兼容的 `/audio/transcriptions`。留空时仍保存附件原件。
 
-使用 [Cloudflare Clef](https://developers.cloudflare.com/workers-ai/models/clef/) 做入口判断时，在 `.env` 中填写：
+## 决策提供商
 
-```dotenv
-DECISION_PROVIDER=clef
-DECISION_URL=https://api.cloudflare.com/client/v4/accounts/YOUR_ACCOUNT_ID/ai/run/@cf/cloudflare/clef
-DECISION_API_KEY=
-DECISION_MODEL=clef
-```
+设置页提供主模型、Clef、OpenAI、Vercel、JEV 卡片。选择主模型时使用 `AI_MODEL`；独立服务失败不会回退到普通 LLM。
 
-在 Cloudflare 控制台进入 **Workers AI → Use REST API → Create a Workers AI API Token**。把生成的 Token 填入 `DECISION_API_KEY`，不加 `Bearer ` 前缀；把同页 **Get Account ID** 的账号 ID 替换到地址的 `YOUR_ACCOUNT_ID`。若自行创建 Token，需给该账号授予 **Workers AI – Read** 和 **Workers AI – Edit** 权限，详见 [Cloudflare REST API 配置说明](https://developers.cloudflare.com/workers-ai/get-started/rest-api/)。`DECISION_MODEL` 填 `clef`，完整模型路径只出现在 URL 中。补齐 Token 和账号 ID 后再启动。
+[Cloudflare Clef](https://developers.cloudflare.com/workers-ai/models/clef/) 配置：
 
-然后在项目目录运行：
+| 字段           | 填写内容                                                                              |
+| -------------- | ------------------------------------------------------------------------------------- |
+| 完整 POST 地址 | `https://api.cloudflare.com/client/v4/accounts/你的账户ID/ai/run/@cf/cloudflare/clef` |
+| 模型           | `clef`                                                                                |
+| API Key        | Workers AI API Token 原文，不加 `Bearer`                                              |
 
-```sh
-docker compose up -d --build
-```
+在 Cloudflare 控制台 **Workers AI → Use REST API** 创建 API Token、获取 Account ID。权限设置见 [官方 REST API 说明](https://developers.cloudflare.com/workers-ai/get-started/rest-api/)。
 
-Compose 一起启动 NapCat 和言栖。言栖读取本地 `.env`，通过 `ws://napcat:3001` 连接 NapCat；两边共用 `ONEBOT_TOKEN`，消息格式自动设为 `array`。容器配置不需要改动 `.env` 中用于本地运行的 `ONEBOT_URL`。
+OpenAI 与 Vercel 填 SDK Base URL、密钥和模型；JEV 填完整 POST 地址。各协议实现位于 `packages/bot/src/agent/decisions/`。
 
-需要密码自动登录时，在 `.env` 中填写 `NAPCAT_QUICK_PASSWORD_MD5`，值为 QQ 密码的 32 位 MD5。NapCat 会先使用已保存的登录状态，首次登录或快速登录失败时再尝试密码登录。QQ 若要求验证码或新设备验证，需要在 WebUI 中完成。参数和登录流程见 [NapCat 登录实现](https://github.com/NapNeko/NapCatQQ/blob/main/packages/napcat-shell/base.ts)。
+## 本地开发
 
-需要扫码或完成登录验证时，打开 [NapCat WebUI](http://127.0.0.1:6099/webui)，从日志中获取 WebUI 登录 token。扫码时使用 `BOT_QQ` 对应的 QQ。WebUI token 与 `ONEBOT_TOKEN` 是两个不同的凭据。登录方式见 [NapCat 官方说明](https://github.com/NapNeko/NapCat-Docker#登录)。
+使用根目录 `packageManager` 指定的 pnpm 和支持的 Node.js 版本：
 
 ```sh
-docker compose logs -f napcat
+npx get-pnpm
+pnpm install
+pnpm dev
 ```
 
-QQ 登录后，言栖会自动连接。查看言栖日志：
+Nuxt 位于 `http://127.0.0.1:3000`，API 默认位于 `http://127.0.0.1:3100`。前端开发代理默认指向 3100；改变 API 端口后，用 `API_PROXY=http://127.0.0.1:新端口/api pnpm dev` 同步代理。
+
+```sh
+pnpm lint:fix
+pnpm check
+pnpm build
+```
+
+`pnpm build` 生成 `apps/web/.output/public` 静态站点。生产前端需要将 `/api/` 代理到管理后端，并把页面路径回退到 `index.html`，仓库中提供了 Nginx 配置。
+
+`pnpm start` 只启动管理 API。需要不带管理台的独立机器人时使用 `pnpm bot`；该入口直接读取 `.env`，不使用管理数据库中的配置。不要让这两个入口同时操作同一个数据目录。
+
+## 日志
+
+管理台可以切换 `info` / `debug` 和日志详情长度。终端查看：
 
 ```sh
 docker compose --ansi always logs -f --no-log-prefix yanqi
 ```
 
-默认 `LOG_LEVEL=info` 会记录任务入队、开始、完成或重试，AI 模型与轮次、返回状态和 token 用量，工具调用，以及群消息发送结果。日志按毫秒时间、模块名、等级和正文排列，模块名按列对齐；AI 日志同时标明所属任务或发送编号，并行处理时仍能追到对应请求。整理进度、草稿路径和最终保存位置也会写入日志。
+沿用 Koishi logger，按毫秒时间、模块名和等级排列。Compose 通过 `FORCE_COLOR=2` 打开彩色日志，默认 `TZ=Asia/Shanghai`；设 `FORCE_COLOR=0` 可关闭颜色。
 
-沿用 Koishi 自带的 logger。容器没有 TTY 时，底层库默认关闭颜色，所以 Compose 显示的服务名前缀可能有颜色，应用日志却没有。Compose 配置已通过 `FORCE_COLOR=2` 开启应用颜色，并默认使用北京时间（`TZ=Asia/Shanghai`）。修改后需要重新创建言栖容器；旧日志不会补上颜色。在 `.env` 中设 `FORCE_COLOR=0` 可关闭应用颜色。上面的 `--ansi always` 控制 Compose 的 ANSI 输出，`--no-log-prefix` 则去掉重复的服务名前缀。直接在终端运行时，logger 自动判断颜色支持。
-
-需要查看 AI 输入和返回片段、工具参数与结果、异常堆栈时，在 `.env` 中设置 `LOG_LEVEL=debug`，然后更新容器：
-
-```sh
-docker compose up -d --build yanqi
-docker compose --ansi always logs -f --no-log-prefix yanqi
-```
-
-Debug 日志的输入、返回内容和工具详情另起一行，长对象会换行缩进。这些详情可能包含聊天内容，每条默认最多显示 4000 个字符，可通过 `LOG_DETAIL_CHARS` 调整，并隐藏配置中的 AI 密钥、决策服务密钥和 OneBot token。不会打印请求头、完整配置或图片的 base64 数据。开启 debug 只调整言栖的日志，不开启适配器的底层报文日志。
-
-## TODOs
-
-- [ ] 实现一个 WebUI 管理面板，这样可以把 .env 大部分配置放进去
-- [ ] WebUI 通过 NapCat API 获取群成员列表，支持从列表中添加、移除可交互成员；群主和群管理员自动拥有权限。
+`info` 记录任务、模型请求、工具调用和发送结果。`debug` 增加参数、结果片段和异常堆栈，可能包含聊天正文；`LOG_DETAIL_CHARS` 控制每段长度。AI 密钥、决策密钥和 OneBot Token 会隐藏，不记录完整请求头或图片 base64。

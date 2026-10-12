@@ -1,3 +1,5 @@
+import { stripVTControlCharacters } from "node:util";
+
 import type { Config } from "@yanqi/bot";
 import { Logger } from "koishi";
 
@@ -29,7 +31,7 @@ export class LogBuffer {
           current.AI_VISION_MODEL?.apiKey,
           current.AI_AUDIO_MODEL?.apiKey,
         ];
-        let text = entry.content;
+        let text = stripVTControlCharacters(entry.content);
 
         for (const secret of secrets) {
           if (secret) {

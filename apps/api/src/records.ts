@@ -44,6 +44,12 @@ export function registerRecords(app: Hono, bot: Yanqi): void {
     const groupId = ctx.req.param("groupId");
 
     requireItem((await db.get("groups", { id: groupId }))[0]);
+    if (!bot.config.GROUP_IDS.includes(groupId)) {
+      throw new HTTPException(409, {
+        message: "请先启用这个群，再创建整理任务",
+      });
+    }
+
     const input = await body(
       ctx,
       Type.Object({
@@ -152,6 +158,12 @@ export function registerRecords(app: Hono, bot: Yanqi): void {
   });
 
   app.post("/api/groups/:groupId/records/:topicId/summarize", async (ctx) => {
+    if (!bot.config.GROUP_IDS.includes(ctx.req.param("groupId"))) {
+      throw new HTTPException(409, {
+        message: "请先启用这个群，再创建整理任务",
+      });
+    }
+
     const topic = await db.transact(async (tx) => {
       const topic = requireItem(
         (
