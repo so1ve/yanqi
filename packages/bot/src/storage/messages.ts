@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 import type { Config } from "../config.ts";
 import type { IncomingMessage, JobPayloads, Message } from "../types.ts";
+import { beijingTime } from "../utils/time.ts";
 import { enqueueJob } from "./jobs.ts";
 import { decodeContent, encodeContent } from "./message-content.ts";
 import type { Database, MessageRow } from "./schema.ts";
@@ -21,6 +22,12 @@ export interface MessageMetadata {
   sentAt: number;
   textChars: number;
   attachmentCount: number;
+}
+
+export interface HistoryAvailability {
+  messageCount: number;
+  from: string | null;
+  through: string | null;
 }
 
 export class Messages {
@@ -317,6 +324,28 @@ export class Messages {
       .execute();
 
     return rows.reverse().map(decodeMessage);
+  }
+
+  public async availableHistory(
+    groupId: string,
+    beforeId: number,
+  ): Promise<HistoryAvailability> {
+    const range = await this.#db
+      .selectFrom("messages")
+      .where("groupId", "=", groupId)
+      .where("id", "<", beforeId)
+      .select((eb) => [
+        eb.fn.countAll<number>().as("messageCount"),
+        eb.fn.min<number | null>("sentAt").as("from"),
+        eb.fn.max<number | null>("sentAt").as("through"),
+      ])
+      .executeTakeFirstOrThrow();
+
+    return {
+      messageCount: range.messageCount,
+      from: range.from === null ? null : beijingTime(range.from),
+      through: range.through === null ? null : beijingTime(range.through),
+    };
   }
 
   public async listMetadata(

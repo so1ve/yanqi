@@ -6,6 +6,7 @@ import type { Config } from "../../config.ts";
 import type { Store } from "../../storage/store.ts";
 import type { ChatMessage } from "../../types.ts";
 import { logContext, logDetail } from "../../utils/logging.ts";
+import { speakerIdentity } from "../prompts/common.ts";
 import { prompts as conversationPrompts } from "../prompts/conversation.ts";
 import type { AgentRuntime } from "../runtime.ts";
 import { reserveCall } from "../usage.ts";
@@ -125,7 +126,10 @@ export class Decisions {
         },
       ]),
     );
-    const decisionInput = { rules: conversationPrompts.requests, ...state };
+    const decisionInput = {
+      rules: `${speakerIdentity(this.#config.BOT_QQ)}\n${conversationPrompts.requests}`,
+      ...state,
+    };
     const input = JSON.stringify(decisionInput);
     const size = input.length + JSON.stringify(questions).length;
     const label = [logContext.getStore()?.task, "observe"]

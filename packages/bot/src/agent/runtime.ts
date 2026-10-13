@@ -50,7 +50,7 @@ export class AgentRuntime {
 
     const text = await this.#run(
       purpose,
-      `${boundary}\n${instructions}`,
+      `${boundary(this.#config.BOT_QQ)}\n${instructions}`,
       { role: "user", content, timestamp: Date.now() },
       options,
       schema,
@@ -100,7 +100,7 @@ export class AgentRuntime {
   ): Promise<string> {
     return this.#run(
       purpose,
-      `${boundary}\n${instructions}`,
+      `${boundary(this.#config.BOT_QQ)}\n${instructions}`,
       { role: "user", content: JSON.stringify(input), timestamp: Date.now() },
       options,
     );
@@ -113,7 +113,7 @@ export class AgentRuntime {
   ): Promise<string> {
     return this.#run(
       "image",
-      `${boundary}\n${instructions}`,
+      `${boundary(this.#config.BOT_QQ)}\n${instructions}`,
       { role: "user", content: [image], timestamp: Date.now() },
       { model },
     );

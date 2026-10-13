@@ -90,6 +90,7 @@ export async function selectSources(
   store: Store,
   request: Message,
   scope: Static<typeof sourceScope>,
+  { includeBot = false } = {},
 ): Promise<MessageMetadata[]> {
   let sources: MessageMetadata[];
 
@@ -98,10 +99,13 @@ export async function selectSources(
 
     sources = await store.messages.listMetadata(request.groupId, request.id, {
       ids,
+      includeBot,
     });
 
     if (sources.length !== ids.length) {
-      throw new Error("只能使用当前请求及此前保存的本群成员原文");
+      throw new Error(
+        `只能使用当前请求及此前保存的本群${includeBot ? "消息" : "成员原文"}`,
+      );
     }
   } else if ("fromMessageId" in scope) {
     const fromId = Number(scope.fromMessageId.slice(1));
@@ -126,6 +130,7 @@ export async function selectSources(
 
     sources = await store.messages.listMetadata(request.groupId, throughId, {
       fromId,
+      includeBot,
     });
   } else if ("topicIds" in scope) {
     for (const id of new Set(scope.topicIds)) {
@@ -141,6 +146,7 @@ export async function selectSources(
       request.id - 1,
       {
         topicIds: scope.topicIds,
+        includeBot,
       },
     );
   } else {
@@ -175,6 +181,7 @@ export async function selectSources(
       {
         from,
         to,
+        includeBot,
       },
     );
 

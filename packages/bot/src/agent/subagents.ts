@@ -195,7 +195,15 @@ export class Subagents {
       subagentPrompts[assignment.kind],
       {
         task: assignment.task,
-        ...(assignment.kind === "history" ? { scope: assignment.scope } : {}),
+        ...(assignment.kind === "history"
+          ? {
+              scope: assignment.scope,
+              availableHistory: await store.messages.availableHistory(
+                message.groupId,
+                message.id,
+              ),
+            }
+          : {}),
         quoted: quote ? await contextWithin(store, [quote], 1500) : [],
         request: {
           id: `m${message.id}`,

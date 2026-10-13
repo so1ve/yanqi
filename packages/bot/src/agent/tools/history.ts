@@ -7,6 +7,7 @@ import {
   sourceId,
   sourceScope,
 } from "../../recording/sources.ts";
+import type { HistoryAvailability } from "../../storage/messages.ts";
 import type { ChatMessage } from "../../types.ts";
 import { beijingTime } from "../../utils/time.ts";
 import type { ToolContext } from "./context.ts";
@@ -33,6 +34,7 @@ export interface HistoryMetadata {
   textChars: number;
   sourceCount?: number;
   attachmentCount?: number;
+  availableHistory?: HistoryAvailability;
   range?: {
     fromMessageId: string;
     throughMessageId: string;
@@ -56,9 +58,9 @@ function historyReader(context: ToolContext, onMetadata: OnMetadata) {
       load: () => Promise<Page[]>,
     ): HistoryMetadata {
       const handle = `h${reads.size + 1}`;
-      let pages: Promise<Page[]> | undefined;
+      let pages: Page[] | undefined;
 
-      reads.set(handle, () => (pages ??= load()));
+      reads.set(handle, async () => (pages ??= await load()));
 
       const metadata = { handle, ...info };
 
@@ -107,12 +109,14 @@ export function chatHistoryTools(context: ToolContext, onMetadata: OnMetadata) {
     tool(
       context,
       "history",
-      "先查询本群聊天的元数据，不返回正文。context 查询 beforeId 之前最近 40 条对话，省略时从请求前开始；messages 按 scope 查询；search 字面搜索聊天。返回句柄、消息数、文本字符数、附件数和时间范围。textChars 不含附件解析内容，搜索统计只覆盖命中消息。元数据会立即转交小栖，需要正文时用 read_history 携带句柄读取。",
+      "先查询本群聊天的元数据，不返回正文。context 查询 beforeId 之前最近 40 条对话，省略时从请求前开始；messages 按 scope 查询；search 字面搜索聊天，均包含成员和言栖的发言。返回句柄、消息数、文本字符数、附件数和时间范围。availableHistory 是本群请求前全部可读历史的数量和时间边界，不代表入群时间；textChars 不含附件解析内容，搜索统计只覆盖命中消息。元数据会立即转交小栖，需要正文时用 read_history 携带句柄读取。",
       chatParameters,
       async (args) => {
         const sources =
           args.action === "messages"
-            ? await selectSources(store, message, args.scope)
+            ? await selectSources(store, message, args.scope, {
+                includeBot: true,
+              })
             : await store.messages.listMetadata(
                 message.groupId,
                 args.action === "context" && args.beforeId
@@ -120,7 +124,7 @@ export function chatHistoryTools(context: ToolContext, onMetadata: OnMetadata) {
                   : message.id - 1,
                 args.action === "context"
                   ? { includeBot: true, limit: 40 }
-                  : { query: args.query.trim() },
+                  : { query: args.query.trim(), includeBot: true },
               );
         const first = sources[0];
         const last = sources.at(-1);
@@ -135,6 +139,10 @@ export function chatHistoryTools(context: ToolContext, onMetadata: OnMetadata) {
         return history.register(
           {
             selection: args,
+            availableHistory: await store.messages.availableHistory(
+              message.groupId,
+              message.id,
+            ),
             sourceCount: sources.length,
             textChars: sources.reduce((sum, item) => sum + item.textChars, 0),
             attachmentCount: sources.reduce(

@@ -70,6 +70,10 @@ export async function handleRequest(
       quoted,
       context: context.messages,
       contextBeforeId: context.nextBeforeId,
+      availableHistory: await store.messages.availableHistory(
+        message.groupId,
+        message.id,
+      ),
       topics: (await store.topics.list(message.groupId, 15)).map(
         ({
           id,
