@@ -213,8 +213,8 @@ function download(): void {
         · {{ task.lastError || task.progress || "等待整理" }}
         <NuxtLink to="/tasks">查看任务</NuxtLink>
       </NAlert>
-      <NTabs v-model:value="tab" animated type="line">
-        <NTabPane name="note" tab="纪要正文">
+      <NTabs v-model:value="tab" type="line">
+        <NTabPane display-directive="show:lazy" name="note" tab="纪要正文">
           <NoteEditor
             v-if="editing && data.note"
             :note="data.note"
@@ -237,11 +237,13 @@ function download(): void {
             </EmptyState>
           </AppPanel>
         </NTabPane>
-        <NTabPane :disabled="!data.note" name="original" tab="完整原文">
-          <TranscriptView
-            v-if="tab === 'original' && data.note"
-            :note="data.note"
-          />
+        <NTabPane
+          :disabled="!data.note"
+          display-directive="show:lazy"
+          name="original"
+          tab="完整原文"
+        >
+          <TranscriptView v-if="data.note" :note="data.note" />
         </NTabPane>
       </NTabs>
     </template>
