@@ -8,7 +8,7 @@ export async function taskStatus(store: Store, groupId: string, id: number) {
     "assetId" in payload ? await store.assets.get(payload.assetId) : null;
   const topic =
     "topicId" in payload ? await store.topics.get(payload.topicId) : null;
-  const note = topic ? await store.notes.latest(topic.id) : null;
+  const note = topic ? await store.notes.find(topic.id) : null;
 
   return {
     id: job.id,

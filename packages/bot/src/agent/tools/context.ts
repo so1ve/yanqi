@@ -29,6 +29,12 @@ export const title = Type.Optional(
   Type.String({ minLength: 1, maxLength: 100 }),
 );
 export const topicId = Type.String({ minLength: 1 });
+export const revision = Type.Optional(
+  Type.Integer({
+    minimum: 1,
+    description: "纪要的版本号，例如第 2 版填 2；省略时使用最新版。",
+  }),
+);
 
 export const tool = <P extends TSchema>(
   context: ToolContext,

@@ -32,7 +32,7 @@ export default defineEventHandler(async (event) => {
           })
         )[0],
       )
-    : requireItem((await bot.store.notes.latest(topic.id)) ?? undefined);
+    : requireItem((await bot.store.notes.find(topic.id)) ?? undefined);
   const path = join(dirname(note.path), "transcript.md");
 
   setResponseHeader(event, "Content-Type", "text/plain; charset=utf-8");

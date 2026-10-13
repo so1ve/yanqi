@@ -27,7 +27,7 @@ export class Notes {
   }
 
   public async arrange(topic: Topic, requestId: number) {
-    const note = await this.#store.notes.latest(topic.id);
+    const note = await this.#store.notes.find(topic.id);
     const record = { topicId: topic.id, title: topic.title };
 
     if (note?.generation === topic.generation) {
@@ -52,6 +52,7 @@ export class Notes {
       ...record,
       taskId,
       state: taskId === null ? "empty" : "processing",
+      pendingRevision: taskId === null ? null : topic.revision + 1,
     };
   }
 
@@ -64,7 +65,7 @@ export class Notes {
       return;
     }
 
-    let note = await this.#store.notes.latest(topic.id);
+    let note = await this.#store.notes.find(topic.id);
     const sources = await this.#store.topics.messages(
       topic.id,
       topic.lastSourceId,

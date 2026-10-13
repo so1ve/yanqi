@@ -56,10 +56,21 @@ export class SavedNotes {
     return note;
   }
 
-  public async latest(topicId: string): Promise<Note | null> {
-    const [note] = await this.#db.get(
+  public versions(topicId: string) {
+    return this.#db.get(
       "notes",
       { topicId },
+      {
+        fields: ["revision", "createdAt"],
+        sort: { revision: "desc" },
+      },
+    );
+  }
+
+  public async find(topicId: string, revision?: number): Promise<Note | null> {
+    const [note] = await this.#db.get(
+      "notes",
+      { topicId, ...(revision === undefined ? {} : { revision }) },
       { sort: { revision: "desc" }, limit: 1 },
     );
 

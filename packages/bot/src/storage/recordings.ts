@@ -220,22 +220,30 @@ export class Recordings {
         await linkMessages(db, topicId, changes.messageIds);
       }
 
-      if (changes.focus !== undefined && changes.focus !== topic.focus) {
-        const [current] = await db.get("topics", { id: topicId });
-        const generation = current!.generation + 1;
+      const [updated] = await db.get("topics", { id: topicId });
+
+      assert.ok(updated);
+      if (
+        (changes.focus !== undefined && changes.focus !== topic.focus) ||
+        updated.generation === topic.generation
+      ) {
+        updated.generation++;
+        updated.focus = changes.focus ?? updated.focus;
 
         await db.set(
           "topics",
           { id: topicId },
-          { focus: changes.focus, generation },
+          { focus: updated.focus, generation: updated.generation },
         );
-        // 选材要求改变后，旧段落不能继续复用。
-        await db.set("topic_messages", { topicId }, { generation });
+        // 修改要求或按原范围重做时，重新提取原文，避免复用旧正文。
+        await db.set(
+          "topic_messages",
+          { topicId },
+          { generation: updated.generation },
+        );
       }
 
-      const [updated] = await db.get("topics", { id: topicId });
-
-      return updated!;
+      return updated;
     });
   }
 }
