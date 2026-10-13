@@ -25,7 +25,7 @@ NapCat 管理页的登录 Token 与 OneBot Token 用途不同，分别用于登�
 
 模型、权限和机器人参数都在管理台中设置，无需创建 `.env`。API Key 和 OneBot Token 在登录后的设置页直接显示，可以修改或清空。保存时先写入数据库，再应用到机器人；当前对话会中断，后台整理会使用新配置继续。
 
-Compose 固定向本机开放言栖的 `3210` 和 NapCat 的 `6099` 端口。WebSocket 只在容器网络内使用，容器的 `/app/data` 挂载到仓库的 `data/`。通过反向代理访问时，需保留浏览器访问的 `Host`，并正确设置 `X-Forwarded-Proto`，供同源校验和 HTTPS 会话 Cookie 使用。
+Compose 在宿主机所有网络接口上开放言栖的 `3210` 和 NapCat 的 `6099` 端口。远程访问时，将上述地址中的 `127.0.0.1` 换成服务器地址，并在言栖设置中填写可访问的 NapCat 管理页地址。WebSocket 只在容器网络内使用，容器的 `/app/data` 挂载到仓库的 `data/`。通过反向代理访问时，需保留浏览器访问的 `Host`，并正确设置 `X-Forwarded-Proto`，供同源校验和 HTTPS 会话 Cookie 使用。
 
 ## 在群里使用
 
