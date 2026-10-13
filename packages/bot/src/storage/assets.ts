@@ -12,7 +12,11 @@ export class Assets {
   }
 
   public async get(id: number): Promise<Asset> {
-    const [asset] = await this.#db.get("assets", { id });
+    const asset = await this.#db
+      .selectFrom("assets")
+      .selectAll()
+      .where("id", "=", id)
+      .executeTakeFirst();
 
     if (!asset) {
       throw new Error(`不存在的附件 ${id}`);
@@ -22,7 +26,12 @@ export class Assets {
   }
 
   public forMessage(messageId: number): Promise<Asset[]> {
-    return this.#db.get("assets", { messageId }, { sort: { id: "asc" } });
+    return this.#db
+      .selectFrom("assets")
+      .selectAll()
+      .where("messageId", "=", messageId)
+      .orderBy("id")
+      .execute();
   }
 
   public async save(
@@ -32,8 +41,12 @@ export class Assets {
     interpretation: string | null,
     error: string | null,
   ): Promise<void> {
-    await this.#db.transact(async (db) => {
-      const [asset] = await db.get("assets", { id });
+    await this.#db.transaction().execute(async (db) => {
+      const asset = await db
+        .selectFrom("assets")
+        .selectAll()
+        .where("id", "=", id)
+        .executeTakeFirst();
 
       assert.ok(asset);
       if (
@@ -45,7 +58,11 @@ export class Assets {
         return;
       }
 
-      await db.set("assets", { id }, { state, path, interpretation, error });
+      await db
+        .updateTable("assets")
+        .set({ state, path, interpretation, error })
+        .where("id", "=", id)
+        .execute();
       await messageChanged(db, asset.messageId);
     });
   }

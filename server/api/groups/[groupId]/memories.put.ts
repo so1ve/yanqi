@@ -16,10 +16,27 @@ export default defineEventHandler(async (event) => {
     }),
   );
 
-  await bot.database.upsert("groups", [{ id: groupId }]);
-  await bot.database.upsert("memories", [
-    { ...input, groupId, sourceMessageId: null, updatedAt: Date.now() },
-  ]);
+  await bot.database.transaction().execute(async (db) => {
+    await db
+      .insertInto("groups")
+      .values({ id: groupId })
+      .onConflict((conflict) => conflict.column("id").doNothing())
+      .execute();
+    const values = {
+      ...input,
+      groupId,
+      sourceMessageId: null,
+      updatedAt: Date.now(),
+    };
+
+    await db
+      .insertInto("memories")
+      .values(values)
+      .onConflict((conflict) =>
+        conflict.columns(["groupId", "userId", "key"]).doUpdateSet(values),
+      )
+      .execute();
+  });
 
   return { ok: true };
 });

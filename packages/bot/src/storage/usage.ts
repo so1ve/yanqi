@@ -1,7 +1,4 @@
-import type { Tables } from "@koishijs/core";
-import { $ } from "@koishijs/core";
-
-import type { Database } from "./schema.ts";
+import type { Database, UsageRow } from "./schema.ts";
 
 export class Usage {
   #db: Database;
@@ -16,22 +13,30 @@ export class Usage {
     purpose: string,
     limit: number,
     now: number,
-    details: Pick<Tables["usage"], "provider" | "account" | "groupId" | "task">,
+    details: Pick<UsageRow, "provider" | "account" | "groupId" | "task">,
   ): Promise<number | null> {
-    return this.#db.transact(async (db) => {
-      const calls = await db.eval("usage", (row) => $.count(row.id), { day });
+    return this.#db.transaction().execute(async (db) => {
+      const calls = await db
+        .selectFrom("usage")
+        .where("day", "=", day)
+        .select((eb) => eb.fn.countAll<number>().as("count"))
+        .executeTakeFirstOrThrow();
 
-      if (calls >= limit) {
+      if (calls.count >= limit) {
         return null;
       }
 
-      const call = await db.create("usage", {
-        createdAt: now,
-        day,
-        model,
-        purpose,
-        ...details,
-      });
+      const call = await db
+        .insertInto("usage")
+        .values({
+          createdAt: now,
+          day,
+          model,
+          purpose,
+          ...details,
+        })
+        .returning("id")
+        .executeTakeFirstOrThrow();
 
       return call.id;
     });
@@ -39,17 +44,30 @@ export class Usage {
 
   public async record(
     calls: Pick<
-      Tables["usage"],
+      UsageRow,
       "id" | "input" | "output" | "cacheRead" | "cacheWrite" | "durationMs"
     >[],
   ): Promise<void> {
     if (calls.length > 0) {
-      await this.#db.transact((db) => db.upsert("usage", calls));
+      await this.#db.transaction().execute(async (db) => {
+        for (const { id, ...values } of calls) {
+          await db
+            .updateTable("usage")
+            .set(values)
+            .where("id", "=", id)
+            .execute();
+        }
+      });
     }
   }
 
   public async summary(groupId: string, day: string) {
-    const calls = await this.#db.get("usage", { groupId, day });
+    const calls = await this.#db
+      .selectFrom("usage")
+      .selectAll()
+      .where("groupId", "=", groupId)
+      .where("day", "=", day)
+      .execute();
     const totals = new Map<
       string,
       {

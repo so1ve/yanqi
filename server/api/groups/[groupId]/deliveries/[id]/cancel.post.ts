@@ -8,12 +8,12 @@ export default defineEventHandler(async (event) => {
 
   const id = integer(getRouterParam(event, "id"));
   const delivery = requireItem(
-    (
-      await bot.database.get("deliveries", {
-        id,
-        groupId,
-      })
-    )[0],
+    await bot.database
+      .selectFrom("deliveries")
+      .selectAll()
+      .where("id", "=", id)
+      .where("groupId", "=", groupId)
+      .executeTakeFirst(),
   );
 
   if (bot.running) {

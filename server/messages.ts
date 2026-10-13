@@ -1,24 +1,36 @@
-import type { Database, Message } from "@yanqi/bot";
+import type { Database, MessageRow } from "@yanqi/bot";
+import { decodeMessage } from "@yanqi/bot";
 
 import { imageMimeType } from "./files";
 
 export async function messageDetails(
   db: Database,
   groupId: string,
-  messages: Message[],
+  rows: MessageRow[],
 ) {
+  const messages = rows.map(decodeMessage);
   const [assets, quotes] = await Promise.all([
-    db.get("assets", { messageId: messages.map((message) => message.id) }),
-    db.get(
-      "messages",
-      {
-        groupId,
-        messageId: messages.flatMap((message) =>
+    db
+      .selectFrom("assets")
+      .selectAll()
+      .where(
+        "messageId",
+        "in",
+        messages.map((message) => message.id),
+      )
+      .execute(),
+    db
+      .selectFrom("messages")
+      .select(["messageId", "displayName", "text", "recalledAt"])
+      .where("groupId", "=", groupId)
+      .where(
+        "messageId",
+        "in",
+        messages.flatMap((message) =>
           message.replyTo ? [message.replyTo] : [],
         ),
-      },
-      ["messageId", "displayName", "text", "recalledAt"],
-    ),
+      )
+      .execute(),
   ]);
 
   return messages.map((message) => ({

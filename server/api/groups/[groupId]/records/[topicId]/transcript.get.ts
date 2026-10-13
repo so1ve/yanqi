@@ -16,21 +16,21 @@ export default defineEventHandler(async (event) => {
   const groupId = groupParam(event);
 
   const topic = requireItem(
-    (
-      await db.get("topics", {
-        id: getRouterParam(event, "topicId")!,
-        groupId,
-      })
-    )[0],
+    await db
+      .selectFrom("topics")
+      .selectAll()
+      .where("id", "=", getRouterParam(event, "topicId")!)
+      .where("groupId", "=", groupId)
+      .executeTakeFirst(),
   );
   const note = queryParam(event, "version")
     ? requireItem(
-        (
-          await db.get("notes", {
-            id: integer(queryParam(event, "version")),
-            topicId: topic.id,
-          })
-        )[0],
+        await db
+          .selectFrom("notes")
+          .select("path")
+          .where("id", "=", integer(queryParam(event, "version")))
+          .where("topicId", "=", topic.id)
+          .executeTakeFirst(),
       )
     : requireItem((await bot.store.notes.find(topic.id)) ?? undefined);
   const path = join(dirname(note.path), "transcript.md");

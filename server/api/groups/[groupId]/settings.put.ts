@@ -39,12 +39,22 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  await bot.database.upsert("groups", [
-    {
+  await bot.database
+    .insertInto("groups")
+    .values({
       id: groupId,
-      ...(input.automatic === undefined ? {} : { aiEnabled: input.automatic }),
-    },
-  ]);
+      ...(input.automatic === undefined
+        ? {}
+        : { aiEnabled: Number(input.automatic) }),
+    })
+    .onConflict((conflict) =>
+      input.automatic === undefined
+        ? conflict.column("id").doNothing()
+        : conflict
+            .column("id")
+            .doUpdateSet({ aiEnabled: Number(input.automatic) }),
+    )
+    .execute();
   await settings.save(saved);
   await bot.configure(config);
 

@@ -15,10 +15,12 @@ export default defineEventHandler(async (event) => {
     }),
   );
 
-  await bot.database.remove("memories", {
-    ...input,
-    groupId,
-  });
+  await bot.database
+    .deleteFrom("memories")
+    .where("groupId", "=", groupId)
+    .where("userId", "=", input.userId)
+    .where("key", "=", input.key)
+    .execute();
 
   return { ok: true };
 });

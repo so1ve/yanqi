@@ -3,8 +3,18 @@ import assert from "node:assert/strict";
 import type { Config } from "../config.ts";
 import type { IncomingMessage, JobPayloads, Message } from "../types.ts";
 import { enqueueJob } from "./jobs.ts";
-import type { Database } from "./schema.ts";
+import { decodeContent, encodeContent } from "./message-content.ts";
+import type { Database, MessageRow } from "./schema.ts";
 import { linkMessages, messageChanged } from "./topic-sources.ts";
+
+export const decodeMessage = (row: MessageRow): Message => ({
+  ...row,
+  content: decodeContent(row.content),
+  isBot: Boolean(row.isBot),
+  addressed: Boolean(row.addressed),
+  command: Boolean(row.command),
+  awaitingReply: Boolean(row.awaitingReply),
+});
 
 export class Messages {
   #db: Database;
@@ -30,31 +40,33 @@ export class Messages {
   }
 
   public capture(input: IncomingMessage): Promise<Message | null> {
-    return this.#db.transact(async (db) => {
-      const [existing] = await db.get("messages", {
-        groupId: input.groupId,
-        messageId: input.messageId,
-      });
+    return this.#db.transaction().execute(async (db) => {
+      const existing = await db
+        .selectFrom("messages")
+        .selectAll()
+        .where("groupId", "=", input.groupId)
+        .where("messageId", "=", input.messageId)
+        .executeTakeFirst();
 
       if (existing) {
         if (input.noteId !== undefined) {
-          await db.set(
-            "messages",
-            { id: existing.id },
-            { noteId: input.noteId },
-          );
+          await db
+            .updateTable("messages")
+            .set({ noteId: input.noteId })
+            .where("id", "=", existing.id)
+            .execute();
         }
 
         if (
           input.isBot &&
-          existing.content.length === 0 &&
+          decodeContent(existing.content).length === 0 &&
           input.content.length > 0
         ) {
-          await db.set(
-            "messages",
-            { id: existing.id },
-            { content: input.content },
-          );
+          await db
+            .updateTable("messages")
+            .set({ content: encodeContent(input.content) })
+            .where("id", "=", existing.id)
+            .execute();
         }
 
         return null;
@@ -62,37 +74,54 @@ export class Messages {
 
       const canInteract = this.#canInteract(input);
       const waiting = canInteract
-        ? await db.get("messages", {
-            groupId: input.groupId,
-            userId: input.userId,
-            awaitingReply: true,
-            recalledAt: { $exists: false },
-          })
+        ? await db
+            .selectFrom("messages")
+            .select("id")
+            .where("groupId", "=", input.groupId)
+            .where("userId", "=", input.userId)
+            .where("awaitingReply", "=", 1)
+            .where("recalledAt", "is", null)
+            .execute()
         : [];
       const quote =
         canInteract && input.replyTo
-          ? await db.get("messages", {
-              groupId: input.groupId,
-              messageId: input.replyTo,
-              isBot: true,
-            })
-          : [];
+          ? await db
+              .selectFrom("messages")
+              .select("id")
+              .where("groupId", "=", input.groupId)
+              .where("messageId", "=", input.replyTo)
+              .where("isBot", "=", 1)
+              .executeTakeFirst()
+          : undefined;
       const command =
         canInteract &&
-        (input.addressed || waiting.length > 0 || quote.length > 0);
+        (input.addressed || waiting.length > 0 || quote !== undefined);
 
       if (waiting.length > 0) {
-        await db.set(
-          "messages",
-          { id: waiting.map((item) => item.id) },
-          { awaitingReply: false },
-        );
+        await db
+          .updateTable("messages")
+          .set({ awaitingReply: 0 })
+          .where(
+            "id",
+            "in",
+            waiting.map((item) => item.id),
+          )
+          .execute();
       }
 
-      const message = await db.create("messages", {
-        ...input,
-        command,
-      });
+      const message = decodeMessage(
+        await db
+          .insertInto("messages")
+          .values({
+            ...input,
+            content: encodeContent(input.content),
+            isBot: Number(input.isBot),
+            addressed: Number(input.addressed),
+            command: Number(command),
+          })
+          .returningAll()
+          .executeTakeFirstOrThrow(),
+      );
 
       if (!input.isBot) {
         for (const segment of input.content) {
@@ -120,34 +149,31 @@ export class Messages {
             continue;
           }
 
-          const [existingAsset] = await db.get("assets", {
-            messageId: message.id,
-            kind,
-            reference,
-          });
+          const asset = await db
+            .insertInto("assets")
+            .values({ messageId: message.id, kind, reference })
+            .onConflict((conflict) =>
+              conflict.columns(["messageId", "kind", "reference"]).doNothing(),
+            )
+            .returning("id")
+            .executeTakeFirst();
 
-          if (existingAsset) {
-            continue;
+          if (asset) {
+            await enqueueJob(db, "asset", `asset:${asset.id}`, {
+              assetId: asset.id,
+              groupId: input.groupId,
+            });
           }
-
-          const asset = await db.create("assets", {
-            messageId: message.id,
-            kind,
-            reference,
-          });
-
-          await enqueueJob(db, "asset", `asset:${asset.id}`, {
-            assetId: asset.id,
-            groupId: input.groupId,
-          });
         }
 
         if (!command) {
-          const topics = await db.get("topics", {
-            groupId: input.groupId,
-            mode: "manual",
-            state: "active",
-          });
+          const topics = await db
+            .selectFrom("topics")
+            .select("id")
+            .where("groupId", "=", input.groupId)
+            .where("mode", "=", "manual")
+            .where("state", "=", "active")
+            .execute();
 
           for (const topic of topics) {
             await linkMessages(db, topic.id, [message.id]);
@@ -160,13 +186,17 @@ export class Messages {
   }
 
   public async get(id: number): Promise<Message> {
-    const [message] = await this.#db.get("messages", { id });
+    const row = await this.#db
+      .selectFrom("messages")
+      .selectAll()
+      .where("id", "=", id)
+      .executeTakeFirst();
 
-    if (!message) {
+    if (!row) {
       throw new Error(`不存在的消息 m${id}`);
     }
 
-    return message;
+    return decodeMessage(row);
   }
 
   public async getRequest(id: number): Promise<Message | null> {
@@ -183,26 +213,34 @@ export class Messages {
       return;
     }
 
-    return this.#db.transact(async (db) => {
-      const [pending] = await db.get("jobs", {
-        "kind": "observe",
-        "state": "pending",
-        "payload.groupId": message.groupId,
-      });
+    await this.#db.transaction().execute(async (db) => {
+      const pending = await db
+        .selectFrom("jobs")
+        .selectAll()
+        .where("kind", "=", "observe")
+        .where("state", "=", "pending")
+        .where((eb) =>
+          eb(
+            eb.fn<string>("json_extract", ["payload", eb.val("$.groupId")]),
+            "=",
+            message.groupId,
+          ),
+        )
+        .executeTakeFirst();
 
       if (pending) {
-        const payload = pending.payload as JobPayloads["observe"];
+        const payload: JobPayloads["observe"] = JSON.parse(pending.payload);
 
-        await db.set(
-          "jobs",
-          { id: pending.id },
-          {
-            payload: {
+        await db
+          .updateTable("jobs")
+          .set({
+            payload: JSON.stringify({
               ...payload,
               messageIds: [...payload.messageIds, message.id],
-            },
-          },
-        );
+            }),
+          })
+          .where("id", "=", pending.id)
+          .execute();
       } else {
         // 从第一条消息起收集一秒，后续消息不延后处理时间。
         await enqueueJob(
@@ -219,26 +257,31 @@ export class Messages {
     });
   }
 
-  public async awaitReply(request: Message): Promise<Message | null> {
-    return this.#db.transact(async (db) => {
-      const following = await db.get(
-        "messages",
-        {
-          groupId: request.groupId,
-          userId: request.userId,
-          id: { $gt: request.id },
-          recalledAt: { $exists: false },
-        },
-        { sort: { id: "asc" } },
-      );
-      const next = following.find((message) => this.#canInteract(message));
+  public awaitReply(request: Message): Promise<Message | null> {
+    return this.#db.transaction().execute(async (db) => {
+      const following = await db
+        .selectFrom("messages")
+        .selectAll()
+        .where("groupId", "=", request.groupId)
+        .where("userId", "=", request.userId)
+        .where("id", ">", request.id)
+        .where("recalledAt", "is", null)
+        .orderBy("id")
+        .execute();
+      const next = following
+        .map(decodeMessage)
+        .find((message) => this.#canInteract(message));
 
       if (next) {
         if (next.command) {
           return null;
         }
 
-        await db.set("messages", { id: next.id }, { command: true });
+        await db
+          .updateTable("messages")
+          .set({ command: 1 })
+          .where("id", "=", next.id)
+          .execute();
         await enqueueJob(db, "intent", `intent:${next.id}`, {
           groupId: next.groupId,
           messageId: next.id,
@@ -247,7 +290,11 @@ export class Messages {
         return { ...next, command: true };
       }
 
-      await db.set("messages", { id: request.id }, { awaitingReply: true });
+      await db
+        .updateTable("messages")
+        .set({ awaitingReply: 1 })
+        .where("id", "=", request.id)
+        .execute();
 
       return null;
     });
@@ -257,9 +304,14 @@ export class Messages {
     groupId: string,
     messageId: string,
   ): Promise<Message | null> {
-    const [message] = await this.#db.get("messages", { groupId, messageId });
+    const row = await this.#db
+      .selectFrom("messages")
+      .selectAll()
+      .where("groupId", "=", groupId)
+      .where("messageId", "=", messageId)
+      .executeTakeFirst();
 
-    return message ?? null;
+    return row ? decodeMessage(row) : null;
   }
 
   public async recall(
@@ -267,15 +319,27 @@ export class Messages {
     messageId: string,
     now: number,
   ): Promise<void> {
-    await this.#db.transact(async (db) => {
-      const [message] = await db.get("messages", { groupId, messageId });
+    await this.#db.transaction().execute(async (db) => {
+      const message = await db
+        .selectFrom("messages")
+        .select(["id", "recalledAt"])
+        .where("groupId", "=", groupId)
+        .where("messageId", "=", messageId)
+        .executeTakeFirst();
 
       if (message?.recalledAt !== null) {
         return;
       }
 
-      await db.set("messages", { id: message.id }, { recalledAt: now });
-      await db.remove("memories", { sourceMessageId: message.id });
+      await db
+        .updateTable("messages")
+        .set({ recalledAt: now })
+        .where("id", "=", message.id)
+        .execute();
+      await db
+        .deleteFrom("memories")
+        .where("sourceMessageId", "=", message.id)
+        .execute();
       await messageChanged(db, message.id);
     });
   }
@@ -285,13 +349,17 @@ export class Messages {
     limit: number,
     through = Number.MAX_SAFE_INTEGER,
   ): Promise<Message[]> {
-    const messages = await this.#db.get(
-      "messages",
-      { groupId, id: { $lte: through }, isBot: false },
-      { sort: { id: "desc" }, limit },
-    );
+    const rows = await this.#db
+      .selectFrom("messages")
+      .selectAll()
+      .where("groupId", "=", groupId)
+      .where("id", "<=", through)
+      .where("isBot", "=", 0)
+      .orderBy("id", "desc")
+      .limit(limit)
+      .execute();
 
-    return messages.reverse();
+    return rows.reverse().map(decodeMessage);
   }
 
   public async conversation(
@@ -299,53 +367,64 @@ export class Messages {
     limit: number,
     through: number,
   ): Promise<Message[]> {
-    const messages = await this.#db.get(
-      "messages",
-      { groupId, id: { $lte: through } },
-      { sort: { id: "desc" }, limit },
-    );
+    const rows = await this.#db
+      .selectFrom("messages")
+      .selectAll()
+      .where("groupId", "=", groupId)
+      .where("id", "<=", through)
+      .orderBy("id", "desc")
+      .limit(limit)
+      .execute();
 
-    return messages.reverse();
+    return rows.reverse().map(decodeMessage);
   }
 
-  public history(
+  public async history(
     groupId: string,
     through: number,
     {
       from = 0,
       to = Number.MAX_SAFE_INTEGER,
       fromId = 0,
-    }: {
-      from?: number;
-      to?: number;
-      fromId?: number;
-    } = {},
+    }: { from?: number; to?: number; fromId?: number } = {},
   ): Promise<Message[]> {
-    return this.#db.get(
-      "messages",
-      {
-        groupId,
-        sentAt: { $gte: from, $lt: to },
-        id: { $gte: fromId, $lte: through },
-        isBot: false,
-      },
-      { sort: { id: "asc" } },
-    );
+    const rows = await this.#db
+      .selectFrom("messages")
+      .selectAll()
+      .where("groupId", "=", groupId)
+      .where("sentAt", ">=", from)
+      .where("sentAt", "<", to)
+      .where("id", ">=", fromId)
+      .where("id", "<=", through)
+      .where("isBot", "=", 0)
+      .orderBy("id")
+      .execute();
+
+    return rows.map(decodeMessage);
   }
 
   public async nextDetection(
     groupId: string,
     limit: number,
   ): Promise<Message[]> {
-    const [group] = await this.#db.get("groups", { id: groupId });
+    const group = await this.#db
+      .selectFrom("groups")
+      .select("cursor")
+      .where("id", "=", groupId)
+      .executeTakeFirst();
 
     assert.ok(group);
+    const rows = await this.#db
+      .selectFrom("messages")
+      .selectAll()
+      .where("groupId", "=", groupId)
+      .where("id", ">", group.cursor)
+      .where("isBot", "=", 0)
+      .orderBy("id")
+      .limit(limit)
+      .execute();
 
-    return this.#db.get(
-      "messages",
-      { groupId, id: { $gt: group.cursor }, isBot: false },
-      { sort: { id: "asc" }, limit },
-    );
+    return rows.map(decodeMessage);
   }
 
   public async scheduleRequests(
@@ -356,19 +435,26 @@ export class Messages {
       return [];
     }
 
-    return this.#db.transact(async (db) => {
-      const messages = await db.get("messages", {
-        groupId,
-        id: messageIds,
-        isBot: false,
-        command: false,
-        recalledAt: { $exists: false },
-      });
-
-      const requests = messages.filter((message) => this.#canInteract(message));
+    return this.#db.transaction().execute(async (db) => {
+      const rows = await db
+        .selectFrom("messages")
+        .selectAll()
+        .where("groupId", "=", groupId)
+        .where("id", "in", messageIds)
+        .where("isBot", "=", 0)
+        .where("command", "=", 0)
+        .where("recalledAt", "is", null)
+        .execute();
+      const requests = rows
+        .map(decodeMessage)
+        .filter((message) => this.#canInteract(message));
 
       for (const message of requests) {
-        await db.set("messages", { id: message.id }, { command: true });
+        await db
+          .updateTable("messages")
+          .set({ command: 1 })
+          .where("id", "=", message.id)
+          .execute();
         await enqueueJob(db, "intent", `intent:${message.id}`, {
           groupId,
           messageId: message.id,
@@ -379,25 +465,24 @@ export class Messages {
     });
   }
 
-  public search(
+  public async search(
     groupId: string,
     query: string,
     through: number,
   ): Promise<Message[]> {
-    const literal = new RegExp(
-      query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-      "i",
-    );
+    const rows = await this.#db
+      .selectFrom("messages")
+      .selectAll()
+      .where("groupId", "=", groupId)
+      .where("id", "<=", through)
+      .where("isBot", "=", 0)
+      .where((eb) =>
+        eb(eb.fn<number>("contains_text", ["text", eb.val(query)]), ">", 0),
+      )
+      .orderBy("id", "desc")
+      .limit(8)
+      .execute();
 
-    return this.#db.get(
-      "messages",
-      {
-        groupId,
-        id: { $lte: through },
-        isBot: false,
-        text: literal,
-      },
-      { sort: { id: "desc" }, limit: 8 },
-    );
+    return rows.map(decodeMessage);
   }
 }

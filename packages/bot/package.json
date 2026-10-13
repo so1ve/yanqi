@@ -12,12 +12,12 @@
     "@earendil-works/pi-agent-core": "catalog:",
     "@earendil-works/pi-ai": "catalog:",
     "@koishijs/core": "catalog:",
-    "@koishijs/plugin-database-sqlite": "catalog:",
     "@koishijs/plugin-http": "catalog:",
     "entities": "catalog:",
     "jsonrepair": "catalog:",
     "koishi": "catalog:",
     "koishi-plugin-adapter-onebot": "catalog:",
+    "kysely": "catalog:",
     "marked": "catalog:",
     "openai": "catalog:",
     "typebox": "catalog:"

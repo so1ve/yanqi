@@ -2,7 +2,12 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 
 import type { Yanqi } from "@yanqi/bot";
-import { enqueueJob, topicDirectory, writeMarkdown } from "@yanqi/bot";
+import {
+  decodeNote,
+  enqueueJob,
+  topicDirectory,
+  writeMarkdown,
+} from "@yanqi/bot";
 import { createError } from "h3";
 
 import { readDataFile } from "./files";
@@ -14,21 +19,39 @@ export const editNote = (
   topicId: string,
   input: { noteId: number; markdown: string },
 ) =>
-  bot.database.transact(async (db) => {
+  bot.database.transaction().execute(async (db) => {
     const topic = requireItem(
-      (await db.get("topics", { id: topicId, groupId }))[0],
+      await db
+        .selectFrom("topics")
+        .selectAll()
+        .where("id", "=", topicId)
+        .where("groupId", "=", groupId)
+        .executeTakeFirst(),
     );
     const current = requireItem(
-      (await db.get("notes", { id: input.noteId, topicId }))[0],
+      await db
+        .selectFrom("notes")
+        .selectAll()
+        .where("id", "=", input.noteId)
+        .where("topicId", "=", topicId)
+        .executeTakeFirst(),
     );
-    const busy = await db.get("jobs", {
-      "kind": "summarize",
-      "payload.topicId": topicId,
-      "$or": [{ state: "pending" }, { state: "running" }],
-    });
+    const busy = await db
+      .selectFrom("jobs")
+      .select("id")
+      .where("kind", "=", "summarize")
+      .where("state", "in", ["pending", "running"])
+      .where((eb) =>
+        eb(
+          eb.fn<string>("json_extract", ["payload", eb.val("$.topicId")]),
+          "=",
+          topicId,
+        ),
+      )
+      .executeTakeFirst();
 
     if (
-      busy.length > 0 ||
+      busy !== undefined ||
       current.generation !== topic.generation ||
       current.revision !== topic.revision
     ) {
@@ -59,25 +82,29 @@ export const editNote = (
       mode: 0o600,
     });
     await writeMarkdown(path, markdown);
-    const note = await db.create("notes", {
-      topicId,
-      groupId,
-      sourceThrough: current.sourceThrough,
-      revision,
-      generation,
-      markdown,
-      path,
-      sections: [],
-      createdAt: Date.now(),
-    });
+    const note = await db
+      .insertInto("notes")
+      .values({
+        topicId,
+        groupId,
+        sourceThrough: current.sourceThrough,
+        revision,
+        generation,
+        markdown,
+        path,
+        sections: "[]",
+        createdAt: Date.now(),
+      })
+      .returningAll()
+      .executeTakeFirstOrThrow();
 
-    await db.set(
-      "topics",
-      { id: topicId },
-      { revision, generation, noteGeneration: generation },
-    );
+    await db
+      .updateTable("topics")
+      .set({ revision, generation, noteGeneration: generation })
+      .where("id", "=", topicId)
+      .execute();
 
-    return note;
+    return decodeNote(note);
   });
 
 export async function regenerateRecord(
@@ -93,17 +120,30 @@ export async function regenerateRecord(
     });
   }
 
-  const taskId = await bot.database.transact(async (db) => {
+  const taskId = await bot.database.transaction().execute(async (db) => {
     const topic = requireItem(
-      (await db.get("topics", { id: topicId, groupId }))[0],
+      await db
+        .selectFrom("topics")
+        .selectAll()
+        .where("id", "=", topicId)
+        .where("groupId", "=", groupId)
+        .executeTakeFirst(),
     );
-    const busy = await db.get("jobs", {
-      "kind": "summarize",
-      "payload.topicId": topicId,
-      "$or": [{ state: "pending" }, { state: "running" }],
-    });
+    const busy = await db
+      .selectFrom("jobs")
+      .select("id")
+      .where("kind", "=", "summarize")
+      .where("state", "in", ["pending", "running"])
+      .where((eb) =>
+        eb(
+          eb.fn<string>("json_extract", ["payload", eb.val("$.topicId")]),
+          "=",
+          topicId,
+        ),
+      )
+      .executeTakeFirst();
 
-    if (busy.length > 0) {
+    if (busy !== undefined) {
       throw createError({
         statusCode: 409,
         message: "这篇纪要正在排队或整理中",
@@ -112,8 +152,16 @@ export async function regenerateRecord(
 
     const generation = topic.generation + 1;
 
-    await db.set("topics", { id: topicId }, { generation, focus });
-    await db.set("topic_messages", { topicId }, { generation });
+    await db
+      .updateTable("topics")
+      .set({ generation, focus })
+      .where("id", "=", topicId)
+      .execute();
+    await db
+      .updateTable("topic_messages")
+      .set({ generation })
+      .where("topicId", "=", topicId)
+      .execute();
 
     return enqueueJob(db, "summarize", `summarize:${topicId}:${generation}`, {
       groupId,
@@ -133,16 +181,29 @@ export const deleteRecord = (
   groupId: string,
   topicId: string,
 ): Promise<void> =>
-  bot.database.transact(async (db) => {
+  bot.database.transaction().execute(async (db) => {
     const topic = requireItem(
-      (await db.get("topics", { id: topicId, groupId }))[0],
+      await db
+        .selectFrom("topics")
+        .selectAll()
+        .where("id", "=", topicId)
+        .where("groupId", "=", groupId)
+        .executeTakeFirst(),
     );
-    const busy = await db.get("jobs", {
-      "payload.topicId": topicId,
-      "state": "running",
-    });
+    const busy = await db
+      .selectFrom("jobs")
+      .select("id")
+      .where("state", "=", "running")
+      .where((eb) =>
+        eb(
+          eb.fn<string>("json_extract", ["payload", eb.val("$.topicId")]),
+          "=",
+          topicId,
+        ),
+      )
+      .executeTakeFirst();
 
-    if (busy.length > 0 || bot.running) {
+    if (busy !== undefined || bot.running) {
       throw createError({
         statusCode: 409,
         message: "请先暂停 AI，再删除纪要",
@@ -153,9 +214,21 @@ export const deleteRecord = (
       recursive: true,
       force: true,
     });
-    await db.remove("deliveries", { topicId });
-    await db.remove("jobs", { "payload.topicId": topicId });
-    await db.remove("notes", { topicId });
-    await db.remove("topic_messages", { topicId });
-    await db.remove("topics", { id: topicId });
+    await db.deleteFrom("deliveries").where("topicId", "=", topicId).execute();
+    await db
+      .deleteFrom("jobs")
+      .where((eb) =>
+        eb(
+          eb.fn<string>("json_extract", ["payload", eb.val("$.topicId")]),
+          "=",
+          topicId,
+        ),
+      )
+      .execute();
+    await db.deleteFrom("notes").where("topicId", "=", topicId).execute();
+    await db
+      .deleteFrom("topic_messages")
+      .where("topicId", "=", topicId)
+      .execute();
+    await db.deleteFrom("topics").where("id", "=", topicId).execute();
   });

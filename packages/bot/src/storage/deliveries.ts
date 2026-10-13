@@ -19,25 +19,36 @@ export class DeliveryQueue {
   }
 
   public enqueue(key: string, outgoing: Outgoing): Promise<boolean> {
-    return this.#db.transact(async (db) => {
+    return this.#db.transaction().execute(async (db) => {
       const note = outgoing.kind === "text" ? null : outgoing.note;
       const repeat = outgoing.kind === "note" && outgoing.repeat;
-      let [existing] = await db.get("deliveries", { key });
+      let existing = await db
+        .selectFrom("deliveries")
+        .selectAll()
+        .where("key", "=", key)
+        .executeTakeFirst();
 
       if (note && outgoing.kind === "note") {
-        await db.set(
-          "deliveries",
-          { noteId: note.id, kind: "text", state: "pending" },
-          { state: "cancelled" },
-        );
+        await db
+          .updateTable("deliveries")
+          .set({ state: "cancelled" })
+          .where("noteId", "=", note.id)
+          .where("kind", "=", "text")
+          .where("state", "=", "pending")
+          .execute();
       }
 
       if (!existing && note) {
-        existing = (await db.get("deliveries", { noteId: note.id })).find(
-          (item) =>
-            repeat
-              ? item.kind === "note" && item.state === "pending"
-              : item.state === "pending" || item.state === "done",
+        existing = (
+          await db
+            .selectFrom("deliveries")
+            .selectAll()
+            .where("noteId", "=", note.id)
+            .execute()
+        ).find((item) =>
+          repeat
+            ? item.kind === "note" && item.state === "pending"
+            : item.state === "pending" || item.state === "done",
         );
       }
 
@@ -49,8 +60,11 @@ export class DeliveryQueue {
         );
 
         return false;
-      } else {
-        const delivery = await db.create("deliveries", {
+      }
+
+      const delivery = await db
+        .insertInto("deliveries")
+        .values({
           key,
           kind: outgoing.kind === "saved" ? "text" : outgoing.kind,
           groupId:
@@ -64,25 +78,31 @@ export class DeliveryQueue {
                 ? outgoing.content
                 : "",
           createdAt: Date.now(),
-        });
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
 
-        this.#logger.info(
-          "发送 #%s 入队：key=%s group=%s kind=%s note=%s",
-          delivery.id,
-          key,
-          delivery.groupId,
-          delivery.kind,
-          delivery.noteId,
-        );
+      this.#logger.info(
+        "发送 #%s 入队：key=%s group=%s kind=%s note=%s",
+        delivery.id,
+        key,
+        delivery.groupId,
+        delivery.kind,
+        delivery.noteId,
+      );
 
-        return true;
-      }
+      return true;
     });
   }
 
   public async isPending(id: number): Promise<boolean> {
     return (
-      (await this.#db.get("deliveries", { id, state: "pending" })).length > 0
+      (await this.#db
+        .selectFrom("deliveries")
+        .select("id")
+        .where("id", "=", id)
+        .where("state", "=", "pending")
+        .executeTakeFirst()) !== undefined
     );
   }
 
@@ -91,7 +111,11 @@ export class DeliveryQueue {
 
     while (true) {
       signal?.throwIfAborted();
-      const [delivery] = await this.#db.get("deliveries", { key });
+      const delivery = await this.#db
+        .selectFrom("deliveries")
+        .select("state")
+        .where("key", "=", key)
+        .executeTakeFirst();
 
       if (!delivery) {
         throw new Error("回复尚未提交发送");
@@ -106,52 +130,61 @@ export class DeliveryQueue {
   }
 
   public forNote(noteId: number) {
-    return this.#db.get(
-      "deliveries",
-      { noteId },
-      {
-        fields: ["id", "kind", "state", "createdAt"],
-        sort: { id: "desc" },
-        limit: 5,
-      },
-    );
+    return this.#db
+      .selectFrom("deliveries")
+      .select(["id", "kind", "state", "createdAt"])
+      .where("noteId", "=", noteId)
+      .orderBy("id", "desc")
+      .limit(5)
+      .execute();
   }
 
   public async next(kind: Delivery["kind"]): Promise<Delivery | null> {
-    return this.#db.transact(async (db) => {
-      const [delivery] = await db.get(
-        "deliveries",
-        { state: "pending", kind },
-        { sort: { id: "asc" }, limit: 1 },
-      );
-
-      return delivery ?? null;
-    });
+    return (
+      (await this.#db
+        .selectFrom("deliveries")
+        .selectAll()
+        .where("state", "=", "pending")
+        .where("kind", "=", kind)
+        .orderBy("id")
+        .limit(1)
+        .executeTakeFirst()) ?? null
+    );
   }
 
   public async done(id: number): Promise<void> {
-    await this.#db.transact((db) =>
-      db.set("deliveries", { id }, { state: "done" }),
-    );
+    await this.#db
+      .updateTable("deliveries")
+      .set({ state: "done" })
+      .where("id", "=", id)
+      .execute();
   }
 
   public async cancel(id: number): Promise<void> {
-    await this.#db.transact((db) =>
-      db.set("deliveries", { id, state: "pending" }, { state: "cancelled" }),
-    );
+    await this.#db
+      .updateTable("deliveries")
+      .set({ state: "cancelled" })
+      .where("id", "=", id)
+      .where("state", "=", "pending")
+      .execute();
   }
 
   public async fail(id: number): Promise<void> {
-    await this.#db.transact((db) =>
-      db.set("deliveries", { id }, { state: "failed" }),
-    );
+    await this.#db
+      .updateTable("deliveries")
+      .set({ state: "failed" })
+      .where("id", "=", id)
+      .execute();
   }
 
   public async retryFailed(groupId: string): Promise<number> {
-    const result = await this.#db.transact((db) =>
-      db.set("deliveries", { groupId, state: "failed" }, { state: "pending" }),
-    );
+    const result = await this.#db
+      .updateTable("deliveries")
+      .set({ state: "pending" })
+      .where("groupId", "=", groupId)
+      .where("state", "=", "failed")
+      .executeTakeFirst();
 
-    return result.matched!;
+    return Number(result.numUpdatedRows);
   }
 }

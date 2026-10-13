@@ -1,4 +1,4 @@
-import { $ } from "@koishijs/core";
+import { decodeJob } from "@yanqi/bot";
 import { createError, defineEventHandler, getRouterParam } from "h3";
 
 import { groupParam, integer, requireItem } from "~~/server/utils/http";
@@ -6,12 +6,24 @@ import { groupParam, integer, requireItem } from "~~/server/utils/http";
 export default defineEventHandler(async (event) => {
   const { bot } = event.context;
   const groupId = groupParam(event);
-
   const id = integer(getRouterParam(event, "id"));
 
-  await bot.database.transact(async (db) => {
-    const job = requireItem(
-      (await db.get("jobs", { id, "payload.groupId": groupId }))[0],
+  await bot.database.transaction().execute(async (db) => {
+    const job = decodeJob(
+      requireItem(
+        await db
+          .selectFrom("jobs")
+          .selectAll()
+          .where("id", "=", id)
+          .where((eb) =>
+            eb(
+              eb.fn<string>("json_extract", ["payload", eb.val("$.groupId")]),
+              "=",
+              groupId,
+            ),
+          )
+          .executeTakeFirst(),
+      ),
     );
 
     if (job.state === "running") {
@@ -24,16 +36,20 @@ export default defineEventHandler(async (event) => {
     if (job.kind === "detect" && "messageIds" in job.payload) {
       const through = Math.max(0, ...job.payload.messageIds);
 
-      await db.set("groups", { id: groupId }, (row) => ({
-        cursor: $.if($.gt(through, row.cursor), through, row.cursor),
-      }));
+      await db
+        .updateTable("groups")
+        .set((eb) => ({
+          cursor: eb.fn<number>("max", ["cursor", eb.val(through)]),
+        }))
+        .where("id", "=", groupId)
+        .execute();
     }
 
-    await db.set(
-      "jobs",
-      { id },
-      { state: "done", lastError: "管理员取消", progress: "已取消" },
-    );
+    await db
+      .updateTable("jobs")
+      .set({ state: "done", lastError: "管理员取消", progress: "已取消" })
+      .where("id", "=", id)
+      .execute();
   });
 
   return { ok: true };

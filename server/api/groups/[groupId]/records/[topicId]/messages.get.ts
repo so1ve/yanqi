@@ -1,4 +1,5 @@
-import { $ } from "@koishijs/core";
+import type { Note } from "@yanqi/bot";
+import { decodeNote } from "@yanqi/bot";
 import { defineEventHandler, getRouterParam } from "h3";
 
 import { messageDetails } from "~~/server/messages";
@@ -15,51 +16,62 @@ export default defineEventHandler(async (event) => {
   const groupId = groupParam(event);
   const topicId = getRouterParam(event, "topicId")!;
   const version = queryParam(event, "version");
-  const note = requireItem(
-    (
-      await db.get(
-        "notes",
-        {
-          groupId,
-          topicId,
-          ...(version ? { id: integer(version) } : {}),
-        },
-        { sort: { revision: "desc" }, limit: 1 },
-      )
-    )[0],
+  let notes = db
+    .selectFrom("notes")
+    .selectAll()
+    .where("groupId", "=", groupId)
+    .where("topicId", "=", topicId);
+
+  if (version) {
+    notes = notes.where("id", "=", integer(version));
+  }
+
+  const note = decodeNote(
+    requireItem(
+      await notes.orderBy("revision", "desc").limit(1).executeTakeFirst(),
+    ),
   );
   let sections = note.sections;
 
   // 手工编辑只改正文，原文沿用此前最近一次整理的版本。
   if (sections.length === 0) {
-    const earlier = await db.get(
-      "notes",
-      {
-        groupId,
-        topicId,
-        revision: { $lt: note.revision },
-      },
-      { fields: ["sections"], sort: { revision: "desc" } },
-    );
+    const earlier = await db
+      .selectFrom("notes")
+      .select("sections")
+      .where("groupId", "=", groupId)
+      .where("topicId", "=", topicId)
+      .where("revision", "<", note.revision)
+      .orderBy("revision", "desc")
+      .execute();
 
-    sections = earlier.find((item) => item.sections.length > 0)?.sections ?? [];
+    sections =
+      earlier
+        .map((row): Note["sections"] => JSON.parse(row.sections))
+        .find((items) => items.length > 0) ?? [];
   }
 
   const ids = [...new Set(sections.flatMap((section) => section.messageIds))];
-  const query = { groupId, id: ids };
+  const query = db
+    .selectFrom("messages")
+    .where("groupId", "=", groupId)
+    .where("id", "in", ids);
   const { page, limit, offset } = pagination(event);
   const [messages, total] = await Promise.all([
-    db.get("messages", query, {
-      sort: { sentAt: "asc", id: "asc" },
-      limit,
-      offset,
-    }),
-    db.eval("messages", (row) => $.count(row.id), query),
+    query
+      .selectAll()
+      .orderBy("sentAt")
+      .orderBy("id")
+      .limit(limit)
+      .offset(offset)
+      .execute(),
+    query
+      .select((eb) => eb.fn.countAll<number>().as("count"))
+      .executeTakeFirstOrThrow(),
   ]);
 
   return {
     items: await messageDetails(db, groupId, messages),
-    total,
+    total: total.count,
     page,
     limit,
   };

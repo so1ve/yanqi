@@ -8,7 +8,13 @@ export default defineEventHandler(async (event) => {
   const db = bot.database;
   const groupId = groupParam(event);
 
-  requireItem((await db.get("groups", { id: groupId }))[0]);
+  requireItem(
+    await db
+      .selectFrom("groups")
+      .select("id")
+      .where("id", "=", groupId)
+      .executeTakeFirst(),
+  );
   if (!bot.config.GROUP_IDS.includes(groupId)) {
     throw createError({
       statusCode: 409,
@@ -34,16 +40,16 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: "开始时间不能晚于结束时间" });
   }
 
-  const messages = await db.get(
-    "messages",
-    {
-      groupId,
-      isBot: false,
-      command: false,
-      sentAt: { $gte: input.from ?? 0, $lte: input.to ?? Date.now() },
-    },
-    { fields: ["id"], sort: { id: "asc" } },
-  );
+  const messages = await db
+    .selectFrom("messages")
+    .select("id")
+    .where("groupId", "=", groupId)
+    .where("isBot", "=", 0)
+    .where("command", "=", 0)
+    .where("sentAt", ">=", input.from ?? 0)
+    .where("sentAt", "<=", input.to ?? Date.now())
+    .orderBy("id")
+    .execute();
 
   if (messages.length === 0) {
     throw createError({

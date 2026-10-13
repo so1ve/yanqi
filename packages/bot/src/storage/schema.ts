@@ -1,323 +1,340 @@
-import type { Context } from "@koishijs/core";
+import type { Generated, Kysely, Selectable } from "kysely";
 
 import type {
   Asset,
   Delivery,
   JobKind,
-  JobPayloads,
   Message,
   Note,
-  Segment,
   Topic,
 } from "../types.ts";
-import { decodeContent, encodeContent } from "./message-content.ts";
 
-interface GroupRow {
-  id: string;
-  cursor: number;
-  aiEnabled: boolean;
-}
+type Defaults<T, K extends keyof T> = Omit<T, K> & {
+  [P in K]: Generated<T[P]>;
+};
 
-interface JobRow {
-  id: number;
-  kind: JobKind;
-  payload: JobPayloads[JobKind];
-  attempts: number;
-  key: string;
-  state: "pending" | "running" | "done" | "failed";
-  runAfter: number;
-  lastError: string | null;
-  progress: string | null;
-}
-
-interface MemoryRow {
-  groupId: string;
-  userId: string;
-  key: string;
-  content: string;
-  sourceMessageId: number | null;
-  updatedAt: number;
-}
-
-declare module "@koishijs/core" {
-  interface Tables {
-    groups: GroupRow;
-    // 旧字段只供 Minato 首次转换已有数据库，转换后由驱动移除。
-    messages: Message & { segments?: Segment[]; rawJson?: string };
-    topics: Topic;
-    topic_messages: { topicId: string; messageId: number; generation: number };
-    assets: Asset;
-    notes: Note & { createdAt: number };
-    jobs: JobRow;
-    deliveries: Delivery & {
+export interface Tables {
+  groups: {
+    id: string;
+    cursor: Generated<number>;
+    aiEnabled: Generated<number>;
+  };
+  messages: Defaults<
+    Omit<
+      Message,
+      "content" | "isBot" | "addressed" | "command" | "awaitingReply"
+    > & {
+      content: Uint8Array;
+      isBot: number;
+      addressed: number;
+      command: number;
+      awaitingReply: number;
+    },
+    "id" | "isBot" | "addressed" | "command" | "awaitingReply"
+  >;
+  topics: Defaults<
+    Topic,
+    | "description"
+    | "focus"
+    | "state"
+    | "lastSourceId"
+    | "revision"
+    | "generation"
+    | "noteGeneration"
+    | "directive"
+  >;
+  topic_messages: {
+    topicId: string;
+    messageId: number;
+    generation: Generated<number>;
+  };
+  assets: Defaults<Asset, "id" | "state">;
+  notes: Defaults<
+    Omit<Note, "sections"> & { sections: string; createdAt: number },
+    "id" | "sections"
+  >;
+  jobs: {
+    id: Generated<number>;
+    kind: JobKind;
+    payload: string;
+    attempts: Generated<number>;
+    key: string;
+    state: Generated<"pending" | "running" | "done" | "failed">;
+    runAfter: number;
+    lastError: string | null;
+    progress: string | null;
+  };
+  deliveries: Defaults<
+    Delivery & {
       key: string;
       state: "pending" | "done" | "failed" | "cancelled";
       createdAt: number;
-    };
-    usage: {
-      id: number;
-      createdAt: number;
-      day: string;
-      model: string;
-      purpose: string;
-      provider: string;
-      account: string;
-      groupId: string | null;
-      task: string | null;
-      input: number | null;
-      output: number | null;
-      cacheRead: number | null;
-      cacheWrite: number | null;
-      durationMs: number | null;
-    };
-    memories: MemoryRow;
-  }
+    },
+    "id" | "state"
+  >;
+  usage: {
+    id: Generated<number>;
+    createdAt: number;
+    day: string;
+    model: string;
+    purpose: string;
+    provider: string;
+    account: string;
+    groupId: string | null;
+    task: string | null;
+    input: number | null;
+    output: number | null;
+    cacheRead: number | null;
+    cacheWrite: number | null;
+    durationMs: number | null;
+  };
+  memories: {
+    groupId: string;
+    userId: string;
+    key: string;
+    content: string;
+    sourceMessageId: number | null;
+    updatedAt: number;
+  };
 }
 
-export type Database = Context["model"];
+export type Database = Kysely<Tables>;
+export type MessageRow = Selectable<Tables["messages"]>;
+export type JobRow = Selectable<Tables["jobs"]>;
+export type NoteRow = Selectable<Tables["notes"]>;
+export type UsageRow = Selectable<Tables["usage"]>;
 
-export function defineModels(model: Database): void {
-  const messageContent = model.define<Segment[]>({
-    type: "binary",
-    dump: (value: Segment[] | null) =>
-      value === null ? null : encodeContent(value),
-    load: (value: ArrayBuffer | null) =>
-      value === null ? null : decodeContent(value),
-    initial: [],
-  });
+export async function createTables(db: Database): Promise<void> {
+  await db.schema
+    .createTable("groups")
+    .ifNotExists()
+    .addColumn("id", "text", (column) => column.primaryKey())
+    .addColumn("cursor", "integer", (column) => column.notNull().defaultTo(0))
+    .addColumn("aiEnabled", "integer", (column) =>
+      column.notNull().defaultTo(1),
+    )
+    .execute();
 
-  model.extend(
-    "groups",
-    {
-      id: "string",
-      cursor: "integer",
-      aiEnabled: { type: "boolean", initial: true },
-    },
-    { primary: "id" },
-  );
+  await db.schema
+    .createTable("messages")
+    .ifNotExists()
+    .addColumn("id", "integer", (column) => column.primaryKey().autoIncrement())
+    .addColumn("groupId", "text", (column) =>
+      column.notNull().references("groups.id"),
+    )
+    .addColumn("messageId", "text", (column) => column.notNull())
+    .addColumn("userId", "text", (column) => column.notNull())
+    .addColumn("displayName", "text", (column) => column.notNull())
+    .addColumn("sentAt", "integer", (column) => column.notNull())
+    .addColumn("receivedAt", "integer", (column) => column.notNull())
+    .addColumn("text", "text", (column) => column.notNull())
+    .addColumn("content", "blob", (column) => column.notNull())
+    .addColumn("replyTo", "text")
+    .addColumn("isBot", "integer", (column) => column.notNull().defaultTo(0))
+    .addColumn("addressed", "integer", (column) =>
+      column.notNull().defaultTo(0),
+    )
+    .addColumn("role", "text", (column) => column.notNull())
+    .addColumn("command", "integer", (column) => column.notNull().defaultTo(0))
+    .addColumn("awaitingReply", "integer", (column) =>
+      column.notNull().defaultTo(0),
+    )
+    .addColumn("recalledAt", "integer")
+    .addColumn("noteId", "integer")
+    .addUniqueConstraint("messages_group_message", ["groupId", "messageId"])
+    .execute();
 
-  model.extend(
-    "messages",
-    {
-      id: "unsigned",
-      groupId: { type: "string" },
-      messageId: { type: "string" },
-      userId: { type: "string" },
-      displayName: { type: "text" },
-      sentAt: { type: "integer" },
-      receivedAt: { type: "integer" },
-      text: "text",
-      content: messageContent,
-      replyTo: { type: "string", nullable: true },
-      isBot: { type: "boolean", initial: false },
-      addressed: { type: "boolean", initial: false },
-      role: "string",
-      command: { type: "boolean", initial: false },
-      awaitingReply: { type: "boolean", initial: false },
-      recalledAt: { type: "integer", nullable: true },
-      noteId: { type: "integer", nullable: true },
-    },
-    {
-      autoInc: true,
-      unique: [["groupId", "messageId"]],
-      indexes: [
-        ["groupId", "id"],
-        ["groupId", "sentAt"],
-      ],
-      foreign: { groupId: ["groups", "id"] },
-    },
-  );
+  await db.schema
+    .createTable("topics")
+    .ifNotExists()
+    .addColumn("id", "text", (column) => column.primaryKey())
+    .addColumn("groupId", "text", (column) =>
+      column.notNull().references("groups.id"),
+    )
+    .addColumn("title", "text", (column) => column.notNull())
+    .addColumn("description", "text", (column) =>
+      column.notNull().defaultTo(""),
+    )
+    .addColumn("focus", "text", (column) => column.notNull().defaultTo(""))
+    .addColumn("mode", "text", (column) => column.notNull())
+    .addColumn("ownerId", "text")
+    .addColumn("state", "text", (column) =>
+      column.notNull().defaultTo("active"),
+    )
+    .addColumn("lastActiveAt", "integer", (column) => column.notNull())
+    .addColumn("lastSourceId", "integer", (column) =>
+      column.notNull().defaultTo(0),
+    )
+    .addColumn("revision", "integer", (column) => column.notNull().defaultTo(0))
+    .addColumn("generation", "integer", (column) =>
+      column.notNull().defaultTo(0),
+    )
+    .addColumn("noteGeneration", "integer", (column) =>
+      column.notNull().defaultTo(-1),
+    )
+    .addColumn("directive", "text", (column) =>
+      column.notNull().defaultTo("auto"),
+    )
+    .addColumn("directiveMessageId", "integer")
+    .addColumn("endedAtMessageId", "integer")
+    .execute();
 
-  model.migrate(
-    "messages",
-    { segments: "json", rawJson: "text" },
-    async (db) => {
-      let after = 0;
+  await db.schema
+    .createTable("topic_messages")
+    .ifNotExists()
+    .addColumn("topicId", "text", (column) =>
+      column.notNull().references("topics.id"),
+    )
+    .addColumn("messageId", "integer", (column) =>
+      column.notNull().references("messages.id"),
+    )
+    .addColumn("generation", "integer", (column) =>
+      column.notNull().defaultTo(0),
+    )
+    .addPrimaryKeyConstraint("topic_messages_primary", ["topicId", "messageId"])
+    .execute();
 
-      while (true) {
-        const messages = await db.get(
-          "messages",
-          { id: { $gt: after } },
-          {
-            fields: ["id", "segments"],
-            sort: { id: "asc" },
-            limit: 500,
-          },
-        );
+  await db.schema
+    .createTable("assets")
+    .ifNotExists()
+    .addColumn("id", "integer", (column) => column.primaryKey().autoIncrement())
+    .addColumn("messageId", "integer", (column) =>
+      column.notNull().references("messages.id"),
+    )
+    .addColumn("kind", "text", (column) => column.notNull())
+    .addColumn("reference", "text", (column) => column.notNull())
+    .addColumn("state", "text", (column) =>
+      column.notNull().defaultTo("pending"),
+    )
+    .addColumn("path", "text")
+    .addColumn("interpretation", "text")
+    .addColumn("error", "text")
+    .addUniqueConstraint("assets_message_reference", [
+      "messageId",
+      "kind",
+      "reference",
+    ])
+    .execute();
 
-        if (messages.length === 0) {
-          break;
-        }
+  await db.schema
+    .createTable("notes")
+    .ifNotExists()
+    .addColumn("id", "integer", (column) => column.primaryKey().autoIncrement())
+    .addColumn("topicId", "text", (column) =>
+      column.notNull().references("topics.id"),
+    )
+    .addColumn("groupId", "text", (column) => column.notNull())
+    .addColumn("revision", "integer", (column) => column.notNull())
+    .addColumn("sourceThrough", "integer", (column) => column.notNull())
+    .addColumn("generation", "integer", (column) => column.notNull())
+    .addColumn("markdown", "text", (column) => column.notNull())
+    .addColumn("sections", "text", (column) => column.notNull().defaultTo("[]"))
+    .addColumn("path", "text", (column) => column.notNull())
+    .addColumn("createdAt", "integer", (column) => column.notNull())
+    .addUniqueConstraint("notes_topic_generation", ["topicId", "generation"])
+    .execute();
 
-        await db.upsert(
-          "messages",
-          messages.map(({ id, segments }) => ({
-            id,
-            content: segments!,
-          })),
-        );
-        after = messages.at(-1)!.id;
-      }
-    },
-  );
+  await db.schema
+    .createTable("jobs")
+    .ifNotExists()
+    .addColumn("id", "integer", (column) => column.primaryKey().autoIncrement())
+    .addColumn("kind", "text", (column) => column.notNull())
+    .addColumn("key", "text", (column) => column.notNull().unique())
+    .addColumn("payload", "text", (column) => column.notNull())
+    .addColumn("state", "text", (column) =>
+      column.notNull().defaultTo("pending"),
+    )
+    .addColumn("attempts", "integer", (column) => column.notNull().defaultTo(0))
+    .addColumn("runAfter", "integer", (column) => column.notNull())
+    .addColumn("lastError", "text")
+    .addColumn("progress", "text")
+    .execute();
 
-  model.extend(
-    "topics",
-    {
-      id: "string",
-      groupId: { type: "string" },
-      title: "text",
-      description: { type: "text", initial: "" },
-      focus: { type: "text", initial: "" },
-      mode: "string",
-      ownerId: { type: "string", nullable: true },
-      state: { type: "string", initial: "active" },
-      lastActiveAt: { type: "integer" },
-      lastSourceId: { type: "integer", initial: 0 },
-      revision: { type: "integer", initial: 0 },
-      generation: { type: "integer", initial: 0 },
-      noteGeneration: {
-        type: "integer",
-        initial: -1,
-      },
-      directive: { type: "string", initial: "auto" },
-      directiveMessageId: {
-        type: "integer",
-        nullable: true,
-      },
-      endedAtMessageId: { type: "integer", nullable: true },
-    },
-    {
-      primary: "id",
-      indexes: [["groupId", "lastActiveAt"]],
-      foreign: { groupId: ["groups", "id"] },
-    },
-  );
+  await db.schema
+    .createTable("deliveries")
+    .ifNotExists()
+    .addColumn("id", "integer", (column) => column.primaryKey().autoIncrement())
+    .addColumn("key", "text", (column) => column.notNull().unique())
+    .addColumn("groupId", "text", (column) => column.notNull())
+    .addColumn("topicId", "text")
+    .addColumn("noteId", "integer")
+    .addColumn("kind", "text", (column) => column.notNull())
+    .addColumn("content", "text", (column) => column.notNull())
+    .addColumn("state", "text", (column) =>
+      column.notNull().defaultTo("pending"),
+    )
+    .addColumn("createdAt", "integer", (column) => column.notNull())
+    .execute();
 
-  model.extend(
-    "topic_messages",
-    {
-      topicId: { type: "string" },
-      messageId: { type: "integer" },
-      generation: { type: "integer", initial: 0 },
-    },
-    {
-      primary: ["topicId", "messageId"],
-      foreign: { topicId: ["topics", "id"], messageId: ["messages", "id"] },
-    },
-  );
+  await db.schema
+    .createTable("usage")
+    .ifNotExists()
+    .addColumn("id", "integer", (column) => column.primaryKey().autoIncrement())
+    .addColumn("createdAt", "integer", (column) => column.notNull())
+    .addColumn("day", "text", (column) => column.notNull())
+    .addColumn("model", "text", (column) => column.notNull())
+    .addColumn("purpose", "text", (column) => column.notNull())
+    .addColumn("provider", "text", (column) => column.notNull())
+    .addColumn("account", "text", (column) => column.notNull())
+    .addColumn("groupId", "text")
+    .addColumn("task", "text")
+    .addColumn("input", "integer")
+    .addColumn("output", "integer")
+    .addColumn("cacheRead", "integer")
+    .addColumn("cacheWrite", "integer")
+    .addColumn("durationMs", "integer")
+    .execute();
 
-  model.extend(
-    "assets",
-    {
-      id: "unsigned",
-      messageId: { type: "integer" },
-      kind: "string",
-      reference: "text",
-      state: { type: "string", initial: "pending" },
-      path: { type: "text", nullable: true },
-      interpretation: { type: "text", nullable: true },
-      error: { type: "text", nullable: true },
-    },
-    {
-      autoInc: true,
-      unique: [["messageId", "kind", "reference"]],
-      indexes: ["path"],
-      foreign: { messageId: ["messages", "id"] },
-    },
-  );
+  await db.schema
+    .createTable("memories")
+    .ifNotExists()
+    .addColumn("groupId", "text", (column) =>
+      column.notNull().references("groups.id"),
+    )
+    .addColumn("userId", "text", (column) => column.notNull())
+    .addColumn("key", "text", (column) => column.notNull())
+    .addColumn("content", "text", (column) => column.notNull())
+    .addColumn("sourceMessageId", "integer", (column) =>
+      column.references("messages.id"),
+    )
+    .addColumn("updatedAt", "integer", (column) => column.notNull())
+    .addPrimaryKeyConstraint("memories_primary", ["groupId", "userId", "key"])
+    .execute();
 
-  model.extend(
-    "notes",
-    {
-      id: "unsigned",
-      topicId: { type: "string" },
-      groupId: { type: "string" },
-      revision: "integer",
-      sourceThrough: { type: "integer" },
-      generation: "integer",
-      markdown: "text",
-      sections: { type: "json", initial: [] },
-      path: "text",
-      createdAt: { type: "integer" },
-    },
-    {
-      autoInc: true,
-      unique: [["topicId", "generation"]],
-      foreign: { topicId: ["topics", "id"] },
-    },
-  );
-
-  model.extend(
-    "jobs",
-    {
-      id: "unsigned",
-      kind: "string",
-      key: { type: "string" },
-      payload: "json",
-      state: { type: "string", initial: "pending" },
-      attempts: { type: "integer", initial: 0 },
-      runAfter: { type: "integer" },
-      lastError: { type: "text", nullable: true },
-      progress: { type: "text", nullable: true },
-    },
-    { autoInc: true, unique: ["key"], indexes: [["state", "runAfter"]] },
-  );
-
-  model.extend(
-    "deliveries",
-    {
-      id: "unsigned",
-      key: { type: "string" },
-      groupId: { type: "string" },
-      topicId: { type: "string", nullable: true },
-      noteId: { type: "integer", nullable: true },
-      kind: "string",
-      content: "text",
-      state: { type: "string", initial: "pending" },
-      createdAt: { type: "integer" },
-    },
-    { autoInc: true, unique: ["key"] },
-  );
-
-  model.extend(
-    "usage",
-    {
-      id: "unsigned",
-      createdAt: { type: "integer" },
-      day: "string",
-      model: "string",
-      purpose: "string",
-      provider: { type: "text", initial: "" },
-      account: { type: "string", initial: "" },
-      groupId: { type: "string", nullable: true },
-      task: { type: "string", nullable: true },
-      input: { type: "integer", nullable: true },
-      output: { type: "integer", nullable: true },
-      cacheRead: { type: "integer", nullable: true },
-      cacheWrite: { type: "integer", nullable: true },
-      durationMs: { type: "integer", nullable: true },
-    },
-    { autoInc: true },
-  );
-
-  model.extend(
-    "memories",
-    {
-      groupId: { type: "string" },
-      userId: { type: "string" },
-      key: "string",
-      content: "text",
-      sourceMessageId: { type: "integer", nullable: true },
-      updatedAt: { type: "integer" },
-    },
-    {
-      primary: ["groupId", "userId", "key"],
-      indexes: ["sourceMessageId"],
-      foreign: {
-        groupId: ["groups", "id"],
-        sourceMessageId: ["messages", "id"],
-      },
-    },
-  );
+  await db.schema
+    .createIndex("index:messages:groupId+id")
+    .ifNotExists()
+    .on("messages")
+    .columns(["groupId", "id"])
+    .execute();
+  await db.schema
+    .createIndex("index:messages:groupId+sentAt")
+    .ifNotExists()
+    .on("messages")
+    .columns(["groupId", "sentAt"])
+    .execute();
+  await db.schema
+    .createIndex("index:topics:groupId+lastActiveAt")
+    .ifNotExists()
+    .on("topics")
+    .columns(["groupId", "lastActiveAt"])
+    .execute();
+  await db.schema
+    .createIndex("index:assets:path")
+    .ifNotExists()
+    .on("assets")
+    .columns(["path"])
+    .execute();
+  await db.schema
+    .createIndex("index:jobs:state+runAfter")
+    .ifNotExists()
+    .on("jobs")
+    .columns(["state", "runAfter"])
+    .execute();
+  await db.schema
+    .createIndex("index:memories:sourceMessageId")
+    .ifNotExists()
+    .on("memories")
+    .columns(["sourceMessageId"])
+    .execute();
 }

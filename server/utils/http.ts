@@ -92,7 +92,7 @@ export function pagination(event: H3Event) {
   return { page, limit, offset: (page - 1) * limit };
 }
 
-export function search(event: H3Event): RegExp | undefined {
+export function search(event: H3Event): string | undefined {
   const query = queryParam(event, "q")?.trim();
 
   if (!query) {
@@ -106,7 +106,7 @@ export function search(event: H3Event): RegExp | undefined {
     });
   }
 
-  return new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+  return query;
 }
 
 export function requireItem<T>(item: T | undefined): T {

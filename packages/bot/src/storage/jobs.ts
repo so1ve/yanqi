@@ -4,9 +4,15 @@ import { setTimeout as delay } from "node:timers/promises";
 import { Logger } from "@koishijs/core";
 
 import type { Job, JobKind, JobPayloads, Topic } from "../types.ts";
-import type { Database } from "./schema.ts";
+import type { Database, JobRow } from "./schema.ts";
 
 const logger = new Logger("yanqi:jobs");
+
+export function decodeJob(row: JobRow) {
+  const payload: JobPayloads[JobKind] = JSON.parse(row.payload);
+
+  return { ...row, payload };
+}
 
 export async function enqueueJob<K extends JobKind>(
   db: Database,
@@ -15,10 +21,18 @@ export async function enqueueJob<K extends JobKind>(
   payload: JobPayloads[K],
   now = Date.now(),
 ): Promise<number> {
-  const [existing] = await db.get("jobs", { key });
+  const existing = await db
+    .selectFrom("jobs")
+    .selectAll()
+    .where("key", "=", key)
+    .executeTakeFirst();
 
   if (!existing) {
-    const job = await db.create("jobs", { kind, key, payload, runAfter: now });
+    const job = await db
+      .insertInto("jobs")
+      .values({ kind, key, payload: JSON.stringify(payload), runAfter: now })
+      .returning("id")
+      .executeTakeFirstOrThrow();
 
     logger.info("任务 #%s 入队：kind=%s key=%s", job.id, kind, key);
 
@@ -29,17 +43,17 @@ export async function enqueueJob<K extends JobKind>(
     payload.requested &&
     existing.state !== "running"
   ) {
-    await db.set(
-      "jobs",
-      { id: existing.id },
-      {
-        payload,
+    await db
+      .updateTable("jobs")
+      .set({
+        payload: JSON.stringify(payload),
         state: "pending",
         attempts: 0,
         runAfter: now,
         lastError: null,
-      },
-    );
+      })
+      .where("id", "=", existing.id)
+      .execute();
     logger.info("任务 #%s 重新安排：kind=%s key=%s", existing.id, kind, key);
   }
 
@@ -56,26 +70,26 @@ export class JobQueue {
 
   public async recover(): Promise<void> {
     await this.cancelRequests("服务重启，跳过旧对话");
-    await this.#db.set("jobs", { state: "running" }, { state: "pending" });
+    await this.#db
+      .updateTable("jobs")
+      .set({ state: "pending" })
+      .where("state", "=", "running")
+      .execute();
   }
 
   public cancelRequests(reason: string): Promise<void> {
-    return this.#db.transact(async (db) => {
-      await db.set(
-        "jobs",
-        {
-          $and: [
-            { $or: [{ kind: "intent" }, { kind: "observe" }] },
-            { $or: [{ state: "pending" }, { state: "running" }] },
-          ],
-        },
-        { state: "failed", lastError: reason },
-      );
-      await db.set(
-        "messages",
-        { awaitingReply: true },
-        { awaitingReply: false },
-      );
+    return this.#db.transaction().execute(async (db) => {
+      await db
+        .updateTable("jobs")
+        .set({ state: "failed", lastError: reason })
+        .where("kind", "in", ["intent", "observe"])
+        .where("state", "in", ["pending", "running"])
+        .execute();
+      await db
+        .updateTable("messages")
+        .set({ awaitingReply: 0 })
+        .where("awaitingReply", "=", 1)
+        .execute();
     });
   }
 
@@ -85,7 +99,9 @@ export class JobQueue {
     payload: JobPayloads[K],
     now = Date.now(),
   ): Promise<number> {
-    return this.#db.transact((db) => enqueueJob(db, kind, key, payload, now));
+    return this.#db
+      .transaction()
+      .execute((db) => enqueueJob(db, kind, key, payload, now));
   }
 
   public async summarize(
@@ -108,49 +124,57 @@ export class JobQueue {
   }
 
   public async hasDetection(groupId: string): Promise<boolean> {
-    const rows = await this.#db.get(
-      "jobs",
-      {
-        "kind": "detect",
-        "state": { $ne: "done" },
-        "payload.groupId": groupId,
-      },
-      { limit: 1 },
-    );
+    const row = await this.#db
+      .selectFrom("jobs")
+      .select("id")
+      .where("kind", "=", "detect")
+      .where("state", "!=", "done")
+      .where((eb) =>
+        eb(
+          eb.fn<string>("json_extract", ["payload", eb.val("$.groupId")]),
+          "=",
+          groupId,
+        ),
+      )
+      .limit(1)
+      .executeTakeFirst();
 
-    return rows.length > 0;
+    return row !== undefined;
   }
 
   public claim(kind: JobKind, now: number): Promise<Job | null> {
-    return this.#db.transact(async (db) => {
+    return this.#db.transaction().execute(async (db) => {
       const pausedGroups =
         kind === "detect" || kind === "summarize"
-          ? (await db.get("groups", { aiEnabled: false }, ["id"])).map(
-              (group) => group.id,
-            )
+          ? (
+              await db
+                .selectFrom("groups")
+                .select("id")
+                .where("aiEnabled", "=", 0)
+                .execute()
+            ).map((group) => group.id)
           : [];
       const pausedTopics =
         kind === "summarize"
           ? (
-              await db.get(
-                "topics",
-                {
-                  groupId: pausedGroups,
-                  mode: "auto",
-                },
-                ["id"],
-              )
+              await db
+                .selectFrom("topics")
+                .select("id")
+                .where("groupId", "in", pausedGroups)
+                .where("mode", "=", "auto")
+                .execute()
             ).map((topic) => topic.id)
           : [];
-      const pending = await db.get(
-        "jobs",
-        {
-          kind,
-          state: "pending",
-          runAfter: { $lte: now },
-        },
-        { sort: { id: "asc" } },
-      );
+      const pending = (
+        await db
+          .selectFrom("jobs")
+          .selectAll()
+          .where("kind", "=", kind)
+          .where("state", "=", "pending")
+          .where("runAfter", "<=", now)
+          .orderBy("id")
+          .execute()
+      ).map(decodeJob);
 
       // 等待工具所需的任务优先，其他任务仍按入队顺序处理。
       pending.sort(
@@ -159,21 +183,40 @@ export class JobQueue {
       );
       const busyRequests =
         kind === "intent"
-          ? await db.get("messages", {
-              id: (
-                await db.get("jobs", { kind: "intent", state: "running" })
-              ).map(
-                ({ payload }) => (payload as JobPayloads["intent"]).messageId,
-              ),
-            })
+          ? await db
+              .selectFrom("messages")
+              .select(["groupId", "userId"])
+              .where(
+                "id",
+                "in",
+                db
+                  .selectFrom("jobs")
+                  .select((eb) =>
+                    eb
+                      .fn<number>("json_extract", [
+                        "payload",
+                        eb.val("$.messageId"),
+                      ])
+                      .as("messageId"),
+                  )
+                  .where("kind", "=", "intent")
+                  .where("state", "=", "running"),
+              )
+              .execute()
           : [];
       const requests =
         kind === "intent"
-          ? await db.get("messages", {
-              id: pending.map(
-                ({ payload }) => (payload as JobPayloads["intent"]).messageId,
-              ),
-            })
+          ? await db
+              .selectFrom("messages")
+              .select(["id", "groupId", "userId"])
+              .where(
+                "id",
+                "in",
+                pending.map(
+                  ({ payload }) => (payload as JobPayloads["intent"]).messageId,
+                ),
+              )
+              .execute()
           : [];
       const job = pending.find(({ payload }) => {
         if (kind === "detect") {
@@ -205,72 +248,98 @@ export class JobQueue {
         return null;
       }
 
-      await db.set(
-        "jobs",
-        { id: job.id },
-        { state: "running", attempts: job.attempts + 1 },
-      );
+      await db
+        .updateTable("jobs")
+        .set({ state: "running", attempts: job.attempts + 1 })
+        .where("id", "=", job.id)
+        .execute();
 
       return { ...job, attempts: job.attempts + 1 } as Job;
     });
   }
 
   public async get(groupId: string, id: number) {
-    const [job] = await this.#db.get("jobs", {
-      id,
-      "payload.groupId": groupId,
-    });
+    const row = await this.#db
+      .selectFrom("jobs")
+      .selectAll()
+      .where("id", "=", id)
+      .where((eb) =>
+        eb(
+          eb.fn<string>("json_extract", ["payload", eb.val("$.groupId")]),
+          "=",
+          groupId,
+        ),
+      )
+      .executeTakeFirst();
 
-    if (!job) {
+    if (!row) {
       throw new Error(`本群没有任务 #${id}`);
     }
 
-    return job;
+    return decodeJob(row);
   }
 
   public async forAsset(assetId: number) {
-    const [job] = await this.#db.get("jobs", {
-      "kind": "asset",
-      "payload.assetId": assetId,
-    });
+    const row = await this.#db
+      .selectFrom("jobs")
+      .selectAll()
+      .where("kind", "=", "asset")
+      .where((eb) =>
+        eb(
+          eb.fn<number>("json_extract", ["payload", eb.val("$.assetId")]),
+          "=",
+          assetId,
+        ),
+      )
+      .executeTakeFirst();
 
-    assert.ok(job, `附件 #${assetId} 缺少处理任务`);
+    assert.ok(row, `附件 #${assetId} 缺少处理任务`);
 
-    return job;
+    return decodeJob(row);
   }
 
-  public forGroup(groupId: string) {
-    return this.#db.get(
-      "jobs",
-      {
-        "payload.groupId": groupId,
-        "state": { $ne: "done" },
-      },
-      { sort: { id: "desc" }, limit: 20 },
-    );
+  public async forGroup(groupId: string) {
+    const rows = await this.#db
+      .selectFrom("jobs")
+      .selectAll()
+      .where("state", "!=", "done")
+      .where((eb) =>
+        eb(
+          eb.fn<string>("json_extract", ["payload", eb.val("$.groupId")]),
+          "=",
+          groupId,
+        ),
+      )
+      .orderBy("id", "desc")
+      .limit(20)
+      .execute();
+
+    return rows.map(decodeJob);
   }
 
   public async restart(groupId: string, id: number): Promise<boolean> {
-    const result = await this.#db.transact((db) =>
-      db.set(
-        "jobs",
-        {
-          id,
-          "payload.groupId": groupId,
-          "$or": [{ state: "failed" }, { state: "done" }],
-          "$not": { $or: [{ kind: "intent" }, { kind: "observe" }] },
-        },
-        {
-          state: "pending",
-          attempts: 0,
-          runAfter: Date.now(),
-          lastError: null,
-          progress: null,
-        },
-      ),
-    );
+    const result = await this.#db
+      .updateTable("jobs")
+      .set({
+        state: "pending",
+        attempts: 0,
+        runAfter: Date.now(),
+        lastError: null,
+        progress: null,
+      })
+      .where("id", "=", id)
+      .where("state", "in", ["failed", "done"])
+      .where("kind", "not in", ["intent", "observe"])
+      .where((eb) =>
+        eb(
+          eb.fn<string>("json_extract", ["payload", eb.val("$.groupId")]),
+          "=",
+          groupId,
+        ),
+      )
+      .executeTakeFirst();
 
-    return result.matched === 1;
+    return result.numUpdatedRows === 1n;
   }
 
   public async wait(
@@ -308,41 +377,52 @@ export class JobQueue {
   }
 
   public async done(id: number): Promise<void> {
-    await this.#db.transact((db) =>
-      db.set("jobs", { id }, { state: "done", lastError: null }),
-    );
+    await this.#db
+      .updateTable("jobs")
+      .set({ state: "done", lastError: null })
+      .where("id", "=", id)
+      .execute();
   }
 
   public async reportProgress(id: number, progress: string): Promise<void> {
-    await this.#db.transact((db) => db.set("jobs", { id }, { progress }));
+    await this.#db
+      .updateTable("jobs")
+      .set({ progress })
+      .where("id", "=", id)
+      .execute();
     logger.info("任务 #%s 进度：%s", id, progress);
   }
 
   public async interrupt(job: Job): Promise<void> {
-    await this.#db.set(
-      "jobs",
-      { id: job.id },
-      {
+    await this.#db
+      .updateTable("jobs")
+      .set({
         state:
           job.kind === "intent" || job.kind === "observe"
             ? "failed"
             : "pending",
         lastError: "管理员停止了机器人",
         runAfter: Date.now(),
-      },
-    );
+      })
+      .where("id", "=", job.id)
+      .execute();
   }
 
   public forTopic(topicId: string) {
-    return this.#db.get(
-      "jobs",
-      { "kind": "summarize", "payload.topicId": topicId },
-      {
-        fields: ["id", "state", "progress", "lastError", "runAfter"],
-        sort: { id: "desc" },
-        limit: 3,
-      },
-    );
+    return this.#db
+      .selectFrom("jobs")
+      .select(["id", "state", "progress", "lastError", "runAfter"])
+      .where("kind", "=", "summarize")
+      .where((eb) =>
+        eb(
+          eb.fn<string>("json_extract", ["payload", eb.val("$.topicId")]),
+          "=",
+          topicId,
+        ),
+      )
+      .orderBy("id", "desc")
+      .limit(3)
+      .execute();
   }
 
   public async retry(
@@ -360,39 +440,35 @@ export class JobQueue {
     const runAfter =
       after ?? now + Math.min(300_000, 5000 * 2 ** Math.min(job.attempts, 6));
 
-    await this.#db.transact((db) =>
-      db.set(
-        "jobs",
-        { id: job.id },
-        {
-          state,
-          runAfter,
-          attempts: after === undefined ? job.attempts : job.attempts - 1,
-          lastError: error,
-        },
-      ),
-    );
+    await this.#db
+      .updateTable("jobs")
+      .set({
+        state,
+        runAfter,
+        attempts: after === undefined ? job.attempts : job.attempts - 1,
+        lastError: error,
+      })
+      .where("id", "=", job.id)
+      .execute();
 
     return { state, runAfter };
   }
 
   public async retryFailed(groupId: string): Promise<number> {
-    const result = await this.#db.transact((db) =>
-      db.set(
-        "jobs",
-        {
-          "$not": { $or: [{ kind: "intent" }, { kind: "observe" }] },
-          "state": "failed",
-          "payload.groupId": groupId,
-        },
-        {
-          state: "pending",
-          attempts: 0,
-          runAfter: Date.now(),
-        },
-      ),
-    );
+    const result = await this.#db
+      .updateTable("jobs")
+      .set({ state: "pending", attempts: 0, runAfter: Date.now() })
+      .where("kind", "not in", ["intent", "observe"])
+      .where("state", "=", "failed")
+      .where((eb) =>
+        eb(
+          eb.fn<string>("json_extract", ["payload", eb.val("$.groupId")]),
+          "=",
+          groupId,
+        ),
+      )
+      .executeTakeFirst();
 
-    return result.matched!;
+    return Number(result.numUpdatedRows);
   }
 }

@@ -21,9 +21,12 @@ export default defineEventHandler(async (event) => {
   const path = join(bot.store.directory, "assets", name);
 
   requireItem(
-    (
-      await bot.database.get("assets", { path }, { fields: ["id"], limit: 1 })
-    )[0],
+    await bot.database
+      .selectFrom("assets")
+      .select("id")
+      .where("path", "=", path)
+      .limit(1)
+      .executeTakeFirst(),
   );
   const bytes = await readDataFile(bot.store.directory, path);
 

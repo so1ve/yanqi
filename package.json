@@ -21,7 +21,6 @@
     "dompurify": "catalog:",
     "h3": "catalog:",
     "kysely": "catalog:",
-    "kysely-node-native-sqlite": "catalog:",
     "marked": "catalog:",
     "naive-ui": "catalog:",
     "nuxt": "catalog:",
@@ -31,8 +30,6 @@
     "vue-router": "catalog:"
   },
   "devDependencies": {
-    "@koishijs/plugin-database-sqlite": "catalog:",
-    "@minatojs/sql.js": "catalog:",
     "@so1ve/eslint-config": "catalog:",
     "@so1ve/prettier-config": "catalog:",
     "@types/node": "catalog:",

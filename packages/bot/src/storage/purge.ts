@@ -1,6 +1,8 @@
 import { rm, stat } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 
+import type { Note } from "../types.ts";
+import { decodeJob } from "./jobs.ts";
 import type { Database } from "./schema.ts";
 
 export async function purgeHistory(
@@ -23,27 +25,35 @@ export async function purgeHistory(
   const cutoff = Date.now() - days * 86_400_000;
   const root = `${resolve(directory)}${sep}`;
 
-  for (const group of await db.get("groups", {}, ["id"])) {
+  for (const group of await db.selectFrom("groups").select("id").execute()) {
     let after = 0;
 
     while (true) {
-      const batch = await db.transact(async (db) => {
-        const downloading = await db.get(
-          "jobs",
-          { kind: "asset", state: "running" },
-          { fields: ["id"], limit: 1 },
-        );
-        const jobs = await db.get(
-          "jobs",
-          { "payload.groupId": group.id },
-          {
-            fields: ["id", "kind", "payload", "state"],
-          },
-        );
+      const batch = await db.transaction().execute(async (db) => {
+        const downloading = await db
+          .selectFrom("jobs")
+          .select("id")
+          .where("kind", "=", "asset")
+          .where("state", "=", "running")
+          .limit(1)
+          .executeTakeFirst();
+        const jobs = (
+          await db
+            .selectFrom("jobs")
+            .selectAll()
+            .where((eb) =>
+              eb(
+                eb.fn<string>("json_extract", ["payload", eb.val("$.groupId")]),
+                "=",
+                group.id,
+              ),
+            )
+            .execute()
+        ).map(decodeJob);
 
         // 对话可以回查任意历史；后台任务也可能仍在读取附件或原文。
         if (
-          downloading.length > 0 ||
+          downloading !== undefined ||
           jobs.some(
             (job) =>
               job.state === "running" ||
@@ -53,34 +63,41 @@ export async function purgeHistory(
           return { skipped: true, through: after };
         }
 
-        const messages = await db.get(
-          "messages",
-          {
-            groupId: group.id,
-            sentAt: { $lt: cutoff },
-            id: { $gt: after },
-          },
-          { fields: ["id"], sort: { id: "asc" }, limit: 500 },
-        );
+        const messages = await db
+          .selectFrom("messages")
+          .select("id")
+          .where("groupId", "=", group.id)
+          .where("sentAt", "<", cutoff)
+          .where("id", ">", after)
+          .orderBy("id")
+          .limit(500)
+          .execute();
 
         if (messages.length === 0) {
           return null;
         }
 
         const ids = messages.map(({ id }) => id);
-        const links = await db.get("topic_messages", { messageId: ids }, [
-          "messageId",
-        ]);
-        const memories = await db.get("memories", { sourceMessageId: ids }, [
-          "sourceMessageId",
-        ]);
-        const topics = await db.get("topics", { groupId: group.id }, [
-          "directiveMessageId",
-          "endedAtMessageId",
-        ]);
-        const notes = await db.get("notes", { groupId: group.id }, [
-          "sections",
-        ]);
+        const links = await db
+          .selectFrom("topic_messages")
+          .select("messageId")
+          .where("messageId", "in", ids)
+          .execute();
+        const memories = await db
+          .selectFrom("memories")
+          .select("sourceMessageId")
+          .where("sourceMessageId", "in", ids)
+          .execute();
+        const topics = await db
+          .selectFrom("topics")
+          .select(["directiveMessageId", "endedAtMessageId"])
+          .where("groupId", "=", group.id)
+          .execute();
+        const notes = await db
+          .selectFrom("notes")
+          .select("sections")
+          .where("groupId", "=", group.id)
+          .execute();
         const protectedIds = new Set<number | null>([
           ...links.map((link) => link.messageId),
           ...memories.map((memory) => memory.sourceMessageId),
@@ -89,9 +106,11 @@ export async function purgeHistory(
             topic.endedAtMessageId,
           ]),
           // 历史版本可能引用已经移出当前话题的消息。
-          ...notes.flatMap((note) =>
-            note.sections.flatMap((section) => section.messageIds),
-          ),
+          ...notes.flatMap((note) => {
+            const sections: Note["sections"] = JSON.parse(note.sections);
+
+            return sections.flatMap((section) => section.messageIds);
+          }),
           ...jobs
             .filter(
               (job) => job.state === "pending" && "messageIds" in job.payload,
@@ -101,21 +120,24 @@ export async function purgeHistory(
             ),
         ]);
         const expired = ids.filter((id) => !protectedIds.has(id));
-        const assets = await db.get("assets", { messageId: expired }, [
-          "id",
-          "path",
-        ]);
+        const assets = await db
+          .selectFrom("assets")
+          .select(["id", "path"])
+          .where("messageId", "in", expired)
+          .execute();
 
         for (const path of new Set(
           assets.flatMap((asset) => (asset.path ? [asset.path] : [])),
         )) {
-          const retained = await db.get(
-            "assets",
-            { path, messageId: { $nin: expired } },
-            { fields: ["id"], limit: 1 },
-          );
+          const retained = await db
+            .selectFrom("assets")
+            .select("id")
+            .where("path", "=", path)
+            .where("messageId", "not in", expired)
+            .limit(1)
+            .executeTakeFirst();
 
-          if (retained.length > 0) {
+          if (retained) {
             continue;
           }
 
@@ -150,9 +172,19 @@ export async function purgeHistory(
               payload.messageIds.some((id) => messageIds.has(id))),
         );
 
-        await db.remove("jobs", { id: obsoleteJobs.map((job) => job.id) });
-        await db.remove("assets", { messageId: expired });
-        await db.remove("messages", { id: expired });
+        await db
+          .deleteFrom("jobs")
+          .where(
+            "id",
+            "in",
+            obsoleteJobs.map((job) => job.id),
+          )
+          .execute();
+        await db
+          .deleteFrom("assets")
+          .where("messageId", "in", expired)
+          .execute();
+        await db.deleteFrom("messages").where("id", "in", expired).execute();
         result.messages += expired.length;
         result.assets += assets.length;
 

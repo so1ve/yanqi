@@ -19,24 +19,30 @@ export class Recordings {
     focus: string,
     messageIds: number[],
   ): Promise<{ topic: Topic; taskId: number }> {
-    return this.#db.transact(async (db) => {
-      const topic = await db.create("topics", {
-        id: randomUUID(),
-        groupId,
-        title,
-        focus,
-        mode: "manual",
-        ownerId: null,
-        state: "closed",
-        lastActiveAt: Date.now(),
-        directive: "hold",
-        directiveMessageId: null,
-      });
+    return this.#db.transaction().execute(async (db) => {
+      const topic = await db
+        .insertInto("topics")
+        .values({
+          id: randomUUID(),
+          groupId,
+          title,
+          focus,
+          mode: "manual",
+          ownerId: null,
+          state: "closed",
+          lastActiveAt: Date.now(),
+          directive: "hold",
+          directiveMessageId: null,
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
 
       await linkMessages(db, topic.id, messageIds);
-      const [saved] = await db.get("topics", { id: topic.id });
-
-      assert.ok(saved);
+      const saved = await db
+        .selectFrom("topics")
+        .selectAll()
+        .where("id", "=", topic.id)
+        .executeTakeFirstOrThrow();
       const taskId = await enqueueJob(
         db,
         "summarize",
@@ -63,43 +69,46 @@ export class Recordings {
       following?: boolean;
     },
   ): Promise<Topic> {
-    return this.#db.transact(async (db) => {
+    return this.#db.transaction().execute(async (db) => {
       const messages = [...options.messages];
 
       if (options.following) {
-        const subsequent = await db.get(
-          "messages",
-          {
-            groupId: request.groupId,
-            id: { $gt: request.id },
-            isBot: false,
-            command: false,
-          },
-          ["id"],
-        );
+        const subsequent = await db
+          .selectFrom("messages")
+          .select("id")
+          .where("groupId", "=", request.groupId)
+          .where("id", ">", request.id)
+          .where("isBot", "=", 0)
+          .where("command", "=", 0)
+          .execute();
 
         messages.push(...subsequent.map((message) => message.id));
       }
 
-      const topic = await db.create("topics", {
-        id: randomUUID(),
-        groupId: request.groupId,
-        title: options.title,
-        focus: options.focus ?? "",
-        mode: "manual",
-        ownerId: request.userId,
-        state: options.following ? "active" : "closed",
-        lastActiveAt: request.receivedAt,
-        directive: options.directive,
-        directiveMessageId: request.id,
-      });
+      const topic = await db
+        .insertInto("topics")
+        .values({
+          id: randomUUID(),
+          groupId: request.groupId,
+          title: options.title,
+          focus: options.focus ?? "",
+          mode: "manual",
+          ownerId: request.userId,
+          state: options.following ? "active" : "closed",
+          lastActiveAt: request.receivedAt,
+          directive: options.directive,
+          directiveMessageId: request.id,
+        })
+        .returningAll()
+        .executeTakeFirstOrThrow();
 
       await linkMessages(db, topic.id, messages);
-      const [linked] = await db.get("topics", { id: topic.id });
 
-      assert.ok(linked);
-
-      return linked;
+      return db
+        .selectFrom("topics")
+        .selectAll()
+        .where("id", "=", topic.id)
+        .executeTakeFirstOrThrow();
     });
   }
 
@@ -109,8 +118,12 @@ export class Recordings {
     include: number[],
     directive?: Topic["directive"],
   ): Promise<Topic> {
-    return this.#db.transact(async (db) => {
-      const [existing] = await db.get("topics", { id: topicId });
+    return this.#db.transaction().execute(async (db) => {
+      const existing = await db
+        .selectFrom("topics")
+        .selectAll()
+        .where("id", "=", topicId)
+        .executeTakeFirst();
 
       assert.ok(existing);
       const endedAtMessageId = existing.endedAtMessageId ?? through;
@@ -123,18 +136,23 @@ export class Recordings {
         );
       }
 
-      const [topic] = await db.get("topics", { id: topicId });
+      const topic = await db
+        .selectFrom("topics")
+        .selectAll()
+        .where("id", "=", topicId)
+        .executeTakeFirstOrThrow();
+      const removed = await db
+        .deleteFrom("topic_messages")
+        .where("topicId", "=", topicId)
+        .where("messageId", ">=", endedAtMessageId)
+        .executeTakeFirst();
 
-      assert.ok(topic);
-      const removed = await db.remove("topic_messages", {
-        topicId,
-        messageId: { $gte: endedAtMessageId },
-      });
-
-      if (removed.removed) {
-        const links = await db.get("topic_messages", { topicId }, [
-          "messageId",
-        ]);
+      if (removed.numDeletedRows > 0n) {
+        const links = await db
+          .selectFrom("topic_messages")
+          .select("messageId")
+          .where("topicId", "=", topicId)
+          .execute();
 
         topic.lastSourceId = links.reduce(
           (latest, link) => Math.max(latest, link.messageId),
@@ -150,18 +168,18 @@ export class Recordings {
         topic.directiveMessageId = through;
       }
 
-      await db.set(
-        "topics",
-        { id: topicId },
-        {
+      await db
+        .updateTable("topics")
+        .set({
           state: topic.state,
           lastSourceId: topic.lastSourceId,
           generation: topic.generation,
           endedAtMessageId,
           directive: topic.directive,
           directiveMessageId: topic.directiveMessageId,
-        },
-      );
+        })
+        .where("id", "=", topicId)
+        .execute();
 
       return topic;
     });
@@ -171,58 +189,73 @@ export class Recordings {
     groupId: string,
     ownerId: string,
   ): Promise<Topic | null> {
-    const [topic] = await this.#db.get(
-      "topics",
-      {
-        groupId,
-        ownerId,
-        mode: "manual",
-        state: "closed",
-        endedAtMessageId: { $exists: true },
-      },
-      { sort: { endedAtMessageId: "desc" }, limit: 1 },
+    return (
+      (await this.#db
+        .selectFrom("topics")
+        .selectAll()
+        .where("groupId", "=", groupId)
+        .where("ownerId", "=", ownerId)
+        .where("mode", "=", "manual")
+        .where("state", "=", "closed")
+        .where("endedAtMessageId", "is not", null)
+        .orderBy("endedAtMessageId", "desc")
+        .limit(1)
+        .executeTakeFirst()) ?? null
     );
-
-    return topic ?? null;
   }
 
   public revise(
     topicId: string,
     changes: { messageIds?: number[]; focus?: string },
   ): Promise<Topic> {
-    return this.#db.transact(async (db) => {
-      const [topic] = await db.get("topics", { id: topicId });
+    return this.#db.transaction().execute(async (db) => {
+      const topic = await db
+        .selectFrom("topics")
+        .selectAll()
+        .where("id", "=", topicId)
+        .executeTakeFirstOrThrow();
 
-      assert.ok(topic);
       if (changes.messageIds !== undefined) {
         const wanted = new Set(changes.messageIds);
-        const links = await db.get("topic_messages", { topicId });
+        const links = await db
+          .selectFrom("topic_messages")
+          .select("messageId")
+          .where("topicId", "=", topicId)
+          .execute();
         const removed = links.filter((link) => !wanted.has(link.messageId));
 
         if (removed.length > 0) {
-          await db.remove("topic_messages", {
-            topicId,
-            messageId: removed.map((link) => link.messageId),
-          });
-          await db.set(
-            "topics",
-            { id: topicId },
-            {
+          await db
+            .deleteFrom("topic_messages")
+            .where("topicId", "=", topicId)
+            .where(
+              "messageId",
+              "in",
+              removed.map((link) => link.messageId),
+            )
+            .execute();
+          await db
+            .updateTable("topics")
+            .set({
               generation: topic.generation + 1,
               lastSourceId: changes.messageIds.reduce(
                 (latest, id) => Math.max(latest, id),
                 0,
               ),
-            },
-          );
+            })
+            .where("id", "=", topicId)
+            .execute();
         }
 
         await linkMessages(db, topicId, changes.messageIds);
       }
 
-      const [updated] = await db.get("topics", { id: topicId });
+      const updated = await db
+        .selectFrom("topics")
+        .selectAll()
+        .where("id", "=", topicId)
+        .executeTakeFirstOrThrow();
 
-      assert.ok(updated);
       if (
         (changes.focus !== undefined && changes.focus !== topic.focus) ||
         updated.generation === topic.generation
@@ -230,17 +263,17 @@ export class Recordings {
         updated.generation++;
         updated.focus = changes.focus ?? updated.focus;
 
-        await db.set(
-          "topics",
-          { id: topicId },
-          { focus: updated.focus, generation: updated.generation },
-        );
+        await db
+          .updateTable("topics")
+          .set({ focus: updated.focus, generation: updated.generation })
+          .where("id", "=", topicId)
+          .execute();
         // 修改要求或按原范围重做时，重新提取原文，避免复用旧正文。
-        await db.set(
-          "topic_messages",
-          { topicId },
-          { generation: updated.generation },
-        );
+        await db
+          .updateTable("topic_messages")
+          .set({ generation: updated.generation })
+          .where("topicId", "=", topicId)
+          .execute();
       }
 
       return updated;

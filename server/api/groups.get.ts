@@ -3,7 +3,7 @@ import { defineEventHandler } from "h3";
 export default defineEventHandler(async (event) => {
   const { bot } = event.context;
 
-  const stored = await bot.database.get("groups", {});
+  const stored = await bot.database.selectFrom("groups").selectAll().execute();
   const live = bot.online ? await bot.napcat.getGroupList() : [];
   const ids = [
     ...new Set([
@@ -22,7 +22,7 @@ export default defineEventHandler(async (event) => {
         name: remote?.group_name ?? id,
         members: remote?.member_count ?? null,
         enabled: bot.config.GROUP_IDS.includes(id),
-        automatic: saved?.aiEnabled ?? true,
+        automatic: saved ? Boolean(saved.aiEnabled) : true,
         admins: bot.config.GROUP_ADMINS[id] ?? [],
         statistics: saved ? await bot.store.groups.statistics(id) : null,
       };

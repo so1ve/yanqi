@@ -4,7 +4,7 @@ import type { Segment } from "../types.ts";
 
 type CompactSegment = [type: string, data: Record<string, unknown>];
 
-export function encodeContent(segments: Segment[]): ArrayBuffer {
+export function encodeContent(segments: Segment[]): Uint8Array {
   const content: CompactSegment[] = segments.map(({ type, data }) => [
     type,
     data,
@@ -16,10 +16,10 @@ export function encodeContent(segments: Segment[]): ArrayBuffer {
     },
   });
 
-  return Uint8Array.from(compressed).buffer;
+  return compressed;
 }
 
-export function decodeContent(buffer: ArrayBuffer): Segment[] {
+export function decodeContent(buffer: Uint8Array): Segment[] {
   const content: CompactSegment[] = JSON.parse(
     brotliDecompressSync(Buffer.from(buffer)).toString("utf8"),
   );

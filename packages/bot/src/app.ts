@@ -1,6 +1,3 @@
-import { mkdir } from "node:fs/promises";
-import { join } from "node:path";
-
 import type { Context, ForkScope, Session } from "@koishijs/core";
 import { Adapter, App, Logger } from "@koishijs/core";
 import { HTTP } from "@koishijs/plugin-http";
@@ -11,8 +8,7 @@ import { configurationError } from "./config.ts";
 import { recallMessage, saveMessage } from "./onebot/message.ts";
 import { Secretary } from "./secretary.ts";
 import { purgeHistory } from "./storage/purge.ts";
-import { defineModels } from "./storage/schema.ts";
-import { SQLite } from "./storage/sqlite.ts";
+import type { Database } from "./storage/schema.ts";
 import { Store } from "./storage/store.ts";
 
 export class Yanqi {
@@ -25,6 +21,7 @@ export class Yanqi {
   #poll: (() => void) | null = null;
   #events = new Set<Promise<void>>();
   #operation: Promise<void> = Promise.resolve();
+  public readonly database: Database;
   public readonly store: Store;
   #logger = new Logger("yanqi");
 
@@ -32,12 +29,14 @@ export class Yanqi {
     app: App,
     config: Config,
     directory: string,
+    database: Database,
     autostart: boolean,
   ) {
     this.#app = app;
     this.#config = structuredClone(config);
     this.#enabled = autostart;
-    this.store = new Store(app.database, directory, this.#config);
+    this.database = database;
+    this.store = new Store(database, directory, this.#config);
 
     const groups = app
       .platform("onebot")
@@ -74,23 +73,20 @@ export class Yanqi {
   public static async open(
     config: Config,
     directory: string,
+    database: Database,
     autostart = true,
   ): Promise<Yanqi> {
-    await mkdir(directory, { recursive: true });
-
     const app = new App({
       nickname: ["言栖", "小栖"],
       autoAssign: false,
       autoAuthorize: 0,
     });
 
-    app.plugin(SQLite, { path: join(directory, "yanqi.sqlite") });
-    defineModels(app.model);
     app.plugin(HTTP, {});
 
     await app.start();
 
-    const bot = new Yanqi(app, config, directory, autostart);
+    const bot = new Yanqi(app, config, directory, database, autostart);
 
     await bot.store.jobs.recover();
     await bot.configure(config);
@@ -99,10 +95,6 @@ export class Yanqi {
       .catch((error) => bot.#logger.warn("清理历史失败：%s", String(error)));
 
     return bot;
-  }
-
-  public get database() {
-    return this.#app.database;
   }
 
   public get config(): Readonly<Config> {
@@ -136,10 +128,14 @@ export class Yanqi {
   public configure(config: Config): Promise<void> {
     return this.#change(async () => {
       await this.#stop();
-      await this.database.upsert(
-        "groups",
-        config.GROUP_IDS.map((id) => ({ id })),
-      );
+      if (config.GROUP_IDS.length > 0) {
+        await this.database
+          .insertInto("groups")
+          .values(config.GROUP_IDS.map((id) => ({ id })))
+          .onConflict((conflict) => conflict.column("id").doNothing())
+          .execute();
+      }
+
       Object.assign(this.#config, structuredClone(config));
       this.#logger.level =
         config.LOG_LEVEL === "debug" ? Logger.DEBUG : Logger.INFO;

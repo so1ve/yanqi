@@ -7,11 +7,24 @@ export async function linkMessages(
   topicId: string,
   ids: number[],
 ): Promise<void> {
-  const [topic] = await db.get("topics", { id: topicId });
+  const topic = await db
+    .selectFrom("topics")
+    .selectAll()
+    .where("id", "=", topicId)
+    .executeTakeFirst();
 
   assert.ok(topic);
-  const messages = await db.get("messages", { id: ids });
-  const links = await db.get("topic_messages", { topicId, messageId: ids });
+  const messages = await db
+    .selectFrom("messages")
+    .select(["id", "groupId", "sentAt"])
+    .where("id", "in", ids)
+    .execute();
+  const links = await db
+    .selectFrom("topic_messages")
+    .select("messageId")
+    .where("topicId", "=", topicId)
+    .where("messageId", "in", ids)
+    .execute();
   const existing = new Set(links.map((link) => link.messageId));
   let added = 0;
 
@@ -27,26 +40,29 @@ export async function linkMessages(
       continue;
     }
 
-    await db.create("topic_messages", {
-      topicId,
-      messageId: id,
-      generation: topic.generation + added + 1,
-    });
+    await db
+      .insertInto("topic_messages")
+      .values({
+        topicId,
+        messageId: id,
+        generation: topic.generation + added + 1,
+      })
+      .execute();
     topic.lastSourceId = Math.max(topic.lastSourceId, id);
     topic.lastActiveAt = Math.max(topic.lastActiveAt, source.sentAt);
     added++;
   }
 
   if (added) {
-    await db.set(
-      "topics",
-      { id: topicId },
-      {
+    await db
+      .updateTable("topics")
+      .set({
         generation: topic.generation + added,
         lastSourceId: topic.lastSourceId,
         lastActiveAt: topic.lastActiveAt,
-      },
-    );
+      })
+      .where("id", "=", topicId)
+      .execute();
   }
 }
 
@@ -54,15 +70,25 @@ export async function messageChanged(
   db: Database,
   messageId: number,
 ): Promise<void> {
-  const links = await db.get("topic_messages", { messageId });
+  const links = await db
+    .selectFrom("topic_messages")
+    .select("topicId")
+    .where("messageId", "=", messageId)
+    .execute();
 
   for (const { topicId } of links) {
-    const [topic] = await db.get("topics", { id: topicId });
+    const topic = await db
+      .updateTable("topics")
+      .set((eb) => ({ generation: eb("generation", "+", 1) }))
+      .where("id", "=", topicId)
+      .returning("generation")
+      .executeTakeFirstOrThrow();
 
-    assert.ok(topic);
-    const generation = topic.generation + 1;
-
-    await db.set("topic_messages", { topicId, messageId }, { generation });
-    await db.set("topics", { id: topicId }, { generation });
+    await db
+      .updateTable("topic_messages")
+      .set({ generation: topic.generation })
+      .where("topicId", "=", topicId)
+      .where("messageId", "=", messageId)
+      .execute();
   }
 }

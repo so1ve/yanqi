@@ -1,35 +1,39 @@
-import { $ } from "@koishijs/core";
 import { defineEventHandler } from "h3";
 
 import { groupParam, pagination, search } from "~~/server/utils/http";
 
 export default defineEventHandler(async (event) => {
   const { bot } = event.context;
-  const db = bot.database;
   const groupId = groupParam(event);
-
   const { page, limit, offset } = pagination(event);
-  const pattern = search(event);
-  const query = {
-    groupId,
-    ...(pattern
-      ? {
-          $or: [
-            { title: pattern },
-            { description: pattern },
-            { focus: pattern },
-          ],
-        }
-      : {}),
-  };
+  const text = search(event);
+  let query = bot.database.selectFrom("topics").where("groupId", "=", groupId);
+
+  if (text) {
+    query = query.where((eb) =>
+      eb.or([
+        eb(eb.fn<number>("contains_text", ["title", eb.val(text)]), ">", 0),
+        eb(
+          eb.fn<number>("contains_text", ["description", eb.val(text)]),
+          ">",
+          0,
+        ),
+        eb(eb.fn<number>("contains_text", ["focus", eb.val(text)]), ">", 0),
+      ]),
+    );
+  }
+
   const [items, total] = await Promise.all([
-    db.get("topics", query, {
-      sort: { lastActiveAt: "desc" },
-      offset,
-      limit,
-    }),
-    db.eval("topics", (row) => $.count(row.id), query),
+    query
+      .selectAll()
+      .orderBy("lastActiveAt", "desc")
+      .offset(offset)
+      .limit(limit)
+      .execute(),
+    query
+      .select((eb) => eb.fn.countAll<number>().as("count"))
+      .executeTakeFirstOrThrow(),
   ]);
 
-  return { items, total, page, limit };
+  return { items, total: total.count, page, limit };
 });
