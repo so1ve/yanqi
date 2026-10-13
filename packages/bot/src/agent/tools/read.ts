@@ -1,24 +1,11 @@
 import { Type } from "typebox";
 
-import { conversationBefore, messageChunks } from "../../recording/messages.ts";
-import {
-  selectSources,
-  sourceId,
-  sourceScope,
-} from "../../recording/sources.ts";
 import { taskStatus } from "../../tasks/status.ts";
 import { beijingTime } from "../../utils/time.ts";
 import type { ToolContext } from "./context.ts";
-import { getTopic, object, revision, tool, topicId } from "./context.ts";
+import { getTopic, object, tool, topicId } from "./context.ts";
 
-const page = Type.Optional(Type.Integer({ minimum: 0 }));
 const parameters = Type.Union([
-  object({
-    action: Type.Literal("context"),
-    beforeId: Type.Optional(sourceId),
-  }),
-  object({ action: Type.Literal("history"), scope: sourceScope, page }),
-  object({ action: Type.Literal("note"), topicId, revision, page }),
   object({ action: Type.Literal("versions"), topicId }),
   object({
     action: Type.Literal("search"),
@@ -28,67 +15,15 @@ const parameters = Type.Union([
 ]);
 
 export function readTool(context: ToolContext) {
-  const { store, message, config } = context;
-  const size = Math.floor(config.AI_INPUT_CHARS / 4);
+  const { store, message } = context;
 
   return tool(
     context,
     "read",
-    "读取本群本地资料。context 从 beforeId 之前向前读聊天，省略则从当前请求前开始；返回的 nextBeforeId 可继续回溯，以确定讨论起止点。history 按 scope 分页读完整原文；note 分页读纪要，revision 可指定第几版，省略读最新版；versions 列出一篇纪要的历史版本及保存时间，不返回正文；search 字面查标题、正文或编号；inspect 查看范围、最新保存版本和进度。nextPage 不为空说明还有后文。已知完整范围可直接记录，无需先读完；发送全文用 edit_record(action=send)。",
+    "查阅本群纪要概况，不返回全文。search 按标题、正文或编号查找文档；versions 列出历史版本；inspect 查看范围、保存版本和进度。查聊天、定位讨论范围或理解纪要内容交给 subagent；发送全文用 edit_record(action=send)。",
     parameters,
     async (args) => {
       switch (args.action) {
-        case "context": {
-          return conversationBefore(
-            store,
-            message.groupId,
-            Math.min(
-              args.beforeId ? Number(args.beforeId.slice(1)) : message.id,
-              message.id,
-            ),
-            size,
-          );
-        }
-
-        case "history": {
-          const sources = await selectSources(store, message, args.scope);
-          const pages = await messageChunks(store, sources, size);
-          const page = args.page ?? 0;
-
-          return {
-            sourceCount: sources.length,
-            page,
-            nextPage: page + 1 < pages.length ? page + 1 : null,
-            messages: pages[page] ?? [],
-          };
-        }
-
-        case "note": {
-          const topic = await getTopic(context, args.topicId);
-          const note = await store.notes.find(topic.id, args.revision);
-
-          if (!note) {
-            if (args.revision !== undefined) {
-              throw new Error(
-                `「${topic.title}」没有已保存的第 ${args.revision} 版`,
-              );
-            }
-
-            return "尚无已保存的纪要版本。用 inspect 查看进度，或用 history 读取原文。";
-          }
-
-          const page = args.page ?? 0;
-
-          return {
-            topicId: topic.id,
-            revision: note.revision,
-            page,
-            nextPage:
-              (page + 1) * size < note.markdown.length ? page + 1 : null,
-            markdown: note.markdown.slice(page * size, (page + 1) * size),
-          };
-        }
-
         case "versions": {
           const topic = await getTopic(context, args.topicId);
 
@@ -119,16 +54,9 @@ export function readTool(context: ToolContext) {
             );
           }
 
-          const pages = await messageChunks(
-            store,
-            await store.messages.search(message.groupId, query, message.id - 1),
-            size,
-          );
-
           return {
             records: [],
-            historyMatches: pages[0] ?? [],
-            hint: "未找到匹配的纪要，historyMatches 是按字面查到的原文片段。范围和目标已明确时可直接 record，无需先找到纪要。",
+            hint: "未找到匹配的纪要。查原始聊天可委派 subagent；范围和目标已明确时可直接 record。",
           };
         }
 

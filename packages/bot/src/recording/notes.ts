@@ -104,6 +104,7 @@ export class Notes {
       const footer = "[查看完整原文](transcript.md)\n";
       let sections: Note["sections"] = [];
       let content = "";
+      let excerpt = "";
 
       for await (const progress of this.#summary.sections(
         topic,
@@ -115,13 +116,19 @@ export class Notes {
           .map((section) => section.content)
           .filter(Boolean)
           .join("\n\n");
+        const outline = content
+          .split("\n")
+          .filter((line) => /^#{2,3} |^\*\*/.test(line))
+          .join("；");
+
+        excerpt = (outline || content).slice(0, 600);
         await writeMarkdown(
           path,
           `${header}\n\n> 草稿：整理尚未完成。\n\n${content}\n\n${footer}`,
         );
         await this.#store.jobs.reportProgress(
           job.id,
-          `已提取 ${progress.completed}/${progress.total} 批；草稿：${path}`,
+          `共 ${sources.length} 条原文，已提取 ${progress.completed}/${progress.total} 批。${excerpt ? `已整理内容摘录：${excerpt}。` : ""}草稿：${path}`,
         );
         this.#logger.info(
           "纪要草稿已更新：topic=%s sections=%s file=%s",
@@ -133,7 +140,7 @@ export class Notes {
 
       await this.#store.jobs.reportProgress(
         job.id,
-        `正在合并相关观点；草稿：${path}`,
+        `正在合并相关观点。${excerpt ? `已整理内容摘录：${excerpt}。` : ""}草稿：${path}`,
       );
       content = await this.#summary.compose(sections);
       const markdown = `${header}\n\n${content || "所选原文中没有找到与整理要求相关的内容。"}\n\n${footer}`;
@@ -150,7 +157,7 @@ export class Notes {
       );
       await this.#store.jobs.reportProgress(
         job.id,
-        `第 ${note.revision} 版已保存：${path}`,
+        `第 ${note.revision} 版已保存：${path}${excerpt ? `。已整理内容摘录：${excerpt}` : ""}`,
       );
       this.#logger.info(
         "纪要 #%s 已保存：group=%s topic=%s revision=%s sources=%s file=%s",

@@ -21,6 +21,8 @@ interface RequestOptions {
   tools?: AgentState["tools"];
   thinking?: boolean;
   finishTurn?: FinishTurn;
+  signal?: AbortSignal;
+  maxTurns?: number;
 }
 
 export class AgentRuntime {
@@ -124,7 +126,11 @@ export class AgentRuntime {
     options: RequestOptions,
     schema?: TSchema,
   ): Promise<string> {
-    this.#signal.throwIfAborted();
+    const signal = options.signal
+      ? AbortSignal.any([this.#signal, options.signal])
+      : this.#signal;
+
+    signal.throwIfAborted();
     const config = this.#config;
     const endpoint = options.model ?? config.AI_MODEL;
     const tools = options.tools ?? [];
@@ -187,12 +193,12 @@ export class AgentRuntime {
       },
       toolExecution: "sequential",
       ...(options.finishTurn ? { finishTurn: options.finishTurn } : {}),
-      streamFn: async (_model, context, options) => {
+      streamFn: async (_model, context, streamOptions) => {
         try {
-          if (++turns > 8) {
+          if (++turns > (options.maxTurns ?? 8)) {
             throw new AiError(
               "处理对话",
-              `${purpose} 已达到单次请求的 8 轮模型调用上限`,
+              `${purpose} 已达到单次请求的 ${options.maxTurns ?? 8} 轮模型调用上限`,
             );
           }
 
@@ -201,7 +207,7 @@ export class AgentRuntime {
           timeout.unref();
 
           return streamSimple(model, context, {
-            ...options,
+            ...streamOptions,
             apiKey: endpoint.apiKey,
             maxTokens,
             maxRetries: 0,
@@ -280,13 +286,13 @@ export class AgentRuntime {
 
     const abort = () => agent.abort();
 
-    this.#signal.addEventListener("abort", abort, { once: true });
+    signal.addEventListener("abort", abort, { once: true });
     try {
-      this.#signal.throwIfAborted();
+      signal.throwIfAborted();
       await agent.prompt(input);
-      this.#signal.throwIfAborted();
+      signal.throwIfAborted();
     } finally {
-      this.#signal.removeEventListener("abort", abort);
+      signal.removeEventListener("abort", abort);
       clearTimeout(timeout);
       const messages = agent.state.messages.filter(
         (message) => message.role === "assistant",

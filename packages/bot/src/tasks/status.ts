@@ -25,6 +25,13 @@ export async function taskStatus(store: Store, groupId: string, id: number) {
     state: job.state,
     attempts: job.attempts,
     progress: job.progress,
+    context: topic
+      ? {
+          title: topic.title,
+          description: topic.description,
+          focus: topic.focus,
+        }
+      : null,
     error: job.lastError,
     retryAt:
       job.state === "pending" && job.lastError

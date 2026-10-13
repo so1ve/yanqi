@@ -8,13 +8,6 @@ import type { Notes } from "../recording/notes.ts";
 import type { Store } from "../storage/store.ts";
 import { beijingDate, beijingTime } from "../utils/time.ts";
 import type { Ai } from "./ai.ts";
-import { followTool } from "./tools/follow.ts";
-import { memoryTool } from "./tools/memory.ts";
-import { readTool } from "./tools/read.ts";
-import { recordTools } from "./tools/records.ts";
-import { replyTool } from "./tools/reply.ts";
-import { settingsTools } from "./tools/settings.ts";
-import { taskTool } from "./tools/tasks.ts";
 
 export async function handleRequest(
   messageId: number,
@@ -37,13 +30,17 @@ export async function handleRequest(
     await messageChunks(store, [message], Math.floor(config.AI_INPUT_CHARS / 4))
   ).flat();
   const quoted = quote
-    ? await contextWithin(store, [quote], Math.floor(config.AI_INPUT_CHARS / 6))
+    ? await contextWithin(
+        store,
+        [quote],
+        Math.min(1500, Math.floor(config.AI_INPUT_CHARS / 6)),
+      )
     : [];
   const context = await conversationBefore(
     store,
     message.groupId,
     message.id,
-    Math.floor(config.AI_INPUT_CHARS / 4),
+    Math.min(3000, Math.floor(config.AI_INPUT_CHARS / 4)),
   );
   const memories = await store.memories.list(message.groupId, message.userId);
   const tools = {
@@ -101,14 +98,6 @@ export async function handleRequest(
       timeZone: "Asia/Shanghai",
       today: beijingDate(message.sentAt),
     },
-    [
-      replyTool(tools),
-      readTool(tools),
-      ...recordTools(tools),
-      followTool(tools),
-      taskTool(tools),
-      memoryTool(tools),
-      ...settingsTools(tools),
-    ],
+    tools,
   );
 }
