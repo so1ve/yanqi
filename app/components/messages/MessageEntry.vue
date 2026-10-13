@@ -23,7 +23,7 @@ const continued = computed(
 </script>
 
 <template>
-  <li class="message-entry">
+  <li class="message-entry" :data-message-id="message.id">
     <div v-if="day" class="day-divider">
       <span>{{ day }}</span>
     </div>

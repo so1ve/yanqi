@@ -1,17 +1,70 @@
 <script setup lang="ts">
 import { NVirtualList } from "naive-ui";
-import { computed, useTemplateRef, watch } from "vue";
+import {
+  nextTick,
+  onMounted,
+  onScopeDispose,
+  ref,
+  useTemplateRef,
+  watch,
+} from "vue";
 
 import MessageEntry from "~/components/messages/MessageEntry.vue";
 import type { Message } from "~/types/api";
+import type { ReadingPosition } from "~/utils/message-cache";
 
-const emit = defineEmits<{ updated: [messageId: number]; loadMore: [] }>();
-const props = defineProps<{ messages: Message[]; virtual?: boolean }>();
+const emit = defineEmits<{
+  updated: [messageId: number];
+  loadMore: [];
+  position: [position: ReadingPosition];
+}>();
+const props = defineProps<{ messages: Message[]; loading: boolean }>();
 const virtualList =
   useTemplateRef<InstanceType<typeof NVirtualList>>("virtualList");
-const messages = computed(() =>
-  props.messages.toSorted((a, b) => a.sentAt - b.sentAt || a.id - b.id),
-);
+const interacted = ref(false);
+let restoring = false;
+let scrollFrame = 0;
+
+function position(): ReadingPosition | undefined {
+  const container = virtualList.value?.getScrollContainer();
+
+  if (!container?.clientHeight) {
+    return;
+  }
+
+  const viewport = container.getBoundingClientRect();
+  const entry = [
+    ...container.querySelectorAll<HTMLElement>("[data-message-id]"),
+  ].find((entry) => entry.getBoundingClientRect().bottom > viewport.top + 1);
+
+  if (entry) {
+    return {
+      messageId: Number(entry.dataset.messageId),
+      offset: viewport.top - entry.getBoundingClientRect().top,
+    };
+  }
+}
+
+async function restore(target: ReadingPosition): Promise<void> {
+  restoring = true;
+  await nextTick();
+  virtualList.value?.scrollTo({ key: target.messageId });
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  const container = virtualList.value?.getScrollContainer();
+  const entry = container?.querySelector<HTMLElement>(
+    `[data-message-id="${target.messageId}"]`,
+  );
+
+  if (container && entry) {
+    container.scrollTop +=
+      entry.getBoundingClientRect().top -
+      container.getBoundingClientRect().top +
+      Math.min(target.offset, entry.getBoundingClientRect().height - 1);
+  }
+
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  restoring = false;
+}
 
 function loadMore(): void {
   const container = virtualList.value?.getScrollContainer();
@@ -25,14 +78,49 @@ function loadMore(): void {
   }
 }
 
+function onScroll(): void {
+  loadMore();
+
+  cancelAnimationFrame(scrollFrame);
+  scrollFrame = requestAnimationFrame(() => {
+    if (interacted.value && !restoring) {
+      const current = position();
+
+      if (current) {
+        emit("position", current);
+      }
+    }
+  });
+}
+
 watch(() => props.messages.length, loadMore, { flush: "post" });
+watch(
+  () => props.loading,
+  (loading) => {
+    if (!loading) {
+      loadMore();
+    }
+  },
+  { flush: "post" },
+);
+onScopeDispose(() => cancelAnimationFrame(scrollFrame));
+onMounted(() =>
+  virtualList.value?.getScrollContainer()?.setAttribute("tabindex", "0"),
+);
+defineExpose({ position, restore });
 </script>
 
 <template>
-  <section aria-label="聊天记录" class="conversation">
+  <section
+    aria-label="聊天记录"
+    class="conversation"
+    @keydown="interacted = true"
+    @pointerdown="interacted = true"
+    @touchstart.passive="interacted = true"
+    @wheel.passive="interacted = true"
+  >
     <NImageGroup>
       <NVirtualList
-        v-if="virtual"
         ref="virtualList"
         class="virtual-messages"
         item-resizable
@@ -43,7 +131,7 @@ watch(() => props.messages.length, loadMore, { flush: "post" });
         :padding-bottom="4"
         visible-items-tag="ol"
         @resize="loadMore"
-        @scroll="loadMore"
+        @scroll="onScroll"
       >
         <template #default="{ item, index }">
           <MessageEntry
@@ -53,15 +141,6 @@ watch(() => props.messages.length, loadMore, { flush: "post" });
           />
         </template>
       </NVirtualList>
-      <ol v-else class="messages">
-        <MessageEntry
-          v-for="(message, index) in messages"
-          :key="message.id"
-          :message
-          :previous="messages[index - 1]"
-          @updated="emit('updated', message.id)"
-        />
-      </ol>
     </NImageGroup>
   </section>
 </template>
@@ -72,13 +151,6 @@ watch(() => props.messages.length, loadMore, { flush: "post" });
   border: 1px solid #e1e9ed;
   border-radius: 14px;
   background: #f1f5f6;
-}
-
-.messages {
-  max-width: 980px;
-  margin: 0 auto;
-  padding: 0;
-  list-style: none;
 }
 
 .virtual-messages {

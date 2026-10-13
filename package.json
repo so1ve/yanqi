@@ -20,6 +20,7 @@
     "@yanqi/bot": "workspace:*",
     "dompurify": "catalog:",
     "h3": "catalog:",
+    "idb": "catalog:",
     "kysely": "catalog:",
     "marked": "catalog:",
     "naive-ui": "catalog:",

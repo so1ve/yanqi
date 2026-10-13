@@ -13,7 +13,7 @@ export type RecordDetail =
 export type Overview = InternalApi["/api/overview"]["get"];
 export type LogEntry = InternalApi["/api/logs"]["get"][number];
 export type Message =
-  InternalApi["/api/groups/:groupId/messages"]["get"]["items"][number];
+  InternalApi["/api/groups/:groupId/messages/read"]["post"][number];
 export type Memory =
   InternalApi["/api/groups/:groupId/memories"]["get"]["items"][number];
 export type Usage = InternalApi["/api/groups/:groupId/usage"]["get"];

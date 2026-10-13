@@ -1,0 +1,268 @@
+import { computed, onMounted, onScopeDispose, ref, shallowRef } from "vue";
+
+import type { Message } from "~/types/api";
+import { api, errorText } from "~/utils/api";
+import type { ReadingBookmark, ReadingPosition } from "~/utils/message-cache";
+import {
+  cacheHistory,
+  cacheMessages,
+  readCachedMessages,
+  readHistory,
+  saveReadingPosition,
+} from "~/utils/message-cache";
+
+const batchSize = 50;
+
+export function useMessageHistory(groupId: string, source: string) {
+  const messages = shallowRef<Message[]>([]);
+  const ids = shallowRef<number[]>([]);
+  const loaded = ref(0);
+  const loading = ref(true);
+  const error = ref("");
+  const cacheError = ref("");
+  const bookmark = shallowRef<ReadingBookmark>();
+  const rows = new Map<number, Message>();
+  const controller = new AbortController();
+  let pendingPosition: ReadingBookmark | undefined;
+  let saveTimer: ReturnType<typeof setTimeout> | undefined;
+
+  async function cached<T>(
+    operation: () => Promise<T>,
+  ): Promise<T | undefined> {
+    if (cacheError.value) {
+      return;
+    }
+
+    try {
+      return await operation();
+    } catch {
+      cacheError.value = "浏览器缓存不可用，本次阅读位置不会保存。";
+    }
+  }
+
+  function display(count: number): void {
+    loaded.value = Math.min(count, ids.value.length);
+    messages.value = ids.value
+      .slice(0, loaded.value)
+      .flatMap((id) => (rows.has(id) ? [rows.get(id)!] : []));
+  }
+
+  const readMessages = async (messageIds: number[]): Promise<Message[]> =>
+    api(`groups/${groupId}/messages/read`, {
+      method: "POST",
+      body: { ids: messageIds },
+      signal: controller.signal,
+      timeout: 15_000,
+    });
+
+  async function fill(count: number, refresh = false): Promise<void> {
+    const requested = ids.value.slice(0, count);
+    const stored = await cached(() =>
+      readCachedMessages(
+        groupId,
+        requested.filter((id) => !rows.has(id)),
+      ),
+    );
+
+    for (const message of stored ?? []) {
+      rows.set(message.id, message);
+    }
+
+    const missing = refresh
+      ? requested
+      : requested.filter((id) => !rows.has(id));
+
+    for (let start = 0; start < missing.length; start += batchSize) {
+      const batch = missing.slice(start, start + batchSize);
+      const items = await readMessages(batch);
+      const found = new Set(items.map((message) => message.id));
+
+      for (const message of items) {
+        rows.set(message.id, message);
+      }
+
+      // 编号列表获取后，消息仍可能被历史清理删除。
+      const removed = new Set(batch.filter((id) => !found.has(id)));
+
+      if (removed.size > 0) {
+        ids.value = ids.value.filter((id) => !removed.has(id));
+      }
+
+      await cached(() => cacheMessages(items));
+    }
+
+    if (!controller.signal.aborted) {
+      display(count);
+      await cached(() =>
+        cacheHistory(source, { ids: ids.value, loaded: loaded.value }),
+      );
+    }
+  }
+
+  async function loadMore(): Promise<void> {
+    if (loading.value || error.value || loaded.value >= ids.value.length) {
+      return;
+    }
+
+    loading.value = true;
+
+    try {
+      await fill(loaded.value + batchSize);
+    } catch (cause) {
+      if (!controller.signal.aborted) {
+        error.value = errorText(cause);
+      }
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function refresh(reloadMessages = true): Promise<void> {
+    loading.value = true;
+    error.value = "";
+
+    try {
+      const currentIds = await api<number[]>(source, {
+        signal: controller.signal,
+        timeout: 15_000,
+      });
+
+      if (controller.signal.aborted) {
+        return;
+      }
+
+      ids.value = currentIds;
+
+      if (bookmark.value && !currentIds.includes(bookmark.value.messageId)) {
+        bookmark.value = undefined;
+      }
+
+      await fill(Math.max(loaded.value, batchSize), reloadMessages);
+    } catch (cause) {
+      if (!controller.signal.aborted) {
+        error.value = errorText(cause);
+      }
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function refreshMessage(messageId: number): Promise<void> {
+    try {
+      const items = await readMessages([messageId]);
+
+      for (const message of items) {
+        rows.set(message.id, message);
+      }
+
+      await cached(() => cacheMessages(items));
+      display(loaded.value);
+    } catch (cause) {
+      if (!controller.signal.aborted) {
+        error.value = errorText(cause);
+      }
+    }
+  }
+
+  async function reveal(messageId: number): Promise<boolean> {
+    const index = ids.value.indexOf(messageId);
+
+    if (index >= loaded.value) {
+      loading.value = true;
+
+      try {
+        await fill(index + 1);
+      } catch (cause) {
+        if (!controller.signal.aborted) {
+          error.value = errorText(cause);
+        }
+
+        return false;
+      } finally {
+        loading.value = false;
+      }
+    }
+
+    return index !== -1 && rows.has(messageId);
+  }
+
+  function savePosition(): void {
+    clearTimeout(saveTimer);
+    const position = pendingPosition;
+
+    if (position) {
+      pendingPosition = undefined;
+      void cached(() => saveReadingPosition(source, position));
+    }
+  }
+
+  function remember(position: ReadingPosition): void {
+    const message = rows.get(position.messageId);
+
+    if (!message) {
+      return;
+    }
+
+    pendingPosition = {
+      ...position,
+      sentAt: message.sentAt,
+      preview: `${message.displayName}: ${message.text || "附件消息"}`.slice(
+        0,
+        90,
+      ),
+    };
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(savePosition, 250);
+  }
+
+  async function initialize(): Promise<void> {
+    const saved = await cached(() => readHistory(source));
+
+    if (saved?.history) {
+      ids.value = saved.history.ids;
+      const stored = await cached(() =>
+        readCachedMessages(
+          groupId,
+          saved.history!.ids.slice(0, saved.history!.loaded),
+        ),
+      );
+
+      for (const message of stored ?? []) {
+        rows.set(message.id, message);
+      }
+
+      display(saved.history.loaded);
+    }
+
+    bookmark.value = saved?.bookmark;
+
+    if (!controller.signal.aborted) {
+      await refresh(false);
+    }
+  }
+
+  onMounted(() => {
+    window.addEventListener("pagehide", savePosition);
+    void initialize();
+  });
+  onScopeDispose(() => {
+    controller.abort();
+    window.removeEventListener("pagehide", savePosition);
+    savePosition();
+  });
+
+  return {
+    messages,
+    loading,
+    error,
+    cacheError,
+    bookmark,
+    total: computed(() => ids.value.length),
+    finished: computed(() => loaded.value >= ids.value.length),
+    loadMore,
+    refresh,
+    refreshMessage,
+    remember,
+    reveal,
+  };
+}
