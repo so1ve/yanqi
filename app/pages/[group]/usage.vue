@@ -24,8 +24,8 @@ const day = useQueryValue("day", (value) => {
     ? value
     : today;
 });
-const { data, loading, error, refresh } = useApiData<Usage>(() =>
-  groupId.value ? `groups/${groupId.value}/usage?day=${day.value}` : "",
+const { data, loading, error, refresh } = useApiData<Usage>(
+  () => `groups/${groupId.value}/usage?day=${day.value}`,
 );
 const totals = computed(() =>
   data.value?.models.reduce(
@@ -106,7 +106,7 @@ const columns: DataTableColumns<Usage["models"][number]> = [
 
 <template>
   <PageHeading
-    :description="`${group?.name ?? '请先选择一个群'} · 统计模型服务返回的 token 用量，费用以服务商账单为准`"
+    :description="`${group?.name ?? groupId} · 统计模型服务返回的 token 用量，费用以服务商账单为准`"
     title="模型用量"
   >
     <NDatePicker

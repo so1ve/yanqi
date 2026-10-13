@@ -22,10 +22,9 @@ const page = useQueryValue("page", (value) => positiveInteger(value) ?? 1);
 watch(searchQuery, (value) => {
   query.value = value;
 });
-const { data, error, loading, refresh } = useApiData<Page<Topic>>(() =>
-  groupId.value
-    ? `groups/${groupId.value}/records?page=${page.value}&q=${encodeURIComponent(searchQuery.value)}`
-    : "",
+const { data, error, loading, refresh } = useApiData<Page<Topic>>(
+  () =>
+    `groups/${groupId.value}/records?page=${page.value}&q=${encodeURIComponent(searchQuery.value)}`,
 );
 const columns: DataTableColumns<Topic> = [
   {
@@ -36,7 +35,7 @@ const columns: DataTableColumns<Topic> = [
       h("div", [
         h(
           NuxtLink,
-          { to: `/records/${row.id}?group=${row.groupId}` },
+          { to: `/${row.groupId}/records/${row.id}` },
           { default: () => row.title },
         ),
         h(
@@ -70,22 +69,14 @@ const createGroupId = ref("");
 
 <template>
   <PageHeading
-    :description="
-      group
-        ? `${group.name} · 每篇纪要都保留原文和历史版本`
-        : '选择一个群，查看已整理的讨论'
-    "
+    :description="`${group?.name ?? groupId} · 每篇纪要都保留原文和历史版本`"
     title="纪要"
   >
     <NButton :loading @click="refresh">
       <template #icon><NIcon :component="Refresh" /></template>
       刷新
     </NButton>
-    <NButton
-      :disabled="!groupId"
-      type="primary"
-      @click="createGroupId = groupId"
-    >
+    <NButton type="primary" @click="createGroupId = groupId">
       <template #icon><NIcon :component="Plus" /></template>
       新建纪要
     </NButton>
@@ -106,16 +97,10 @@ const createGroupId = ref("");
   </PageHeading>
   <LoadState
     description="可以在群里让小栖整理讨论，也可以点击“新建纪要”选择已保存的消息。"
-    :empty="!groupId || !data?.items.length"
+    :empty="!data?.items.length"
     :error
     :loading="loading && !data"
-    :title="
-      !groupId
-        ? '请先选择一个群'
-        : searchQuery
-          ? '没有找到匹配的纪要'
-          : '还没有纪要'
-    "
+    :title="searchQuery ? '没有找到匹配的纪要' : '还没有纪要'"
     @retry="refresh"
   >
     <AppPanel>

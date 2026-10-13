@@ -29,7 +29,7 @@ async function create(): Promise<void> {
       },
     );
     emit("close");
-    await navigateTo(`/records/${result.topic.id}?group=${props.groupId}`);
+    await navigateTo(`/${props.groupId}/records/${result.topic.id}`);
   }, "已安排整理");
 }
 </script>

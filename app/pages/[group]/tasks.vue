@@ -37,7 +37,7 @@ const states = [
 
 <template>
   <PageHeading
-    :description="`${group?.name ?? '请先选择一个群'} · 查看进度、错误和发送状态`"
+    :description="`${group?.name ?? groupId} · 查看进度、错误和发送状态`"
     title="后台任务"
   >
     <NButton :loading="activeList?.loading" @click="activeList?.refresh()">

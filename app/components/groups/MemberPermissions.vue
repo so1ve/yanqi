@@ -12,7 +12,6 @@ import { useWorkspace } from "~/composables/useWorkspace";
 import type { Group, Member } from "~/types/api";
 import { api } from "~/utils/api";
 
-const emit = defineEmits<{ close: [] }>();
 const props = defineProps<{ group: Group }>();
 const workspace = useWorkspace();
 const { busy, run } = useAction();
@@ -32,12 +31,12 @@ const checked = computed(() => [
       .map((member) => member.id),
   ]),
 ]);
-const memberQuery = useQueryValue("memberQ", (value) => value ?? "", {
+const memberQuery = useQueryValue("q", (value) => value ?? "", {
   replace: true,
-  reset: ["memberPage"],
+  reset: ["page"],
 });
 const memberPage = useQueryValue(
-  "memberPage",
+  "page",
   (value) => positiveInteger(value) ?? 1,
 );
 const filteredMembers = computed(
@@ -101,68 +100,59 @@ const memberColumns: DataTableColumns<Member> = [
 ];
 
 async function save(): Promise<void> {
-  if (
-    await run(async () => {
-      await api(`groups/${props.group.id}/settings`, {
-        method: "PUT",
-        body: { admins: admins.value },
-      });
-      await workspace.refresh();
-    }, "交互名单已保存")
-  ) {
-    emit("close");
-  }
+  await run(async () => {
+    await api(`groups/${props.group.id}/settings`, {
+      method: "PUT",
+      body: { admins: admins.value },
+    });
+    await workspace.refresh();
+  }, "交互名单已保存");
 }
 </script>
 
 <template>
-  <AppDialog
-    :title="`${props.group.name} · 交互权限`"
-    :width="760"
-    @close="emit('close')"
+  <PageHeading
+    :description="`${props.group.name} · 群主、群管理员和全局管理员已有交互权限，勾选可授权其他成员`"
+    title="群成员"
   >
-    <p class="muted mb-18">
-      群主、群管理员和全局管理员已有交互权限。勾选可授权其他成员。
-    </p>
-    <NInput
-      v-model:value="memberQuery"
-      class="mb-16"
-      clearable
-      placeholder="搜索昵称或 QQ 号"
+    <NButton
+      :disabled="loading || !!error"
+      :loading="busy"
+      type="primary"
+      @click="save"
     >
-      <template #prefix><NIcon :component="Users" /></template>
-    </NInput>
-    <LoadState :error :loading @retry="refreshMembers">
+      保存名单
+    </NButton>
+    <template #toolbar>
+      <ListToolbar>
+        <NInput
+          v-model:value="memberQuery"
+          class="search"
+          clearable
+          placeholder="搜索昵称或 QQ 号"
+        >
+          <template #prefix><NIcon :component="Users" /></template>
+        </NInput>
+      </ListToolbar>
+    </template>
+  </PageHeading>
+  <LoadState :error :loading @retry="refreshMembers">
+    <AppPanel>
       <NDataTable
         :checked-row-keys="checked"
         :columns="memberColumns"
         :data="filteredMembers"
-        :max-height="420"
         :pagination="{ page: memberPage, pageSize: 15 }"
         :row-key="(row: Member) => row.id"
+        :scroll-x="600"
         @update:checked-row-keys="select"
         @update:page="memberPage = $event"
       />
-    </LoadState>
-    <NSpace class="mt-20" justify="end">
-      <NButton @click="emit('close')">取消</NButton>
-      <NButton
-        :disabled="loading || !!error"
-        :loading="busy"
-        type="primary"
-        @click="save"
-      >
-        保存名单
-      </NButton>
-    </NSpace>
-  </AppDialog>
+    </AppPanel>
+  </LoadState>
 </template>
 
 <style scoped>
-.muted {
-  color: #798899;
-}
-
 :deep(.member-cell) {
   display: flex;
   align-items: center;
@@ -179,17 +169,5 @@ async function save(): Promise<void> {
   color: #8a97a7;
   font-size: 11px;
   margin-top: 4px;
-}
-
-.mb-16 {
-  margin-bottom: 16px;
-}
-
-.mb-18 {
-  margin-bottom: 18px;
-}
-
-.mt-20 {
-  margin-top: 20px;
 }
 </style>

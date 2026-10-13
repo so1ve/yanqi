@@ -21,7 +21,7 @@ const source = computed(
 
 <template>
   <PageHeading
-    :description="`${group?.name ?? '请先选择一个群'} · 查看完整发言、引用和附件`"
+    :description="`${group?.name ?? groupId} · 查看完整发言、引用和附件`"
     title="原始消息"
   >
     <NButton :loading="history?.loading" @click="history?.refresh()">
@@ -44,14 +44,12 @@ const source = computed(
     </template>
   </PageHeading>
   <MessageHistory
-    v-if="groupId"
     :key="source"
     ref="history"
     :empty-title="searchQuery ? '没有找到匹配的消息' : '还没有保存的消息'"
     :group-id
     :source
   />
-  <NEmpty v-else description="请先选择一个群" />
 </template>
 
 <style scoped>

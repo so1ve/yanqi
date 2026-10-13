@@ -23,29 +23,31 @@ import type { Status } from "~/types/api";
 import { api, errorText } from "~/utils/api";
 
 const workspace = useWorkspace();
-const { groups, groupId, status, groupLink, selectGroup } = workspace;
+const { groups, groupId, group, status } = workspace;
 const route = useRoute();
 const { busy, run } = useAction();
 const open = ref(false);
 const error = ref("");
 const links = [
   { path: "/", label: "概览", icon: Dashboard },
-  { path: "/records", label: "纪要", icon: Book2 },
-  { path: "/messages", label: "原始消息", icon: Messages },
-  { path: "/groups", label: "群与成员", icon: Users },
-  { path: "/tasks", label: "后台任务", icon: Activity },
-  { path: "/memories", label: "记忆", icon: Bulb },
-  { path: "/usage", label: "模型用量", icon: ChartBar },
+  { path: "/groups", label: "群管理", icon: Users },
+  { path: "/memories", label: "个人偏好", icon: Bulb },
   { path: "/logs", label: "运行日志", icon: Activity },
+];
+const groupLinks = [
+  { path: "records", label: "纪要", icon: Book2 },
+  { path: "messages", label: "原始消息", icon: Messages },
+  { path: "members", label: "群成员", icon: Users },
+  { path: "tasks", label: "后台任务", icon: Activity },
+  { path: "memories", label: "群共享记忆", icon: Bulb },
+  { path: "usage", label: "模型用量", icon: ChartBar },
 ];
 const selected = computed(
   () =>
-    links.find((link) =>
-      link.path === "/" ? route.path === "/" : route.path.startsWith(link.path),
+    (groupId.value
+      ? groupLinks.find((link) => link.path === route.path.split("/")[2])
+      : links.find((link) => link.path === route.path)
     )?.label ?? "设置",
-);
-const options = computed(() =>
-  groups.value.map((group) => ({ label: group.name, value: group.id })),
 );
 onMounted(async () => {
   try {
@@ -87,7 +89,7 @@ async function logout(): Promise<void> {
       @click="open = false"
     />
     <aside class="sidebar" :class="{ 'is-open': open }">
-      <NuxtLink :to="groupLink('/')"><AppBrand caption="管理台" /></NuxtLink>
+      <NuxtLink to="/"><AppBrand caption="管理台" /></NuxtLink>
       <NButton
         aria-label="关闭导航"
         class="nav-close"
@@ -96,24 +98,13 @@ async function logout(): Promise<void> {
       >
         <NIcon :component="X" />
       </NButton>
-      <div class="group-selector">
-        <label for="group-selector">当前群</label>
-        <NSelect
-          id="group-selector"
-          filterable
-          :options
-          placeholder="选择一个群"
-          :value="groupId || null"
-          @update:value="selectGroup"
-        />
-      </div>
-      <nav aria-label="主导航">
+      <nav aria-label="主导航" class="navigation">
         <NuxtLink
           v-for="link in links"
           :key="link.path"
           class="nav-link"
           :class="{ active: link.label === selected }"
-          :to="groupLink(link.path)"
+          :to="link.path"
           @click="open = false"
         >
           <NIcon :component="link.icon" />
@@ -125,12 +116,49 @@ async function logout(): Promise<void> {
             size="13"
           />
         </NuxtLink>
+        <div class="nav-section-title">群聊</div>
+        <details
+          v-for="item in groups"
+          :key="item.id"
+          class="group-menu"
+          :open="item.id === groupId"
+        >
+          <summary :title="`${item.name} (${item.id})`">
+            <NIcon :component="Messages" />
+            <span>{{ item.name }}</span>
+            <NIcon class="group-arrow" :component="ChevronRight" size="13" />
+          </summary>
+          <div class="group-children">
+            <NuxtLink
+              v-for="link in groupLinks"
+              :key="link.path"
+              class="nav-link"
+              :class="{
+                active: item.id === groupId && link.label === selected,
+              }"
+              :to="`/${item.id}/${link.path}`"
+              @click="open = false"
+            >
+              <NIcon :component="link.icon" />
+              <span>{{ link.label }}</span>
+            </NuxtLink>
+          </div>
+        </details>
+        <NuxtLink
+          v-if="groups.length === 0"
+          class="empty-groups"
+          to="/groups"
+          @click="open = false"
+        >
+          添加或同步群聊
+        </NuxtLink>
       </nav>
       <div class="sidebar-bottom">
         <NuxtLink
           class="nav-link"
           :class="{ active: route.path === '/settings' }"
-          :to="groupLink('/settings')"
+          to="/settings"
+          @click="open = false"
         >
           <NIcon :component="Settings" />
           <span>设置</span>
@@ -153,8 +181,18 @@ async function logout(): Promise<void> {
           >
             <NIcon :component="Menu2" size="22" />
           </NButton>
-          <span>言栖</span>
+          <NuxtLink class="breadcrumb-home" to="/">言栖</NuxtLink>
           <span class="separator">/</span>
+          <template v-if="groupId">
+            <NuxtLink
+              class="breadcrumb-group"
+              :title="group?.name ?? groupId"
+              :to="`/${groupId}`"
+            >
+              {{ group?.name ?? groupId }}
+            </NuxtLink>
+            <span class="separator">/</span>
+          </template>
           <strong>{{ selected }}</strong>
         </div>
         <div class="topbar-status">
@@ -209,16 +247,72 @@ async function logout(): Promise<void> {
   z-index: 30;
 }
 
-.group-selector {
-  margin: 38px 6px 25px;
+.navigation {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin-top: 30px;
 }
 
-.group-selector label {
-  display: block;
+.nav-section-title {
   color: #8a97a7;
   font-size: 11px;
-  margin: 0 0 9px 2px;
+  margin: 22px 12px 10px;
   letter-spacing: 1px;
+}
+
+.group-menu summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 42px;
+  padding: 8px 12px;
+  color: #526376;
+  cursor: pointer;
+  list-style: none;
+  border-radius: 6px;
+}
+
+.group-menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.group-menu summary:hover {
+  background: #f0f4f7;
+}
+
+.group-menu summary span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.group-menu summary .n-icon {
+  flex-shrink: 0;
+}
+
+.group-menu[open] .group-arrow {
+  transform: rotate(90deg);
+}
+
+.group-children {
+  margin: 3px 0 12px 18px;
+  padding-left: 5px;
+  border-left: 1px solid #e2e8ef;
+}
+
+.group-children .nav-link {
+  height: 37px;
+  font-size: 13px;
+  gap: 9px;
+  margin-bottom: 2px;
+}
+
+.empty-groups {
+  display: block;
+  padding: 8px 12px;
+  font-size: 12px;
 }
 
 .nav-link {
@@ -255,8 +349,7 @@ async function logout(): Promise<void> {
 }
 
 .sidebar-bottom {
-  margin-top: auto;
-  padding-top: 30px;
+  padding-top: 20px;
 }
 
 .sidebar-bottom p {
@@ -300,8 +393,19 @@ async function logout(): Promise<void> {
 }
 
 .breadcrumb {
+  min-width: 0;
   color: #8c99a9;
   font-size: 12px;
+}
+
+.breadcrumb-home {
+  color: inherit;
+}
+
+.breadcrumb-group {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .breadcrumb strong {
@@ -426,6 +530,8 @@ async function logout(): Promise<void> {
   }
 
   .breadcrumb > span,
+  .breadcrumb-home,
+  .breadcrumb-group,
   .connection {
     display: none;
   }

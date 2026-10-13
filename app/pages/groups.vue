@@ -4,8 +4,8 @@ import type { DataTableColumns } from "naive-ui";
 import { NButton, NSwitch } from "naive-ui";
 import { computed, h, ref } from "vue";
 
+import { NuxtLink } from "#components";
 import AddGroupDialog from "~/components/groups/AddGroupDialog.vue";
-import GroupMembersDialog from "~/components/groups/GroupMembersDialog.vue";
 import { useAction } from "~/composables/useAction";
 import { useQueryValue } from "~/composables/useQueryValue";
 import { useWorkspace } from "~/composables/useWorkspace";
@@ -14,19 +14,13 @@ import { api } from "~/utils/api";
 import { formatNumber } from "~/utils/format";
 
 const workspace = useWorkspace();
-const { groups, status, groupLink } = workspace;
+const { groups, status } = workspace;
 const { busy, run } = useAction();
 const query = useQueryValue("q", (value) => value ?? "", { replace: true });
 const filtered = computed(() =>
   groups.value.filter((item) =>
     `${item.name} ${item.id}`.includes(query.value),
   ),
-);
-const memberGroup = useQueryValue("members", (value) => value ?? "", {
-  reset: ["memberPage", "memberQ"],
-});
-const active = computed(() =>
-  groups.value.find((item) => item.id === memberGroup.value),
 );
 const showAdd = ref(false);
 
@@ -48,7 +42,7 @@ const columns: DataTableColumns<Group> = [
     minWidth: 220,
     render: (row) =>
       h("div", [
-        h("strong", row.name),
+        h(NuxtLink, { to: `/${row.id}/records` }, { default: () => row.name }),
         h("div", { class: "cell-sub mono" }, row.id),
       ]),
   },
@@ -93,15 +87,12 @@ const columns: DataTableColumns<Group> = [
     width: 125,
     render: (row) =>
       h(
-        NButton,
+        NuxtLink,
+        { to: `/${row.id}/members` },
         {
-          size: "small",
-          disabled: !status.value?.connected,
-          onClick: () => {
-            memberGroup.value = row.id;
-          },
+          default: () =>
+            h(NButton, { size: "small" }, { default: () => "管理成员" }),
         },
-        { default: () => "管理成员" },
       ),
   },
 ];
@@ -110,7 +101,7 @@ const columns: DataTableColumns<Group> = [
 <template>
   <PageHeading
     description="保存已启用群的全部消息；交互权限只决定谁可以向小栖发出请求。"
-    title="群与成员"
+    title="群管理"
   >
     <NButton :loading="busy" @click="run(workspace.refresh)">
       <template #icon><NIcon :component="Refresh" /></template>
@@ -136,7 +127,7 @@ const columns: DataTableColumns<Group> = [
   </PageHeading>
   <NAlert v-if="!status?.connected" :bordered="false" class="mb-22" type="info">
     NapCat 未连接。连接后可同步群名称和成员。
-    <NuxtLink :to="groupLink('/settings')">连接设置</NuxtLink>
+    <NuxtLink to="/settings">连接设置</NuxtLink>
   </NAlert>
   <LoadState
     :description="
@@ -160,12 +151,6 @@ const columns: DataTableColumns<Group> = [
       关闭“保存消息”后，小栖不再处理该群的新消息。只关闭“自动整理”时，仍会保存消息并处理有权限成员的请求。
     </p>
   </LoadState>
-  <GroupMembersDialog
-    v-if="active"
-    :key="active.id"
-    :group="active"
-    @close="memberGroup = ''"
-  />
   <AddGroupDialog v-if="showAdd" @close="showAdd = false" />
 </template>
 

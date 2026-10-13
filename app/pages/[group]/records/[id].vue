@@ -26,16 +26,14 @@ import { downloadText } from "~/utils/download";
 import { formatTime } from "~/utils/format";
 
 const route = useRoute();
-const { groupId, group, status, groupLink } = useWorkspace();
+const { groupId, group, status } = useWorkspace();
 const version = useQueryValue("version", positiveInteger);
 const base = computed(
   () =>
     `groups/${groupId.value}/records/${encodeURIComponent(String(route.params.id))}`,
 );
-const { data, loading, error, refresh } = useApiData<RecordDetail>(() =>
-  groupId.value
-    ? `${base.value}${version.value ? `?version=${version.value}` : ""}`
-    : "",
+const { data, loading, error, refresh } = useApiData<RecordDetail>(
+  () => `${base.value}${version.value ? `?version=${version.value}` : ""}`,
 );
 const tab = useQueryValue("tab", (value) =>
   value === "original" ? "original" : "note",
@@ -104,7 +102,7 @@ function remove(): void {
         "纪要已删除",
       );
       if (result) {
-        await navigateTo(groupLink("/records"));
+        await navigateTo(`/${groupId.value}/records`);
       }
 
       return result;
@@ -124,7 +122,7 @@ function download(): void {
 </script>
 
 <template>
-  <NuxtLink class="muted back-link" :to="groupLink('/records')">
+  <NuxtLink class="muted back-link" :to="`/${groupId}/records`">
     <NIcon :component="ArrowLeft" />
     返回纪要列表
   </NuxtLink>
@@ -216,7 +214,7 @@ function download(): void {
       >
         <strong>任务 #{{ task.id }}</strong>
         · {{ task.lastError || task.progress || "等待整理" }}
-        <NuxtLink :to="groupLink('/tasks')">查看任务</NuxtLink>
+        <NuxtLink :to="`/${groupId}/tasks`">查看任务</NuxtLink>
       </NAlert>
       <PageTabs v-model:value="tab">
         <NTabPane display-directive="show:lazy" name="note" tab="纪要正文">
@@ -238,7 +236,7 @@ function download(): void {
               description="完成后会自动显示，进度和错误可在“后台任务”中查看。"
               title="尚未生成第一版纪要"
             >
-              <NuxtLink :to="groupLink('/tasks')">
+              <NuxtLink :to="`/${groupId}/tasks`">
                 <NButton>查看任务</NButton>
               </NuxtLink>
             </EmptyState>

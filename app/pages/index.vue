@@ -9,7 +9,7 @@ import { formatNumber, formatTime } from "~/utils/format";
 import { kindNames } from "~/utils/labels";
 
 const { data, loading, error, refresh } = useApiData<Overview>("overview");
-const { groups, status, groupLink } = useWorkspace();
+const { groups, status } = useWorkspace();
 usePoll(refresh, 10_000);
 </script>
 
@@ -52,8 +52,8 @@ usePoll(refresh, 10_000);
         <AppPanel>
           <template #header>
             <h2>最近的记录</h2>
-            <NuxtLink :to="groupLink('/records')">
-              查看纪要
+            <NuxtLink to="/groups">
+              查看全部群聊
               <NIcon :component="ArrowRight" />
             </NuxtLink>
           </template>
@@ -62,7 +62,7 @@ usePoll(refresh, 10_000);
               v-for="record in data.recent"
               :key="record.id"
               class="record-link"
-              :to="`/records/${record.id}?group=${record.groupId}`"
+              :to="`/${record.groupId}/records/${record.id}`"
             >
               <span class="cell-sub">
                 {{
@@ -89,7 +89,7 @@ usePoll(refresh, 10_000);
             description="连接 NapCat 并启用群记录后，可以在群里让小栖整理讨论，也可以在“纪要”页新建。"
             title="还没有纪要"
           >
-            <NuxtLink :to="groupLink('/settings')">
+            <NuxtLink to="/settings">
               <NButton>连接 NapCat</NButton>
             </NuxtLink>
           </EmptyState>
@@ -98,12 +98,16 @@ usePoll(refresh, 10_000);
           <AppPanel>
             <template #header>
               <h2>排队和处理中的任务</h2>
-              <NuxtLink :to="groupLink('/tasks')">全部</NuxtLink>
+              <NuxtLink to="/groups">按群查看</NuxtLink>
             </template>
             <div v-for="task in data.tasks" :key="task.id" class="task-brief">
               <span class="task-number">#{{ task.id }}</span>
               <div>
-                <h3>{{ kindNames[task.kind] ?? task.kind }}</h3>
+                <h3>
+                  <NuxtLink :to="`/${task.payload.groupId}/tasks`">
+                    {{ kindNames[task.kind] ?? task.kind }}
+                  </NuxtLink>
+                </h3>
                 <p>
                   {{ task.progress || `群 ${task.payload.groupId}` }}
                 </p>
@@ -127,8 +131,8 @@ usePoll(refresh, 10_000);
               :show-indicator="false"
               type="line"
             />
-            <NuxtLink class="cell-sub usage-link" :to="groupLink('/usage')">
-              按模型查看 token 用量 →
+            <NuxtLink class="cell-sub usage-link" to="/groups">
+              按群查看 token 用量 →
             </NuxtLink>
           </AppPanel>
         </div>

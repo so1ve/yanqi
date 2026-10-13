@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from "vue";
+import { ref } from "vue";
 
 import { useAction } from "~/composables/useAction";
 import type { Memory } from "~/types/api";
@@ -19,12 +19,6 @@ const form = ref({
   key: props.memory?.key ?? "",
   content: props.memory?.content ?? "",
 });
-watch(
-  () => form.value.scope,
-  (scope) => {
-    form.value.ownerId = scope === "group" ? props.groupId : "";
-  },
-);
 
 async function save(): Promise<void> {
   if (
@@ -50,12 +44,7 @@ async function save(): Promise<void> {
   >
     <NForm @submit.prevent="save">
       <NFormItem label="适用范围">
-        <NRadioGroup v-model:value="form.scope" :disabled="!!props.memory">
-          <NRadioButton :disabled="!props.groupId" value="group">
-            群共享
-          </NRadioButton>
-          <NRadioButton value="user">个人偏好</NRadioButton>
-        </NRadioGroup>
+        {{ form.scope === "group" ? "群共享" : "个人偏好" }}
       </NFormItem>
       <p class="scope-help">
         {{
