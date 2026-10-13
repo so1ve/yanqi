@@ -118,17 +118,17 @@ const columns: DataTableColumns<Usage["models"][number]> = [
           },
           {
             label: '输入 token',
-            value: totals?.measured ? formatNumber(totals.input) : '—',
+            value: totals?.measured ? formatNumber(totals.input) : '-',
             note: '缓存读取另列',
           },
           {
             label: '输出 token',
-            value: totals?.measured ? formatNumber(totals.output) : '—',
+            value: totals?.measured ? formatNumber(totals.output) : '-',
             note: '包含服务商上报的思考用量',
           },
           {
             label: '缓存读取',
-            value: totals?.measured ? formatNumber(totals.cache) : '—',
+            value: totals?.measured ? formatNumber(totals.cache) : '-',
             note: '命中缓存的输入 token',
           },
         ]"

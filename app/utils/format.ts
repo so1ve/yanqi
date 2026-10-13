@@ -9,6 +9,6 @@ const timeFormat = new Intl.DateTimeFormat("zh-CN", {
 });
 
 export const formatNumber = (value: number | undefined | null) =>
-  value === undefined || value === null ? "—" : numberFormat.format(value);
+  value === undefined || value === null ? "-" : numberFormat.format(value);
 
 export const formatTime = (time: number) => timeFormat.format(time);
