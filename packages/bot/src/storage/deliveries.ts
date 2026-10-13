@@ -19,6 +19,37 @@ export class DeliveryQueue {
     this.#db = db;
   }
 
+  public find(groupId: string, id: number) {
+    return this.#db
+      .selectFrom("deliveries")
+      .selectAll()
+      .where("groupId", "=", groupId)
+      .where("id", "=", id)
+      .executeTakeFirst();
+  }
+
+  public async page(
+    groupId: string,
+    options: { offset: number; limit: number },
+  ) {
+    const query = this.#db
+      .selectFrom("deliveries")
+      .where("groupId", "=", groupId);
+    const [items, total] = await Promise.all([
+      query
+        .selectAll()
+        .orderBy("id", "desc")
+        .offset(options.offset)
+        .limit(options.limit)
+        .execute(),
+      query
+        .select((eb) => eb.fn.countAll<number>().as("count"))
+        .executeTakeFirstOrThrow(),
+    ]);
+
+    return { items, total: total.count };
+  }
+
   public enqueueNote(note: Note, requestId?: number) {
     return this.enqueue(
       requestId === undefined

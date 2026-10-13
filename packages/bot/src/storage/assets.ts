@@ -56,6 +56,28 @@ export class Assets {
     this.#directory = directory;
   }
 
+  public find(groupId: string, id: number) {
+    return this.#db
+      .selectFrom("assets")
+      .innerJoin("messages", "messages.id", "assets.messageId")
+      .selectAll("assets")
+      .where("assets.id", "=", id)
+      .where("messages.groupId", "=", groupId)
+      .executeTakeFirst();
+  }
+
+  public forMessages(messageIds: number[]): Promise<Asset[]> {
+    if (messageIds.length === 0) {
+      return Promise.resolve([]);
+    }
+
+    return this.#db
+      .selectFrom("assets")
+      .selectAll()
+      .where("messageId", "in", messageIds)
+      .execute();
+  }
+
   public capture(
     message: { id: number; groupId: string },
     content: Iterable<Segment>,

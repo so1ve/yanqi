@@ -1,10 +1,6 @@
 import { Logger } from "@koishijs/core";
-import type { Asset, MessageRow, Segment, Yanqi } from "@yanqi/bot";
-import {
-  attachmentReference,
-  decodeMessage,
-  forwardMessages,
-} from "@yanqi/bot";
+import type { Asset, Message, Segment, Yanqi } from "@yanqi/bot";
+import { attachmentReference, forwardMessages } from "@yanqi/bot";
 
 import { imageMimeType } from "./files";
 
@@ -87,28 +83,11 @@ const displayContent = (
   });
 
 async function mentionNames(bot: Yanqi, groupId: string, userIds: string[]) {
-  const names = new Map<string, string>();
-
   if (userIds.length === 0) {
-    return names;
+    return new Map<string, string>();
   }
 
-  const members = await bot.database
-    .selectFrom("messages")
-    .select(["userId", "displayName"])
-    .where("id", "in", (eb) =>
-      eb
-        .selectFrom("messages")
-        .select((eb) => eb.fn.max<number>("id").as("id"))
-        .where("groupId", "=", groupId)
-        .where("userId", "in", userIds)
-        .groupBy("userId"),
-    )
-    .execute();
-
-  for (const member of members) {
-    names.set(member.userId, member.displayName);
-  }
+  const names = await bot.store.messages.names(groupId, userIds);
 
   if (bot.online) {
     try {
@@ -132,10 +111,8 @@ async function mentionNames(bot: Yanqi, groupId: string, userIds: string[]) {
 export async function messageDetails(
   bot: Yanqi,
   groupId: string,
-  rows: MessageRow[],
+  messages: Message[],
 ) {
-  const db = bot.database;
-  const messages = rows.map(decodeMessage);
   const userIds = [
     ...new Set(
       messages.flatMap((message) =>
@@ -148,27 +125,11 @@ export async function messageDetails(
     ),
   ];
   const [assets, quotes, names] = await Promise.all([
-    db
-      .selectFrom("assets")
-      .selectAll()
-      .where(
-        "messageId",
-        "in",
-        messages.map((message) => message.id),
-      )
-      .execute(),
-    db
-      .selectFrom("messages")
-      .select(["messageId", "displayName", "text", "recalledAt"])
-      .where("groupId", "=", groupId)
-      .where(
-        "messageId",
-        "in",
-        messages.flatMap((message) =>
-          message.replyTo ? [message.replyTo] : [],
-        ),
-      )
-      .execute(),
+    bot.store.assets.forMessages(messages.map((message) => message.id)),
+    bot.store.messages.quotes(
+      groupId,
+      messages.flatMap((message) => (message.replyTo ? [message.replyTo] : [])),
+    ),
     mentionNames(bot, groupId, userIds),
   ]);
 

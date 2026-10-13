@@ -1,16 +1,67 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { rm } from "node:fs/promises";
 
 import type { Message, Topic } from "../types.ts";
+import { StoreError, required } from "./errors.ts";
+import { topicDirectory } from "./files.ts";
+import { enqueueJob } from "./jobs.ts";
 import { decodeMessage } from "./messages.ts";
 import type { Database } from "./schema.ts";
 import { linkMessages } from "./topic-sources.ts";
 
 export class Topics {
   #db: Database;
+  #directory: string;
 
-  constructor(db: Database) {
+  constructor(db: Database, directory: string) {
     this.#db = db;
+    this.#directory = directory;
+  }
+
+  public find(groupId: string, id: string) {
+    return this.#db
+      .selectFrom("topics")
+      .selectAll()
+      .where("groupId", "=", groupId)
+      .where("id", "=", id)
+      .executeTakeFirst();
+  }
+
+  public async page(
+    groupId: string,
+    options: { offset: number; limit: number; query?: string },
+  ) {
+    let query = this.#db.selectFrom("topics").where("groupId", "=", groupId);
+    const text = options.query;
+
+    if (text) {
+      query = query.where((eb) =>
+        eb.or([
+          eb(eb.fn<number>("contains_text", ["title", eb.val(text)]), ">", 0),
+          eb(
+            eb.fn<number>("contains_text", ["description", eb.val(text)]),
+            ">",
+            0,
+          ),
+          eb(eb.fn<number>("contains_text", ["focus", eb.val(text)]), ">", 0),
+        ]),
+      );
+    }
+
+    const [items, total] = await Promise.all([
+      query
+        .selectAll()
+        .orderBy("lastActiveAt", "desc")
+        .offset(options.offset)
+        .limit(options.limit)
+        .execute(),
+      query
+        .select((eb) => eb.fn.countAll<number>().as("count"))
+        .executeTakeFirstOrThrow(),
+    ]);
+
+    return { items, total: total.count };
   }
 
   public async get(id: string): Promise<Topic> {
@@ -161,11 +212,14 @@ export class Topics {
   public async setDirective(
     topicId: string,
     directive: Topic["directive"],
-    messageId: number,
+    messageId?: number,
   ): Promise<void> {
     await this.#db
       .updateTable("topics")
-      .set({ directive, directiveMessageId: messageId })
+      .set({
+        directive,
+        ...(messageId === undefined ? {} : { directiveMessageId: messageId }),
+      })
       .where("id", "=", topicId)
       .execute();
   }
@@ -222,5 +276,109 @@ export class Topics {
       .orderBy("lastActiveAt", "desc")
       .limit(10)
       .execute();
+  }
+
+  public regenerate(groupId: string, topicId: string, focus: string) {
+    return this.#db.transaction().execute(async (db) => {
+      const topic = required(
+        await db
+          .selectFrom("topics")
+          .selectAll()
+          .where("id", "=", topicId)
+          .where("groupId", "=", groupId)
+          .executeTakeFirst(),
+      );
+      const busy = await db
+        .selectFrom("jobs")
+        .select("id")
+        .where("kind", "=", "summarize")
+        .where("state", "in", ["pending", "running"])
+        .where((eb) =>
+          eb(
+            eb.fn<string>("json_extract", ["payload", eb.val("$.topicId")]),
+            "=",
+            topicId,
+          ),
+        )
+        .executeTakeFirst();
+
+      if (busy !== undefined) {
+        throw new StoreError("conflict", "这篇纪要正在排队或整理中");
+      }
+
+      const generation = topic.generation + 1;
+
+      await db
+        .updateTable("topics")
+        .set({ generation, focus })
+        .where("id", "=", topicId)
+        .execute();
+      await db
+        .updateTable("topic_messages")
+        .set({ generation })
+        .where("topicId", "=", topicId)
+        .execute();
+
+      return enqueueJob(db, "summarize", `summarize:${topicId}:${generation}`, {
+        groupId,
+        topicId,
+        requested: true,
+        publish: false,
+      });
+    });
+  }
+
+  public remove(groupId: string, topicId: string): Promise<void> {
+    return this.#db.transaction().execute(async (db) => {
+      const topic = required(
+        await db
+          .selectFrom("topics")
+          .selectAll()
+          .where("id", "=", topicId)
+          .where("groupId", "=", groupId)
+          .executeTakeFirst(),
+      );
+      const busy = await db
+        .selectFrom("jobs")
+        .select("id")
+        .where("state", "=", "running")
+        .where((eb) =>
+          eb(
+            eb.fn<string>("json_extract", ["payload", eb.val("$.topicId")]),
+            "=",
+            topicId,
+          ),
+        )
+        .executeTakeFirst();
+
+      if (busy !== undefined) {
+        throw new StoreError("conflict", "请先暂停 AI，再删除纪要");
+      }
+
+      await rm(topicDirectory(this.#directory, topic), {
+        recursive: true,
+        force: true,
+      });
+      await db
+        .deleteFrom("deliveries")
+        .where("topicId", "=", topicId)
+        .execute();
+      await db
+        .deleteFrom("jobs")
+        .where((eb) =>
+          eb(
+            eb.fn<string>("json_extract", ["payload", eb.val("$.topicId")]),
+            "=",
+            topicId,
+          ),
+        )
+        .execute();
+      await db.deleteFrom("notes").where("topicId", "=", topicId).execute();
+      await db
+        .deleteFrom("topic_messages")
+        .where("topicId", "=", topicId)
+        .execute();
+      await db.deleteFrom("topics").where("id", "=", topicId).execute();
+    });
   }
 }

@@ -58,7 +58,7 @@ export function createMessenger(config: Config, store: Store, ctx: Context) {
   ) {
     const now = Date.now();
 
-    await store.messages.capture({
+    await store.inbox.capture({
       groupId,
       messageId,
       userId: config.BOT_QQ,

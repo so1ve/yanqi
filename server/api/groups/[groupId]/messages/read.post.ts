@@ -16,14 +16,7 @@ export default defineEventHandler(async (event) => {
   const groupId = groupParam(event);
   const { ids } = await body(event, schema);
   const { bot } = event.context;
-  const rows = await bot.database
-    .selectFrom("messages")
-    .selectAll()
-    .where("groupId", "=", groupId)
-    .where("id", "in", ids)
-    .orderBy("sentAt")
-    .orderBy("id")
-    .execute();
+  const messages = await bot.store.messages.read(groupId, ids);
 
-  return messageDetails(bot, groupId, rows);
+  return messageDetails(bot, groupId, messages);
 });

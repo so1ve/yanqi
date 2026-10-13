@@ -7,14 +7,7 @@ export default defineEventHandler(async (event) => {
   const groupId = groupParam(event);
 
   const id = integer(getRouterParam(event, "id"));
-  const delivery = requireItem(
-    await bot.database
-      .selectFrom("deliveries")
-      .selectAll()
-      .where("id", "=", id)
-      .where("groupId", "=", groupId)
-      .executeTakeFirst(),
-  );
+  const delivery = requireItem(await bot.store.deliveries.find(groupId, id));
 
   if (bot.running) {
     throw createError({

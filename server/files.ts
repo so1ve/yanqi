@@ -1,7 +1,8 @@
-import { readFile } from "node:fs/promises";
-import { extname, resolve, sep } from "node:path";
+import { extname } from "node:path";
 
-import { createError } from "h3";
+import { readDataFile as readStoredFile } from "@yanqi/bot";
+
+import { storeOperation } from "./utils/http";
 
 export function imageMimeType(path: string): string | undefined {
   const types: Record<string, string> = {
@@ -15,12 +16,7 @@ export function imageMimeType(path: string): string | undefined {
   return types[extname(path).toLowerCase()];
 }
 
-export function readDataFile(directory: string, path: string): Promise<Buffer> {
-  const target = resolve(path);
-
-  if (!target.startsWith(`${resolve(directory)}${sep}`)) {
-    throw createError({ statusCode: 400, message: "文件不在当前数据目录中" });
-  }
-
-  return readFile(target);
-}
+export const readDataFile = (
+  directory: string,
+  path: string,
+): Promise<Buffer> => storeOperation(() => readStoredFile(directory, path));

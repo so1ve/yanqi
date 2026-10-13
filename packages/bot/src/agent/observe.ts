@@ -19,7 +19,7 @@ export async function observeRequests(
   const { groupId, messageIds } = job.payload;
   const conversation = await store.conversations.open(groupId);
   const messages = (
-    await Promise.all(messageIds.map((id) => store.messages.getRequest(id)))
+    await Promise.all(messageIds.map((id) => store.inbox.getRequest(id)))
   ).filter(
     (message): message is Message =>
       message !== null &&
@@ -54,7 +54,7 @@ export async function observeRequests(
       context,
     );
 
-    const requests = await store.messages.scheduleRequests(
+    const requests = await store.inbox.scheduleRequests(
       groupId,
       requestIds.map((id) => Number(id.slice(1))),
     );

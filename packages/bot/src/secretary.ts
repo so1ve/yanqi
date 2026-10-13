@@ -46,7 +46,7 @@ export class Secretary {
         });
         void this.#messenger.acknowledge(message);
       } else if (this.#config.AUTO_REPLY) {
-        await this.#store.messages.observe(message);
+        await this.#store.inbox.observe(message);
       }
 
       this.processPending();

@@ -42,6 +42,48 @@ export class Memories {
     this.#db = db;
   }
 
+  public async page(options: {
+    scope: MemoryOwner["scope"];
+    ownerId?: string;
+    query?: string;
+    offset: number;
+    limit: number;
+  }) {
+    let query = this.#db
+      .selectFrom("memories")
+      .where("scope", "=", options.scope);
+
+    if (options.ownerId) {
+      query = query.where("ownerId", "=", options.ownerId);
+    }
+
+    const text = options.query;
+
+    if (text) {
+      query = query.where((eb) =>
+        eb.or([
+          eb(eb.fn<number>("contains_text", ["content", eb.val(text)]), ">", 0),
+          eb(eb.fn<number>("contains_text", ["key", eb.val(text)]), ">", 0),
+          eb(eb.fn<number>("instr", ["ownerId", eb.val(text)]), ">", 0),
+        ]),
+      );
+    }
+
+    const [items, total] = await Promise.all([
+      query
+        .selectAll()
+        .orderBy("updatedAt", "desc")
+        .offset(options.offset)
+        .limit(options.limit)
+        .execute(),
+      query
+        .select((eb) => eb.fn.countAll<number>().as("count"))
+        .executeTakeFirstOrThrow(),
+    ]);
+
+    return { items, total: total.count };
+  }
+
   public async list({ scope, ownerId }: MemoryOwner): Promise<Memory[]> {
     return this.#db
       .selectFrom("memories")

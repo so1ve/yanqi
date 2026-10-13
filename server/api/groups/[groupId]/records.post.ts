@@ -5,16 +5,9 @@ import { body, groupParam, requireItem } from "~~/server/utils/http";
 
 export default defineEventHandler(async (event) => {
   const { bot } = event.context;
-  const db = bot.database;
   const groupId = groupParam(event);
 
-  requireItem(
-    await db
-      .selectFrom("groups")
-      .select("id")
-      .where("id", "=", groupId)
-      .executeTakeFirst(),
-  );
+  requireItem(await bot.store.groups.find(groupId));
   if (!bot.config.GROUP_IDS.includes(groupId)) {
     throw createError({
       statusCode: 409,
@@ -40,16 +33,11 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: "开始时间不能晚于结束时间" });
   }
 
-  const messages = await db
-    .selectFrom("messages")
-    .select("id")
-    .where("groupId", "=", groupId)
-    .where("isBot", "=", 0)
-    .where("command", "=", 0)
-    .where("sentAt", ">=", input.from ?? 0)
-    .where("sentAt", "<=", input.to ?? Date.now())
-    .orderBy("id")
-    .execute();
+  const messages = await bot.store.messages.recordable(
+    groupId,
+    input.from ?? 0,
+    input.to ?? Date.now(),
+  );
 
   if (messages.length === 0) {
     throw createError({
@@ -62,7 +50,7 @@ export default defineEventHandler(async (event) => {
     groupId,
     input.title,
     input.focus,
-    messages.map((message) => message.id),
+    messages,
   );
 
   bot.wake();

@@ -7,20 +7,7 @@ export default defineEventHandler(async (event) => {
   const groupId = groupParam(event);
 
   const asset = requireItem(
-    await bot.database
-      .selectFrom("assets")
-      .selectAll()
-      .where("id", "=", integer(getRouterParam(event, "id")))
-      .executeTakeFirst(),
-  );
-
-  requireItem(
-    await bot.database
-      .selectFrom("messages")
-      .select("id")
-      .where("id", "=", asset.messageId)
-      .where("groupId", "=", groupId)
-      .executeTakeFirst(),
+    await bot.store.assets.find(groupId, integer(getRouterParam(event, "id"))),
   );
   const job = await bot.store.jobs.forAsset(asset.id);
 

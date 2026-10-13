@@ -7,7 +7,6 @@ import type { Config } from "./config.ts";
 import { configurationError } from "./config.ts";
 import { recallMessage, saveMessage } from "./onebot/message.ts";
 import { Secretary } from "./secretary.ts";
-import { purgeHistory } from "./storage/purge.ts";
 import type { Database } from "./storage/schema.ts";
 import { Store } from "./storage/store.ts";
 
@@ -21,7 +20,6 @@ export class Yanqi {
   #poll: (() => void) | null = null;
   #events = new Set<Promise<void>>();
   #operation: Promise<void> = Promise.resolve();
-  public readonly database: Database;
   public readonly store: Store;
   #logger = new Logger("yanqi");
 
@@ -35,7 +33,6 @@ export class Yanqi {
     this.#app = app;
     this.#config = structuredClone(config);
     this.#enabled = autostart;
-    this.database = database;
     this.store = new Store(database, directory, this.#config);
 
     const groups = app
@@ -128,13 +125,7 @@ export class Yanqi {
   public configure(config: Config): Promise<void> {
     return this.#change(async () => {
       await this.#stop();
-      if (config.GROUP_IDS.length > 0) {
-        await this.database
-          .insertInto("groups")
-          .values(config.GROUP_IDS.map((id) => ({ id })))
-          .onConflict((conflict) => conflict.column("id").doNothing())
-          .execute();
-      }
+      await this.store.groups.ensure(config.GROUP_IDS);
 
       Object.assign(this.#config, structuredClone(config));
       this.#logger.level =
@@ -199,9 +190,7 @@ export class Yanqi {
 
   public purge() {
     return this.#change(async () => {
-      const result = await purgeHistory(
-        this.database,
-        this.store.directory,
+      const result = await this.store.purge(
         this.#config.HISTORY_RETENTION_DAYS,
       );
 

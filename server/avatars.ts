@@ -1,18 +1,13 @@
 import { createError } from "h3";
 
-import type { ManagementDatabase } from "./database";
-
-interface Avatar {
-  contentType: string;
-  data: Uint8Array;
-}
+import type { Avatar, Avatars } from "./storage/avatars";
 
 export class AvatarCache {
-  #db: ManagementDatabase;
+  #avatars: Avatars;
   #pending = new Map<string, Promise<Avatar>>();
 
-  constructor(db: ManagementDatabase) {
-    this.#db = db;
+  constructor(avatars: Avatars) {
+    this.#avatars = avatars;
   }
 
   public get(userId: string): Promise<Avatar> {
@@ -34,15 +29,11 @@ export class AvatarCache {
   public async clear(): Promise<void> {
     // 等正在下载的头像保存后再清除，避免刷新后又写回旧缓存。
     await Promise.allSettled(this.#pending.values());
-    await this.#db.deleteFrom("avatars").execute();
+    await this.#avatars.clear();
   }
 
   async #load(userId: string): Promise<Avatar> {
-    const cached = await this.#db
-      .selectFrom("avatars")
-      .select(["contentType", "data"])
-      .where("userId", "=", userId)
-      .executeTakeFirst();
+    const cached = await this.#avatars.get(userId);
 
     if (cached) {
       return cached;
@@ -77,11 +68,7 @@ export class AvatarCache {
       data: Buffer.from(await response.arrayBuffer()),
     };
 
-    await this.#db
-      .insertInto("avatars")
-      .values({ userId, ...avatar })
-      .onConflict((conflict) => conflict.column("userId").doUpdateSet(avatar))
-      .execute();
+    await this.#avatars.save(userId, avatar);
 
     return avatar;
   }

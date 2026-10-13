@@ -1,6 +1,5 @@
 import { randomUUID } from "node:crypto";
 
-import { decodeNote } from "@yanqi/bot";
 import { createError, defineEventHandler, getRouterParam } from "h3";
 import { Type } from "typebox";
 
@@ -8,7 +7,6 @@ import { body, groupParam, requireItem } from "~~/server/utils/http";
 
 export default defineEventHandler(async (event) => {
   const { bot } = event.context;
-  const db = bot.database;
   const groupId = groupParam(event);
 
   if (!bot.running || !bot.online) {
@@ -19,37 +17,21 @@ export default defineEventHandler(async (event) => {
   }
 
   const topic = requireItem(
-    await db
-      .selectFrom("topics")
-      .selectAll()
-      .where("id", "=", getRouterParam(event, "topicId")!)
-      .where("groupId", "=", groupId)
-      .executeTakeFirst(),
+    await bot.store.topics.find(groupId, getRouterParam(event, "topicId")!),
   );
   const input = await body(
     event,
     Type.Object({ noteId: Type.Integer({ minimum: 1 }) }),
   );
-  const note = decodeNote(
-    requireItem(
-      await db
-        .selectFrom("notes")
-        .selectAll()
-        .where("id", "=", input.noteId)
-        .where("topicId", "=", topic.id)
-        .executeTakeFirst(),
-    ),
+  const note = requireItem(
+    await bot.store.notes.version(groupId, topic.id, input.noteId),
   );
 
   if (!bot.config.GROUP_IDS.includes(topic.groupId)) {
     throw createError({ statusCode: 409, message: "请先启用这个群" });
   }
 
-  await db
-    .updateTable("topics")
-    .set({ directive: "send" })
-    .where("id", "=", topic.id)
-    .execute();
+  await bot.store.topics.setDirective(topic.id, "send");
   const delivery = await bot.store.deliveries.enqueue(
     `console:${randomUUID()}`,
     {

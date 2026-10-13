@@ -20,22 +20,8 @@ export default defineEventHandler(async (event) => {
   const groupId = groupParam(event);
 
   const id = integer(getRouterParam(event, "id"));
-  const asset = requireItem(
-    await bot.database
-      .selectFrom("assets")
-      .selectAll()
-      .where("id", "=", id)
-      .executeTakeFirst(),
-  );
+  const asset = requireItem(await bot.store.assets.find(groupId, id));
 
-  requireItem(
-    await bot.database
-      .selectFrom("messages")
-      .select("id")
-      .where("id", "=", asset.messageId)
-      .where("groupId", "=", groupId)
-      .executeTakeFirst(),
-  );
   if (!asset.path) {
     throw createError({ statusCode: 404, message: "附件尚未下载" });
   }

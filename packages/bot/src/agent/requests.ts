@@ -17,7 +17,7 @@ export async function handleRequest(
   notes: Notes,
   processPending: () => void,
 ): Promise<void> {
-  const message = await store.messages.getRequest(messageId);
+  const message = await store.inbox.getRequest(messageId);
 
   if (!message) {
     return;

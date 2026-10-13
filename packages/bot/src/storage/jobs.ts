@@ -68,6 +68,39 @@ export class JobQueue {
     this.#db = db;
   }
 
+  public async page(
+    groupId: string,
+    options: { offset: number; limit: number; state?: JobRow["state"] },
+  ) {
+    let query = this.#db
+      .selectFrom("jobs")
+      .where((eb) =>
+        eb(
+          eb.fn<string>("json_extract", ["payload", eb.val("$.groupId")]),
+          "=",
+          groupId,
+        ),
+      );
+
+    if (options.state) {
+      query = query.where("state", "=", options.state);
+    }
+
+    const [items, total] = await Promise.all([
+      query
+        .selectAll()
+        .orderBy("id", "desc")
+        .offset(options.offset)
+        .limit(options.limit)
+        .execute(),
+      query
+        .select((eb) => eb.fn.countAll<number>().as("count"))
+        .executeTakeFirstOrThrow(),
+    ]);
+
+    return { items: items.map(decodeJob), total: total.count };
+  }
+
   public async recover(): Promise<void> {
     await this.cancelRequests("服务重启，跳过旧对话");
     await this.#db

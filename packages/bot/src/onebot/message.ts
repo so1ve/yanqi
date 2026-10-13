@@ -49,7 +49,7 @@ export async function saveMessage(
   config: Config,
 ) {
   try {
-    const message = await store.messages.capture(incomingMessage(session));
+    const message = await store.inbox.capture(incomingMessage(session));
 
     if (message) {
       logger[message.command ? "info" : "debug"](

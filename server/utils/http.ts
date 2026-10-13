@@ -1,7 +1,27 @@
+import { StoreError } from "@yanqi/bot";
 import type { H3Event } from "h3";
 import { createError, getQuery, getRequestWebStream, getRouterParam } from "h3";
 import type { Static, TSchema } from "typebox";
 import * as Value from "typebox/value";
+
+export async function storeOperation<T>(
+  operation: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (error instanceof StoreError) {
+      const statuses = { not_found: 404, conflict: 409, invalid: 400 };
+
+      throw createError({
+        statusCode: statuses[error.kind],
+        message: error.message,
+      });
+    }
+
+    throw error;
+  }
+}
 
 export async function body<S extends TSchema>(
   event: H3Event,

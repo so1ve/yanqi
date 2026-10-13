@@ -3,7 +3,7 @@ import { defineEventHandler } from "h3";
 export default defineEventHandler(async (event) => {
   const { bot } = event.context;
 
-  const stored = await bot.database.selectFrom("groups").selectAll().execute();
+  const stored = await bot.store.groups.list();
   const live = bot.online ? await bot.napcat.getGroupList() : [];
   const ids = [
     ...new Set([

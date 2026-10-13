@@ -9,6 +9,45 @@ export class Groups {
     this.#db = db;
   }
 
+  public list() {
+    return this.#db.selectFrom("groups").selectAll().execute();
+  }
+
+  public find(id: string) {
+    return this.#db
+      .selectFrom("groups")
+      .selectAll()
+      .where("id", "=", id)
+      .executeTakeFirst();
+  }
+
+  public async ensure(ids: readonly string[]): Promise<void> {
+    if (ids.length === 0) {
+      return;
+    }
+
+    await this.#db
+      .insertInto("groups")
+      .values(ids.map((id) => ({ id })))
+      .onConflict((conflict) => conflict.column("id").doNothing())
+      .execute();
+  }
+
+  public async configure(id: string, automatic?: boolean): Promise<void> {
+    await this.#db
+      .insertInto("groups")
+      .values({
+        id,
+        ...(automatic === undefined ? {} : { aiEnabled: Number(automatic) }),
+      })
+      .onConflict((conflict) =>
+        automatic === undefined
+          ? conflict.column("id").doNothing()
+          : conflict.column("id").doUpdateSet({ aiEnabled: Number(automatic) }),
+      )
+      .execute();
+  }
+
   public async setAutomatic(groupId: string, enabled: boolean): Promise<void> {
     await this.#db
       .updateTable("groups")
