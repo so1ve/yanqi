@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { History, X } from "@vicons/tabler";
-import { useTemplateRef, watch } from "vue";
+import { useTemplateRef } from "vue";
 
 import MessageList from "~/components/messages/MessageList.vue";
 import { useMessageHistory } from "~/composables/useMessageHistory";
@@ -10,6 +10,7 @@ const props = defineProps<{
   groupId: string;
   source: string;
   emptyTitle: string;
+  fromLatest?: boolean;
 }>();
 const list = useTemplateRef<InstanceType<typeof MessageList>>("list");
 const {
@@ -25,26 +26,7 @@ const {
   refreshMessage,
   remember,
   reveal,
-} = useMessageHistory(props.groupId, props.source);
-
-watch(
-  messages,
-  async (_, previous) => {
-    if (previous.length === 0) {
-      return;
-    }
-
-    const position = list.value?.position();
-
-    if (
-      position &&
-      messages.value.some((message) => message.id === position.messageId)
-    ) {
-      await list.value?.restore(position);
-    }
-  },
-  { flush: "pre" },
-);
+} = useMessageHistory(props.groupId, props.source, props.fromLatest);
 
 async function resume(): Promise<void> {
   const target = bookmark.value;
@@ -75,6 +57,7 @@ defineExpose({ loading, refresh });
   >
     <MessageList
       ref="list"
+      :from-latest
       :loading
       :messages
       @load-more="loadMore"
@@ -92,7 +75,9 @@ defineExpose({ loading, refresh });
         <NButton size="small" text @click="refresh(false)">重试</NButton>
       </span>
       <span v-else-if="finished">已加载全部消息</span>
-      <span v-else>向下滚动加载更多</span>
+      <span v-else>
+        {{ fromLatest ? "向上滚动查看更早的消息" : "向下滚动加载更多" }}
+      </span>
     </footer>
     <p v-if="cacheError" class="load-error">{{ cacheError }}</p>
     <div v-if="bookmark" class="resume-reading">

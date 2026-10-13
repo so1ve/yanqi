@@ -39,7 +39,7 @@ const source = computed(
           <template #prefix><NIcon :component="Search" /></template>
         </NInput>
         <NButton attr-type="submit">搜索</NButton>
-        <span class="right reading-order">按时间顺序排列 · 向下滚动加载</span>
+        <span class="right reading-order">最新消息在底部 · 向上查看历史</span>
       </ListToolbar>
     </template>
   </PageHeading>
@@ -47,6 +47,7 @@ const source = computed(
     :key="source"
     ref="history"
     :empty-title="searchQuery ? '没有找到匹配的消息' : '还没有保存的消息'"
+    from-latest
     :group-id
     :source
   />

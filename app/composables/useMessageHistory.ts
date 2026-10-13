@@ -13,7 +13,11 @@ import {
 
 const batchSize = 50;
 
-export function useMessageHistory(groupId: string, source: string) {
+export function useMessageHistory(
+  groupId: string,
+  source: string,
+  fromLatest = false,
+) {
   const messages = shallowRef<Message[]>([]);
   const ids = shallowRef<number[]>([]);
   const loaded = ref(0);
@@ -40,11 +44,16 @@ export function useMessageHistory(groupId: string, source: string) {
     }
   }
 
+  const range = (count: number): number[] =>
+    fromLatest
+      ? ids.value.slice(Math.max(0, ids.value.length - count))
+      : ids.value.slice(0, count);
+
   function display(count: number): void {
     loaded.value = Math.min(count, ids.value.length);
-    messages.value = ids.value
-      .slice(0, loaded.value)
-      .flatMap((id) => (rows.has(id) ? [rows.get(id)!] : []));
+    messages.value = range(loaded.value).flatMap((id) =>
+      rows.has(id) ? [rows.get(id)!] : [],
+    );
   }
 
   const readMessages = async (messageIds: number[]): Promise<Message[]> =>
@@ -56,7 +65,7 @@ export function useMessageHistory(groupId: string, source: string) {
     });
 
   async function fill(count: number, refresh = false): Promise<void> {
-    const requested = ids.value.slice(0, count);
+    const requested = range(count);
     const stored = await cached(() =>
       readCachedMessages(
         groupId,
@@ -131,13 +140,20 @@ export function useMessageHistory(groupId: string, source: string) {
         return;
       }
 
+      const visibleIds = new Set(messages.value.map((message) => message.id));
+      const firstVisible = fromLatest
+        ? currentIds.findIndex((id) => visibleIds.has(id))
+        : -1;
+      const count =
+        firstVisible >= 0 ? currentIds.length - firstVisible : loaded.value;
+
       ids.value = currentIds;
 
       if (bookmark.value && !currentIds.includes(bookmark.value.messageId)) {
         bookmark.value = undefined;
       }
 
-      await fill(Math.max(loaded.value, batchSize), reloadMessages);
+      await fill(Math.max(count, batchSize), reloadMessages);
     } catch (cause) {
       if (!controller.signal.aborted) {
         error.value = errorText(cause);
@@ -167,11 +183,17 @@ export function useMessageHistory(groupId: string, source: string) {
   async function reveal(messageId: number): Promise<boolean> {
     const index = ids.value.indexOf(messageId);
 
-    if (index >= loaded.value) {
+    if (index === -1) {
+      return false;
+    }
+
+    const count = fromLatest ? ids.value.length - index : index + 1;
+
+    if (count > loaded.value) {
       loading.value = true;
 
       try {
-        await fill(index + 1);
+        await fill(count);
       } catch (cause) {
         if (!controller.signal.aborted) {
           error.value = errorText(cause);
@@ -183,7 +205,7 @@ export function useMessageHistory(groupId: string, source: string) {
       }
     }
 
-    return index !== -1 && rows.has(messageId);
+    return rows.has(messageId);
   }
 
   function savePosition(): void {
@@ -221,10 +243,7 @@ export function useMessageHistory(groupId: string, source: string) {
     if (saved?.history) {
       ids.value = saved.history.ids;
       const stored = await cached(() =>
-        readCachedMessages(
-          groupId,
-          saved.history!.ids.slice(0, saved.history!.loaded),
-        ),
+        readCachedMessages(groupId, range(saved.history!.loaded)),
       );
 
       for (const message of stored ?? []) {
