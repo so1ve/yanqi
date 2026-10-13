@@ -2,6 +2,7 @@ import type { Static } from "typebox";
 import { Type } from "typebox";
 import { Format } from "typebox/format";
 
+import type { MessageMetadata } from "../storage/messages.ts";
 import type { Store } from "../storage/store.ts";
 import type { Message } from "../types.ts";
 import { beijingDate } from "../utils/time.ts";
@@ -89,60 +90,59 @@ export async function selectSources(
   store: Store,
   request: Message,
   scope: Static<typeof sourceScope>,
-): Promise<Message[]> {
-  let sources: Message[];
+): Promise<MessageMetadata[]> {
+  let sources: MessageMetadata[];
 
   if ("sourceIds" in scope) {
-    sources = await Promise.all(
-      [...new Set(scope.sourceIds)].map((id) =>
-        store.messages.get(Number(id.slice(1))),
-      ),
-    );
+    const ids = [...new Set(scope.sourceIds)].map((id) => Number(id.slice(1)));
 
-    if (
-      sources.some(
-        (source) =>
-          source.groupId !== request.groupId ||
-          source.isBot ||
-          source.id > request.id,
-      )
-    ) {
+    sources = await store.messages.listMetadata(request.groupId, request.id, {
+      ids,
+    });
+
+    if (sources.length !== ids.length) {
       throw new Error("只能使用当前请求及此前保存的本群成员原文");
     }
   } else if ("fromMessageId" in scope) {
-    const first = await store.messages.get(
-      Number(scope.fromMessageId.slice(1)),
+    const fromId = Number(scope.fromMessageId.slice(1));
+    const throughId = scope.throughMessageId
+      ? Number(scope.throughMessageId.slice(1))
+      : request.id;
+    const ids = [...new Set([fromId, throughId])];
+    const boundaries = await store.messages.listMetadata(
+      request.groupId,
+      request.id,
+      {
+        ids,
+        includeBot: true,
+      },
     );
-    const last = scope.throughMessageId
-      ? await store.messages.get(Number(scope.throughMessageId.slice(1)))
-      : request;
 
-    if (
-      first.groupId !== request.groupId ||
-      last.groupId !== request.groupId ||
-      first.id > last.id ||
-      last.id > request.id
-    ) {
+    if (fromId > throughId || boundaries.length !== ids.length) {
       throw new Error(
         "消息区间必须按先后顺序指定，且仅限本群当前请求及此前的消息",
       );
     }
 
-    sources = await store.messages.history(request.groupId, last.id, {
-      fromId: first.id,
+    sources = await store.messages.listMetadata(request.groupId, throughId, {
+      fromId,
     });
   } else if ("topicIds" in scope) {
-    sources = [];
-
     for (const id of new Set(scope.topicIds)) {
       const topic = await store.topics.get(id);
 
       if (topic.groupId !== request.groupId) {
         throw new Error("只能读取本群话题");
       }
-
-      sources.push(...(await store.topics.messages(topic.id, request.id - 1)));
     }
+
+    sources = await store.messages.listMetadata(
+      request.groupId,
+      request.id - 1,
+      {
+        topicIds: scope.topicIds,
+      },
+    );
   } else {
     let from = 0;
     let to = Number.MAX_SAFE_INTEGER;
@@ -169,10 +169,14 @@ export async function selectSources(
       }
     }
 
-    sources = await store.messages.history(request.groupId, request.id - 1, {
-      from,
-      to,
-    });
+    sources = await store.messages.listMetadata(
+      request.groupId,
+      request.id - 1,
+      {
+        from,
+        to,
+      },
+    );
 
     if ("sinceFirstMessageBy" in scope) {
       const first = sources.findIndex(
@@ -183,11 +187,5 @@ export async function selectSources(
     }
   }
 
-  return [
-    ...new Map(
-      sources
-        .filter((source) => !source.isBot)
-        .map((source) => [source.id, source]),
-    ).values(),
-  ].sort((a, b) => a.id - b.id);
+  return sources;
 }

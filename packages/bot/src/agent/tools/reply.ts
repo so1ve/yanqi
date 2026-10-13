@@ -56,7 +56,7 @@ export function notifyTool(context: ToolContext) {
   return tool(
     context,
     "notify",
-    "根据子 agent 简报或整理结果中的内容规模和复杂程度，自主判断有较多工作仍需处理时，向群里发一次简短提示。不能仅因等待超时、响应慢或任务未完成而调用。只说实际正在整理的内容，不说已完成，不播报内部任务 ID 或子 agent。发完继续处理，不结束对话；同一次请求最多发一次。最终答复用 reply。",
+    "根据子 agent 返回的元数据、内容简报或整理结果中的资料规模和复杂程度，自主判断有较多工作仍需处理时，向群里发一次简短提示。元数据已足够判断时无需等正文读完。不能仅因等待超时、响应慢或任务未完成而调用。只说实际正在整理的内容，不说已完成，不播报内部任务 ID 或子 agent。发完继续处理，不结束对话；同一次请求最多发一次。最终答复用 reply。",
     object({ text: Type.String({ minLength: 1, pattern: "\\S" }) }),
     async ({ text }, signal) => {
       const key = `progress:${message.id}`;

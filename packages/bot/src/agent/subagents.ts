@@ -12,7 +12,8 @@ import { subagentPrompt } from "./prompts/subagent.ts";
 import type { AgentRuntime } from "./runtime.ts";
 import type { ToolContext } from "./tools/context.ts";
 import { object, tool } from "./tools/context.ts";
-import { historyTool } from "./tools/history.ts";
+import type { HistoryMetadata } from "./tools/history.ts";
+import { historyTools } from "./tools/history.ts";
 import { readTool } from "./tools/read.ts";
 
 const reportSchema = object({
@@ -46,6 +47,7 @@ interface Work {
   state: "running" | "done" | "failed" | "cancelled";
   updated: PromiseWithResolvers<void>;
   report?: Static<typeof reportSchema>;
+  metadata?: HistoryMetadata;
   error?: string;
 }
 
@@ -67,7 +69,7 @@ export class Subagents {
     return tool(
       this.#context,
       "subagent",
-      "委派独立资料助手检索上下文、确定记录范围、比较纪要或提取信息。start 给出具体任务和可选 scope，不传整段历史，先等待最多 5 秒；助手自行查原文，返回内容简报、资料规模和必要 ID，不操作记录或发言。最多同时运行两个。wait 最多等待 30 秒；有新简报或任务完成时立即返回，否则返回已有简报，可继续 wait。等待超时不说明内容很多。inspect 立即查看；cancel 放弃任务。最终 reply 前须完成或取消查阅任务。",
+      "委派独立资料助手检索上下文、确定记录范围、比较纪要或提取信息。start 给出具体任务和可选 scope，不传整段历史，先等待最多 5 秒；助手先查元数据，再用句柄读正文，只返回元数据、内容简报和必要 ID，不操作记录或发言。最多同时运行两个。wait 最多等待 30 秒；有新元数据、简报或任务完成时立即返回，否则返回已有信息，可继续 wait。metadata 是资料规模和范围，不代表已读正文。等待超时不说明内容很多。inspect 立即查看；cancel 放弃任务。最终 reply 前须完成或取消查阅任务。",
       parameters,
       async (args, signal) => {
         const id =
@@ -111,6 +113,7 @@ export class Subagents {
           id,
           task: run.work.task,
           state: run.work.state,
+          metadata: run.work.metadata ?? null,
           brief: run.work.report?.brief ?? null,
           scope: run.work.report?.scope ?? null,
           error: run.work.error ?? null,
@@ -193,7 +196,14 @@ export class Subagents {
         signal,
         thinking: true,
         maxTurns: 16,
-        tools: [historyTool(this.#context), readTool(this.#context), report],
+        tools: [
+          ...historyTools(this.#context, (metadata) => {
+            work.metadata = metadata;
+            work.updated.resolve();
+          }),
+          readTool(this.#context),
+          report,
+        ],
         finishTurn: ({ message }) => ({
           action:
             work.report?.done ||

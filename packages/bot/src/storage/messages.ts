@@ -15,6 +15,14 @@ export const decodeMessage = (row: MessageRow): Message => ({
   command: Boolean(row.command),
 });
 
+export interface MessageMetadata {
+  id: number;
+  userId: string;
+  sentAt: number;
+  textChars: number;
+  attachmentCount: number;
+}
+
 export class Messages {
   #db: Database;
   #config: Pick<Config, "ADMIN_IDS" | "GROUP_ADMINS">;
@@ -311,28 +319,82 @@ export class Messages {
     return rows.reverse().map(decodeMessage);
   }
 
-  public async history(
+  public async listMetadata(
     groupId: string,
     through: number,
     {
       from = 0,
       to = Number.MAX_SAFE_INTEGER,
       fromId = 0,
-    }: { from?: number; to?: number; fromId?: number } = {},
-  ): Promise<Message[]> {
-    const rows = await this.#db
+      ids,
+      topicIds,
+      query,
+      includeBot = false,
+      limit,
+    }: {
+      from?: number;
+      to?: number;
+      fromId?: number;
+      ids?: number[];
+      topicIds?: string[];
+      query?: string;
+      includeBot?: boolean;
+      limit?: number;
+    } = {},
+  ): Promise<MessageMetadata[]> {
+    let selection = this.#db
       .selectFrom("messages")
-      .selectAll()
+      .select(["id", "userId", "sentAt"])
+      .select((eb) => [
+        eb.fn<number>("length", ["text"]).as("textChars"),
+        eb
+          .selectFrom("assets")
+          .select((eb) => eb.fn.countAll<number>().as("count"))
+          .whereRef("assets.messageId", "=", "messages.id")
+          .$asScalar()
+          .as("attachmentCount"),
+      ])
       .where("groupId", "=", groupId)
       .where("sentAt", ">=", from)
       .where("sentAt", "<", to)
       .where("id", ">=", fromId)
       .where("id", "<=", through)
-      .where("isBot", "=", 0)
-      .orderBy("id")
-      .execute();
+      .orderBy("id", "desc");
 
-    return rows.map(decodeMessage);
+    if (!includeBot) {
+      selection = selection.where("isBot", "=", 0);
+    }
+
+    if (ids) {
+      if (ids.length === 0) {
+        return [];
+      }
+
+      selection = selection.where("id", "in", ids);
+    }
+
+    if (topicIds) {
+      selection = selection.where(
+        "id",
+        "in",
+        this.#db
+          .selectFrom("topic_messages")
+          .select("messageId")
+          .where("topicId", "in", topicIds),
+      );
+    }
+
+    if (query !== undefined) {
+      selection = selection.where((eb) =>
+        eb(eb.fn<number>("contains_text", ["text", eb.val(query)]), ">", 0),
+      );
+    }
+
+    if (limit !== undefined) {
+      selection = selection.limit(limit);
+    }
+
+    return (await selection.execute()).reverse();
   }
 
   public async nextDetection(
@@ -397,20 +459,15 @@ export class Messages {
     });
   }
 
-  public async search(
-    groupId: string,
-    query: string,
-    through: number,
-  ): Promise<Message[]> {
+  public async getMany(ids: number[]): Promise<Message[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+
     const rows = await this.#db
       .selectFrom("messages")
       .selectAll()
-      .where("groupId", "=", groupId)
-      .where("id", "<=", through)
-      .where("isBot", "=", 0)
-      .where((eb) =>
-        eb(eb.fn<number>("contains_text", ["text", eb.val(query)]), ">", 0),
-      )
+      .where("id", "in", ids)
       .orderBy("id")
       .execute();
 

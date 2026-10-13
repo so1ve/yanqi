@@ -82,19 +82,26 @@ export class SavedNotes {
       .execute();
   }
 
-  public async find(topicId: string, revision?: number): Promise<Note | null> {
-    let query = this.#db
-      .selectFrom("notes")
-      .selectAll()
-      .where("topicId", "=", topicId);
+  #findQuery(topicId: string, revision?: number) {
+    let query = this.#db.selectFrom("notes").where("topicId", "=", topicId);
 
     if (revision !== undefined) {
       query = query.where("revision", "=", revision);
     }
 
-    const note = await query
-      .orderBy("revision", "desc")
-      .limit(1)
+    return query.orderBy("revision", "desc").limit(1);
+  }
+
+  public metadata(topicId: string, revision?: number) {
+    return this.#findQuery(topicId, revision)
+      .select(["id", "revision"])
+      .select((eb) => eb.fn<number>("length", ["markdown"]).as("textChars"))
+      .executeTakeFirst();
+  }
+
+  public async find(topicId: string, revision?: number): Promise<Note | null> {
+    const note = await this.#findQuery(topicId, revision)
+      .selectAll()
       .executeTakeFirst();
 
     return note ? decodeNote(note) : null;
