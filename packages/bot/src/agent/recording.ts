@@ -3,6 +3,7 @@ import { Type } from "typebox";
 import type { ChatMessage, Topic } from "../types.ts";
 import { beijingTime } from "../utils/time.ts";
 import { prompts } from "./prompts/recording.ts";
+import { summaryPrompts } from "./prompts/summary.ts";
 import type { AgentRuntime } from "./runtime.ts";
 import type { Detection, Publication } from "./schemas.ts";
 import { detectionSchema, publicationSchema } from "./schemas.ts";
@@ -50,7 +51,7 @@ export class RecordingAI {
           { markdown: Type.String() },
           { additionalProperties: false },
         ),
-        `${prompts.summary}\n\n${prompts.focusedSummary}`,
+        `${summaryPrompts.summarize}\n\n${summaryPrompts.focusedSummary}`,
         { ...input, focus },
         { thinking: true },
       );
@@ -60,7 +61,7 @@ export class RecordingAI {
 
     return this.#runtime.text(
       "summary",
-      `${prompts.summary}\n直接返回纪要正文，不返回 JSON。`,
+      `${summaryPrompts.summarize}\n直接返回纪要正文，不返回 JSON。`,
       input,
       { thinking: true },
     );
@@ -69,7 +70,7 @@ export class RecordingAI {
   public merge(sections: string[]): Promise<string> {
     return this.#runtime.text(
       "summary_merge",
-      prompts.merge,
+      summaryPrompts.merge,
       { sections },
       { thinking: true },
     );
