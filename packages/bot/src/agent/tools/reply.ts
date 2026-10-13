@@ -11,8 +11,7 @@ const parameters = object({
   }),
   waitForReply: Type.Optional(
     Type.Boolean({
-      description:
-        "确实需要请求者下一句补充时设为 true，其下一句无需 @ 即可继续。",
+      description: "需要请求者补充信息时设为 true，其下一句无需 @ 即可继续。",
     }),
   ),
 });
@@ -48,7 +47,7 @@ export function replyTool(context: ToolContext, messenger: Messenger) {
         state,
         message:
           state === "done"
-            ? "已发送到 QQ 群，本次答复结束，不再补发状态。"
+            ? "答复已发到 QQ 群，本次对话结束。"
             : state === "failed"
               ? "QQ 发送失败，回复已保留，可以重试发送。"
               : "QQ 尚未确认发送，回复已保留，不要重复回复或声称已发送。",

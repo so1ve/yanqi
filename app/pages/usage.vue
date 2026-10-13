@@ -29,13 +29,13 @@ const totals = computed(() =>
   ),
 );
 const purposes: Record<string, string> = {
-  "decision:observe": "入口决策",
-  "observe": "入口识别",
+  "decision:observe": "识别记录请求",
+  "observe": "识别记录请求",
   "intent": "处理请求",
-  "detect": "发现讨论",
-  "summary": "提取纪要",
+  "detect": "识别讨论",
+  "summary": "整理纪要",
   "summary_merge": "合并纪要",
-  "publication": "发布判断",
+  "publication": "判断是否发送",
   "image": "图片理解",
   "audio": "语音转写",
 };
@@ -61,7 +61,7 @@ const columns: DataTableColumns<Usage["models"][number]> = [
     render: (row) => purposes[row.purpose] ?? row.purpose,
   },
   {
-    title: "调用",
+    title: "调用次数",
     key: "calls",
     width: 80,
     render: (row) => formatNumber(row.calls),
@@ -92,7 +92,7 @@ const columns: DataTableColumns<Usage["models"][number]> = [
 
 <template>
   <PageHeading
-    :description="`${group?.name ?? '选择一个群'} · 按提供商返回的用量统计，不估算费用`"
+    :description="`${group?.name ?? '请先选择一个群'} · 统计模型服务返回的 token 用量，费用以服务商账单为准`"
     title="模型用量"
   >
     <NDatePicker
@@ -120,21 +120,21 @@ const columns: DataTableColumns<Usage["models"][number]> = [
           <div class="stat-value">
             {{ totals?.measured ? formatNumber(totals.input) : "—" }}
           </div>
-          <div class="stat-note">不含单列的缓存读取</div>
+          <div class="stat-note">缓存读取另列</div>
         </div>
         <div class="stat">
           <div class="stat-label">输出 token</div>
           <div class="stat-value">
             {{ totals?.measured ? formatNumber(totals.output) : "—" }}
           </div>
-          <div class="stat-note">包括服务计入的思考用量</div>
+          <div class="stat-note">包含服务商上报的思考用量</div>
         </div>
         <div class="stat">
           <div class="stat-label">缓存读取</div>
           <div class="stat-value">
             {{ totals?.measured ? formatNumber(totals.cache) : "—" }}
           </div>
-          <div class="stat-note">实际费用以服务账单为准</div>
+          <div class="stat-note">命中缓存的输入 token</div>
         </div>
       </div>
       <NAlert
@@ -144,7 +144,7 @@ const columns: DataTableColumns<Usage["models"][number]> = [
         type="info"
       >
         有 {{ data.calls - (totals?.measured ?? 0) }} 次调用没有返回 token
-        用量，未计入合计，不代表没有消耗。
+        用量，合计不含这些调用。费用请查看服务商账单。
       </NAlert>
       <div v-if="data.models.length > 0" class="panel">
         <NDataTable
@@ -156,7 +156,6 @@ const columns: DataTableColumns<Usage["models"][number]> = [
       </div>
       <div v-else class="panel empty-state">
         <h3>这一天还没有模型调用</h3>
-        <p>换一个日期，或在小栖处理消息后查看。</p>
       </div>
     </template>
   </LoadState>

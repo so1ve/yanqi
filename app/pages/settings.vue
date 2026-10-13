@@ -63,7 +63,7 @@ async function password(): Promise<void> {
           method: "PUT",
           body: { current: currentPassword.value, password: newPassword.value },
         }),
-      "密码已修改，其他登录已退出",
+      "密码已修改，其他登录已失效",
     )
   ) {
     currentPassword.value = "";
@@ -73,10 +73,7 @@ async function password(): Promise<void> {
 </script>
 
 <template>
-  <PageHeading
-    description="配置保存在数据库中，保存后生效，重启后继续使用。"
-    title="设置"
-  >
+  <PageHeading description="保存后生效，服务重启后保留。" title="设置">
     <NButton :disabled="!draft" :loading="busy" type="primary" @click="save">
       <template #icon><NIcon :component="DeviceFloppy" /></template>
       保存并应用
@@ -89,7 +86,7 @@ async function password(): Promise<void> {
           <NForm class="settings-section">
             <div class="section-title">
               <h2>NapCat 连接</h2>
-              <p>先在 NapCat 管理页扫码或输入 QQ 密码登录，再填写连接信息。</p>
+              <p>先在 NapCat 管理页登录 QQ，再填写下方连接信息。</p>
             </div>
             <div class="form-grid">
               <NFormItem label="机器人 QQ 号">
@@ -112,8 +109,8 @@ async function password(): Promise<void> {
                     placeholder="与 NapCat WebSocket 服务端一致"
                   />
                   <p class="form-help">
-                    在 NapCat 的网络配置中启用 WebSocket 服务端，消息格式选
-                    array，打开“上报自身消息”，将同一个 Token 填在这里。
+                    在 NapCat 中启用 WebSocket 服务端，消息格式选
+                    array，打开“上报自身消息”。此处填写同一个 Token。
                   </p>
                 </div>
               </NFormItem>
@@ -137,7 +134,7 @@ async function password(): Promise<void> {
               </NFormItem>
             </div>
             <div class="section-title mt-16"><h2>启动与交互权限</h2></div>
-            <NFormItem label="后端启动后自动运行机器人">
+            <NFormItem label="服务启动时自动运行机器人">
               <NSwitch v-model:value="autostart" />
             </NFormItem>
             <NFormItem label="全局管理员 QQ 号">
@@ -149,7 +146,7 @@ async function password(): Promise<void> {
                   type="textarea"
                 />
                 <p class="form-help">
-                  此名单对全部群生效。各群的群主和管理员自动拥有交互权限；额外成员可在“群与成员”中选择。
+                  对所有群生效。群主和群管理员已有交互权限，其他成员可在“群与成员”中授权。
                 </p>
               </div>
             </NFormItem>
@@ -157,8 +154,7 @@ async function password(): Promise<void> {
               <NInput readonly :value="data?.dataDirectory" />
             </NFormItem>
             <p class="form-help">
-              数据保存在 Docker 挂载的 data/
-              目录。应用设置时会取消进行中的对话，后台整理会在新配置下继续。
+              保存设置会中断当前对话。后台整理会使用新设置继续。
             </p>
           </NForm>
         </NTabPane>
@@ -166,14 +162,14 @@ async function password(): Promise<void> {
           <NForm>
             <ModelEditor
               v-model="draft.AI_MODEL"
-              description="理解请求、调用工具、整理纪要与生成群回复。"
+              description="理解请求、整理纪要和回复群消息。"
               title="主模型"
             />
             <div class="model-card-head">
               <div>
                 <h3>图片理解</h3>
                 <p class="form-help">
-                  解析图片文字、代码和画面。关闭后仍保存原件。
+                  识别图片中的文字、代码和画面。关闭后仍保存原图。
                 </p>
               </div>
               <NSwitch
@@ -190,7 +186,7 @@ async function password(): Promise<void> {
             <div class="model-card-head">
               <div>
                 <h3>语音转写</h3>
-                <p class="form-help">识别语音中的文字，保留本地音频原件。</p>
+                <p class="form-help">把语音转成文字。关闭后仍保存原始音频。</p>
               </div>
               <NSwitch
                 :value="draft.AI_AUDIO_MODEL !== null"
@@ -205,7 +201,7 @@ async function password(): Promise<void> {
             />
           </NForm>
         </NTabPane>
-        <NTabPane name="decision" tab="入口决策">
+        <NTabPane name="decision" tab="请求识别">
           <NForm>
             <DecisionEditor v-model="draft" />
           </NForm>
@@ -219,12 +215,10 @@ async function password(): Promise<void> {
             <NInput
               v-model:value="draft.BOT_PERSONA"
               :autosize="{ minRows: 16, maxRows: 30 }"
-              placeholder="直接描述小栖的个性和表达习惯"
+              placeholder="描述小栖的个性和说话习惯"
               type="textarea"
             />
-            <p class="form-help">
-              保存后会用于普通回复与保存通知，无需上传或修改文件。
-            </p>
+            <p class="form-help">用于群回复和纪要保存通知。</p>
           </section>
         </NTabPane>
         <NTabPane name="runtime" tab="运行参数">
@@ -237,7 +231,7 @@ async function password(): Promise<void> {
           >
             <div class="section-title">
               <h2>修改管理密码</h2>
-              <p>保存后会退出其他浏览器中的登录。</p>
+              <p>修改后，其他已登录的设备需要重新登录。</p>
             </div>
             <NFormItem label="当前密码">
               <NInput

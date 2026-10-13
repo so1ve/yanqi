@@ -95,7 +95,7 @@ async function save(): Promise<void> {
 function send(): void {
   dialog.info({
     title: "发送纪要到群",
-    content: `将这版纪要发送到「${group.value?.name ?? groupId.value}」，群成员都能看到。`,
+    content: `发送第 ${data.value!.note!.revision} 版到「${group.value?.name ?? groupId.value}」？`,
     positiveText: "发送到群",
     negativeText: "取消",
     onPositiveClick: () =>
@@ -105,7 +105,7 @@ function send(): void {
             method: "POST",
             body: { noteId: data.value!.note!.id },
           }),
-        "已加入发送队列",
+        "已安排发送",
       ),
   });
 }
@@ -163,10 +163,10 @@ function download(): void {
 <template>
   <NuxtLink class="muted back-link" to="/records">
     <NIcon :component="ArrowLeft" />
-    返回纪要
+    返回纪要列表
   </NuxtLink>
   <PageHeading
-    :description="`${group?.name ?? groupId} · 内容保存在本地`"
+    :description="group?.name ?? groupId"
     :title="data?.topic.title ?? '纪要'"
   >
     <NButton aria-label="刷新纪要" :loading @click="refresh">
@@ -195,7 +195,7 @@ function download(): void {
             class="version-select"
             :disabled="editing"
             :options
-            placeholder="还没有完成的版本"
+            placeholder="尚未生成纪要"
             :value="version ?? data.note?.id ?? null"
             @update:value="version = $event"
           />
@@ -279,8 +279,8 @@ function download(): void {
             />
           </article>
           <div v-else class="panel empty-state">
-            <h3>正在等待第一版纪要</h3>
-            <p>整理完成后会自动显示。可以在后台任务中查看当前进度。</p>
+            <h3>尚未生成第一版纪要</h3>
+            <p>完成后会自动显示，进度和错误可在“后台任务”中查看。</p>
             <NuxtLink to="/tasks"><NButton>查看任务</NButton></NuxtLink>
           </div>
         </NTabPane>
@@ -305,7 +305,7 @@ function download(): void {
     title="重新整理这篇纪要"
   >
     <p class="muted mb-20">
-      重新阅读这个话题的原文并生成新版本，仅保存到本地。
+      按下方要求重新整理原文，保存为新版本。完成后不会自动发到群里。
     </p>
     <NInput
       v-model:value="focus"

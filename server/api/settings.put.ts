@@ -36,7 +36,7 @@ export default defineEventHandler(async (event) => {
   ) {
     throw createError({
       statusCode: 400,
-      message: "NapCat 管理地址需要使用 http 或 https",
+      message: "请填写有效的 NapCat 管理页地址，使用 http:// 或 https://",
     });
   }
 

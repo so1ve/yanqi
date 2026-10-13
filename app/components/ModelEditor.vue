@@ -12,7 +12,7 @@ const model = defineModel<ModelConfig>({ required: true });
         <h3>{{ title }}</h3>
         <p class="form-help">{{ description }}</p>
       </div>
-      <NTag :bordered="false" size="small">OpenAI 兼容</NTag>
+      <NTag :bordered="false" size="small">OpenAI 兼容接口</NTag>
     </div>
     <div class="form-grid">
       <NFormItem label="服务地址">
@@ -22,7 +22,7 @@ const model = defineModel<ModelConfig>({ required: true });
         />
       </NFormItem>
       <NFormItem label="模型名称">
-        <NInput v-model:value="model.model" placeholder="提供商使用的模型 ID" />
+        <NInput v-model:value="model.model" placeholder="服务商提供的模型 ID" />
       </NFormItem>
       <NFormItem class="full-width" label="API Key">
         <div class="w-full">

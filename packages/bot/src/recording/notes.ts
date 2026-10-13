@@ -111,7 +111,7 @@ export class Notes {
         ? `检索范围共 ${sources.length} 条原始消息\n\n整理要求：${topic.focus}`
         : `${sources.length} 条原始消息`;
       const header = `# ${topic.title}\n\n第 ${revision} 版 · ${scope}`;
-      const footer = "[查看范围内的完整原始记录](transcript.md)。\n";
+      const footer = "[查看完整原文](transcript.md)\n";
       let sections: Note["sections"] = [];
       let content = "";
 
@@ -127,7 +127,7 @@ export class Notes {
           .join("\n\n");
         await writeMarkdown(
           path,
-          `${header}\n\n> 草稿：纪要尚未完成，以下是已整理的部分。\n\n${content}\n\n${footer}`,
+          `${header}\n\n> 草稿：整理尚未完成。\n\n${content}\n\n${footer}`,
         );
         await this.#store.jobs.reportProgress(
           job.id,
@@ -146,7 +146,7 @@ export class Notes {
         `正在合并相关观点；草稿：${path}`,
       );
       content = await this.#summary.compose(sections);
-      const markdown = `${header}\n\n${content || "在这些已保存的讨论中，没有找到与整理要求相关的内容。"}\n\n${footer}`;
+      const markdown = `${header}\n\n${content || "所选原文中没有找到与整理要求相关的内容。"}\n\n${footer}`;
 
       await writeMarkdown(path, markdown);
       note = await this.#store.notes.save(

@@ -30,13 +30,13 @@ export class MediaAI {
 
   public async understandImage(path: string, mime: string): Promise<string> {
     if (!this.#config.AI_VISION_MODEL) {
-      throw new Error("未配置图片理解模型");
+      throw new Error("尚未配置视觉模型，请在“设置 → 模型服务”中填写");
     }
 
     const bytes = await readFile(path);
 
     if (bytes.byteLength > 8 * 1024 * 1024) {
-      throw new Error("图片超过本程序的 8 MiB 识别大小上限，原文件已保存");
+      throw new Error("图片超过 8 MiB，无法识别。原图已保存");
     }
 
     return this.#runtime.image(
@@ -50,7 +50,7 @@ export class MediaAI {
     const model = this.#config.AI_AUDIO_MODEL;
 
     if (!model) {
-      throw new Error("未配置语音转写模型");
+      throw new Error("尚未配置语音模型，请在“设置 → 模型服务”中填写");
     }
 
     await reserveCall(this.#config, this.#store, model, "audio");

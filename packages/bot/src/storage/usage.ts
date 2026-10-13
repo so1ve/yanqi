@@ -102,7 +102,7 @@ export class Usage {
       day,
       calls: calls.length,
       models: [...totals.values()],
-      note: "token 合计仅包含有用量数据的调用；实际费用以提供商账单为准。account 是配置项名称，不含 key。",
+      note: "token 合计只统计服务商已上报的用量，费用以服务商账单为准。account 表示使用的模型配置，不包含 API Key。",
     };
   }
 }

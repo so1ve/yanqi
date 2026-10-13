@@ -126,7 +126,7 @@ const columns: DataTableColumns<Memory> = [
 
 <template>
   <PageHeading
-    :description="`${group?.name ?? '选择一个群'} · 按成员保存的偏好和约定`"
+    :description="`${group?.name ?? '请先选择一个群'} · 查看和编辑成员的偏好与约定`"
     title="记忆"
   >
     <NButton :disabled="!groupId" type="primary" @click="edit()">
@@ -146,11 +146,17 @@ const columns: DataTableColumns<Memory> = [
     <NButton attr-type="submit">搜索</NButton>
   </form>
   <LoadState
-    description="小栖可以记住成员的偏好，也可以在这里直接补充或修改。"
+    description="可以让小栖记住你的偏好，也可以在这里添加。"
     :empty="!data?.items.length"
     :error
     :loading="loading && !data"
-    title="还没有保存的记忆"
+    :title="
+      !groupId
+        ? '请先选择一个群'
+        : searchQuery
+          ? '没有找到匹配的记忆'
+          : '还没有保存的记忆'
+    "
     @retry="refresh"
   >
     <div class="panel">
@@ -181,7 +187,7 @@ const columns: DataTableColumns<Memory> = [
         <NInput
           v-model:value="form.userId"
           :disabled="existing"
-          placeholder="这条记忆属于谁"
+          placeholder="填写成员的 QQ 号"
         />
       </NFormItem>
       <NFormItem label="名称">

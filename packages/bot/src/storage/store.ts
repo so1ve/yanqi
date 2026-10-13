@@ -51,7 +51,7 @@ export class Store {
       "groups",
       groups.map((id) => ({ id })),
     );
-    // 重启后不再判断旧闲聊是否需要插话；新消息会带上近期上下文。
+    // 重启后跳过旧消息的请求识别，避免迟到的回复；新请求仍会带上近期上下文。
     await this.#db.set(
       "jobs",
       { kind: "observe", $or: [{ state: "pending" }, { state: "running" }] },

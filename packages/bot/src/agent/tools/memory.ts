@@ -45,7 +45,7 @@ export function memoryTool(context: ToolContext) {
             args.content.trim(),
           );
 
-          return "已记住这项信息。";
+          return "记忆已保存。";
         }
 
         case "forget": {

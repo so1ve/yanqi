@@ -25,7 +25,7 @@ async function retry(id: number): Promise<void> {
   await run(async () => {
     await api(`groups/${groupId.value}/assets/${id}/retry`, { method: "POST" });
     await refresh();
-  }, "已安排重新解析附件");
+  }, "已安排重新解析");
 }
 const kinds: Record<string, string> = {
   image: "图片",
@@ -38,7 +38,7 @@ const kinds: Record<string, string> = {
 
 <template>
   <PageHeading
-    :description="`${group?.name ?? '选择一个群'} · 消息按时间倒序，保留撤回标记和附件解析结果`"
+    :description="`${group?.name ?? '请先选择一个群'} · 最新消息在前，可查看附件和撤回标记`"
     title="原始消息"
   >
     <NButton :loading @click="refresh">
@@ -59,11 +59,17 @@ const kinds: Record<string, string> = {
     <span class="right muted">{{ data?.total ?? 0 }} 条消息</span>
   </form>
   <LoadState
-    description="小栖启动后，会保存已启用群的新消息。搜索只覆盖已经保存的内容。"
+    description="搜索范围限于已保存的消息。小栖启动后才会接收已启用群的新消息。"
     :empty="!data?.items.length"
     :error
     :loading="loading && !data"
-    title="还没有找到消息"
+    :title="
+      !groupId
+        ? '请先选择一个群'
+        : searchQuery
+          ? '没有找到匹配的消息'
+          : '还没有保存的消息'
+    "
     @retry="refresh"
   >
     <div class="message-list">

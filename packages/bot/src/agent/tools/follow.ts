@@ -67,7 +67,7 @@ export function followTool(context: ToolContext) {
           )));
 
       if (topic?.mode !== "manual") {
-        return "没有找到正在进行的手动记录。";
+        return "没有找到正在进行的连续记录。";
       }
 
       if (topic.state === "closed" && topic.endedAtMessageId === null) {

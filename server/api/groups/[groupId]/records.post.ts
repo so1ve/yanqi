@@ -12,7 +12,7 @@ export default defineEventHandler(async (event) => {
   if (!bot.config.GROUP_IDS.includes(groupId)) {
     throw createError({
       statusCode: 409,
-      message: "请先启用这个群，再创建整理任务",
+      message: "请先在“群与成员”中启用该群的“保存消息”",
     });
   }
 
@@ -48,7 +48,7 @@ export default defineEventHandler(async (event) => {
   if (messages.length === 0) {
     throw createError({
       statusCode: 400,
-      message: "这个范围内还没有保存的讨论",
+      message: "所选时间范围内没有已保存的群成员消息",
     });
   }
 

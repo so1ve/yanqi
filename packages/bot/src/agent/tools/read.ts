@@ -67,7 +67,7 @@ export function readTool(context: ToolContext) {
           const note = await store.notes.latest(topic.id);
 
           if (!note) {
-            return "这份纪要尚未保存；查看进度用 inspect，读取原文用 history。";
+            return "尚无已保存的纪要版本。用 inspect 查看进度，或用 history 读取原文。";
           }
 
           const page = args.page ?? 0;
@@ -108,7 +108,7 @@ export function readTool(context: ToolContext) {
           return {
             records: [],
             historyMatches: pages[0] ?? [],
-            hint: "这些只是字面匹配的片段。没有纪要不代表没有讨论，范围和目标明确时可直接 record。",
+            hint: "未找到匹配的纪要，historyMatches 是按字面查到的原文片段。范围和目标已明确时可直接 record，无需先找到纪要。",
           };
         }
 

@@ -26,7 +26,7 @@ export function taskTool(context: ToolContext) {
   return tool(
     context,
     "task",
-    "inspect 查看任务详情；wait 等待完成并读取最新结果；retry 重试指定失败任务并等待。问图片内容先等待对应任务。status 查本群总体状态；retry_failed 重试本群失败的后台和发送任务。对话不会从头重跑。",
+    "inspect 查看指定任务；wait 等待并读取最新结果；retry 重试指定失败任务并等待。询问附件内容时先等对应任务。status 查看本群任务状态；retry_failed 重试本群失败的后台任务和发送。对话请求不能重试或等待。",
     parameters,
     async (args, signal) => {
       if (args.action === "status") {
@@ -55,7 +55,7 @@ export function taskTool(context: ToolContext) {
       if (action !== "inspect") {
         if (job.kind === "intent" || job.kind === "observe") {
           throw new Error(
-            "对话不能从头重跑或相互等待，请查询它依赖的附件或纪要任务",
+            "不能等待或重试对话请求，请指定相关附件或纪要的任务 ID",
           );
         }
 

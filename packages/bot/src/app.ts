@@ -82,7 +82,9 @@ export class Yanqi {
     ) as OneBotBot<Context> | undefined;
 
     if (!bot) {
-      throw new Error("NapCat 尚未连接，请检查账号、地址和令牌");
+      throw new Error(
+        "NapCat 未连接，请检查 QQ 登录状态、WebSocket 地址和 OneBot Token",
+      );
     }
 
     return bot.internal;

@@ -99,7 +99,7 @@ const columns: DataTableColumns<Group> = [
       }),
   },
   {
-    title: "自动归档",
+    title: "自动整理",
     key: "automatic",
     width: 110,
     render: (row) =>
@@ -147,7 +147,7 @@ const memberColumns: DataTableColumns<Member> = [
       h("div", [row.name, h("div", { class: "cell-sub mono" }, row.id)]),
   },
   {
-    title: "群身份",
+    title: "群内身份",
     key: "role",
     width: 100,
     render: (row) =>
@@ -201,7 +201,7 @@ async function saveMembers(): Promise<void> {
 
 <template>
   <PageHeading
-    description="按群启用记录，并选择可以和小栖交互的人。"
+    description="选择要记录的群，以及可以向小栖发出请求的成员。"
     title="群与成员"
   >
     <NButton :loading="busy" @click="run(workspace.refresh)">
@@ -214,7 +214,7 @@ async function saveMembers(): Promise<void> {
     </NButton>
   </PageHeading>
   <NAlert v-if="!status?.connected" :bordered="false" class="mb-22" type="info">
-    连接 NapCat 后，可以同步群名称与成员。已有记录仍可查看。
+    NapCat 未连接。连接后可同步群名称和成员。
     <NuxtLink to="/settings">连接设置</NuxtLink>
   </NAlert>
   <div class="toolbar">
@@ -229,9 +229,13 @@ async function saveMembers(): Promise<void> {
     </span>
   </div>
   <LoadState
-    description="连接 NapCat 后同步，或直接填写一个群号。"
+    :description="
+      groups.length > 0
+        ? '试试其他群名或群号。'
+        : '连接 NapCat 后同步群列表，或手动添加群号。'
+    "
     :empty="filtered.length === 0"
-    title="还没有记录群"
+    :title="groups.length > 0 ? '没有找到匹配的群' : '还没有添加群'"
   >
     <div class="panel">
       <NDataTable
@@ -243,7 +247,7 @@ async function saveMembers(): Promise<void> {
       />
     </div>
     <p class="form-help">
-      停用“保存消息”后不再处理这个群的新消息。关闭“自动归档”仍会保存消息，并响应获准成员的请求。
+      关闭“保存消息”后，小栖不再处理该群的新消息。只关闭“自动整理”时，仍会保存消息并处理有权限成员的请求。
     </p>
   </LoadState>
   <NModal
@@ -253,7 +257,7 @@ async function saveMembers(): Promise<void> {
     :title="`${active?.name ?? ''} · 交互权限`"
   >
     <p class="muted mb-18">
-      群主、QQ 群管理员和全局名单自动获准。勾选其他成员可加入本群名单。
+      群主、群管理员和全局管理员已有交互权限。勾选可授权其他成员。
     </p>
     <NInput
       v-model:value="memberQuery"
@@ -296,7 +300,7 @@ async function saveMembers(): Promise<void> {
       <NFormItem label="群号">
         <NInput v-model:value="newId" placeholder="机器人已加入的 QQ 群" />
       </NFormItem>
-      <p class="form-help">保存只会启用记录，不会让 QQ 账号自动加入这个群。</p>
+      <p class="form-help">请先让机器人 QQ 账号加入该群，再添加群号。</p>
       <NSpace class="mt-20" justify="end">
         <NButton @click="showAdd = false">取消</NButton>
         <NButton

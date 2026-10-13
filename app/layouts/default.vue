@@ -29,7 +29,7 @@ const { busy, run } = useAction();
 const open = ref(false);
 const error = ref("");
 const links = [
-  { path: "/", label: "工作台", icon: Dashboard },
+  { path: "/", label: "概览", icon: Dashboard },
   { path: "/records", label: "纪要", icon: Book2 },
   { path: "/messages", label: "原始消息", icon: Messages },
   { path: "/groups", label: "群与成员", icon: Users },
@@ -97,7 +97,7 @@ function changeGroup(id: string): void {
         <span class="brand-mark">栖</span>
         <span>
           <strong>言栖</strong>
-          <small>记录工作台</small>
+          <small>管理台</small>
         </span>
       </NuxtLink>
       <NButton
@@ -175,7 +175,7 @@ function changeGroup(id: string): void {
             {{ status?.connected ? "NapCat 已连接" : "NapCat 未连接" }}
           </span>
           <span class="runtime-label">
-            {{ status?.running ? "正在处理消息" : "处理已暂停" }}
+            {{ status?.running ? "机器人已启动" : "机器人未启动" }}
           </span>
           <NButton
             :loading="busy"
@@ -183,7 +183,7 @@ function changeGroup(id: string): void {
             :type="status?.running ? 'default' : 'primary'"
             @click="toggle"
           >
-            {{ status?.running ? "停止处理" : "启动机器人" }}
+            {{ status?.running ? "停止机器人" : "启动机器人" }}
           </NButton>
         </div>
       </div>

@@ -51,7 +51,7 @@ async function retry(task: Task): Promise<void> {
       method: "POST",
     });
     await refresh();
-  }, "已重新安排任务");
+  }, "已安排重试");
 }
 function cancel(id: number, kind: "tasks" | "deliveries"): void {
   dialog.warning({
@@ -108,12 +108,12 @@ const columns: DataTableColumns<Task> = [
               ? "color: #bf655d; overflow-wrap: anywhere"
               : "overflow-wrap: anywhere",
           },
-          row.lastError || row.progress || "等待领取",
+          row.lastError || row.progress || "暂无进度说明",
         ),
         h(
           "div",
           { class: "cell-sub" },
-          `已尝试 ${row.attempts} 次${row.state === "pending" ? ` · 计划 ${formatTime(row.runAfter)}` : ""}`,
+          `已尝试 ${row.attempts} 次${row.state === "pending" ? ` · 最早于 ${formatTime(row.runAfter)} 开始` : ""}`,
         ),
       ]),
   },
@@ -205,7 +205,7 @@ const states = [
 
 <template>
   <PageHeading
-    :description="`${group?.name ?? '选择一个群'} · 查看整理、解析和发送的进度`"
+    :description="`${group?.name ?? '请先选择一个群'} · 查看进度、错误和发送状态`"
     title="后台任务"
   >
     <NButton :loading="tasksLoading || deliveriesLoading" @click="refresh">
@@ -217,14 +217,14 @@ const states = [
     <NTabPane name="tasks" tab="处理任务">
       <div class="toolbar">
         <NSelect v-model:value="state" class="filter-state" :options="states" />
-        <span class="muted">自动更新 · 每 5 秒</span>
+        <span class="muted">每 5 秒刷新</span>
       </div>
       <LoadState
         description="记录请求、附件解析和纪要整理会显示在这里。"
         :empty="!tasks?.items.length"
         :error="tasksError"
         :loading="tasksLoading && !tasks"
-        title="当前没有任务"
+        :title="!groupId ? '请先选择一个群' : '没有符合条件的任务'"
         @retry="refresh"
       >
         <div class="panel">
@@ -245,7 +245,7 @@ const states = [
         </div>
       </LoadState>
       <p class="form-help">
-        旧对话不会重放，避免重复执行群里的请求。要中断正在执行的任务，请停止机器人。
+        对话请求不能重试，请在群里重新提出。要中断正在执行的任务，请停止机器人。
       </p>
     </NTabPane>
     <NTabPane name="deliveries" tab="群消息发送">
@@ -253,7 +253,7 @@ const states = [
         :empty="!deliveries?.items.length"
         :error="deliveriesError"
         :loading="deliveriesLoading && !deliveries"
-        title="还没有发送记录"
+        :title="!groupId ? '请先选择一个群' : '还没有发送记录'"
         @retry="refresh"
       >
         <div class="panel">

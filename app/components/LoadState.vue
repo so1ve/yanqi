@@ -18,7 +18,7 @@ defineProps<{
   </NAlert>
   <div v-else-if="loading" class="loading-state">
     <NSpin size="small" />
-    <span>正在读取…</span>
+    <span>加载中…</span>
   </div>
   <div v-else-if="empty" class="empty-state">
     <h3>{{ title || "还没有内容" }}</h3>

@@ -110,7 +110,7 @@ export function parseConfig(input: unknown): Config {
 
 export function assertConfigured(config: Config): void {
   if (!config.BOT_QQ || !config.ONEBOT_TOKEN) {
-    throw new Error("请先填写 QQ 账号和 NapCat 连接凭据");
+    throw new Error("请先在设置中填写机器人 QQ 号和 OneBot Token");
   }
 
   if (config.GROUP_IDS.length === 0) {
@@ -122,14 +122,16 @@ export function assertConfigured(config: Config): void {
     !config.AI_MODEL.apiKey ||
     !config.AI_MODEL.model
   ) {
-    throw new Error("请先配置主模型的地址、密钥和模型名称");
+    throw new Error("请填写主模型的服务地址、API Key 和模型名称");
   }
 
   for (const key of ["AI_VISION_MODEL", "AI_AUDIO_MODEL"] as const) {
     const model = config[key];
 
     if (model && (!model.baseURL || !model.apiKey || !model.model)) {
-      throw new Error(`请完整填写 ${key} 的地址、密钥和模型名称`);
+      throw new Error(
+        `请填写${key === "AI_VISION_MODEL" ? "视觉" : "语音"}模型的服务地址、API Key 和模型名称`,
+      );
     }
   }
 
@@ -137,6 +139,6 @@ export function assertConfigured(config: Config): void {
     config.DECISION_PROVIDER !== "llm" &&
     (!config.DECISION_URL || !config.DECISION_API_KEY || !config.DECISION_MODEL)
   ) {
-    throw new Error("请完整填写决策提供商的地址、密钥和模型名称");
+    throw new Error("请填写请求识别服务的地址、API Key 和模型名称");
   }
 }

@@ -41,7 +41,7 @@ export default defineNuxtConfig({
   },
   app: {
     head: {
-      title: "言栖 · 记录工作台",
+      title: "言栖 · 管理台",
       htmlAttrs: { lang: "zh-CN" },
       meta: [{ name: "theme-color", content: "#f5f7fa" }],
     },

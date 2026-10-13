@@ -9,7 +9,7 @@ export class BudgetExceeded extends Error {
   public nextRunAt: number;
 
   constructor(day: string) {
-    super("今天的 AI 调用额度已用完，原始消息仍会保存");
+    super("已达到今天的 AI 调用次数上限，原始消息仍会保存。");
     this.nextRunAt = Date.parse(`${day}T00:00:00+08:00`) + 86_400_000;
   }
 }

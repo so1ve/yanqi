@@ -108,7 +108,7 @@ export class Decisions {
 
     if (size > this.#config.AI_INPUT_CHARS) {
       throw new Error(
-        `入口决策输入过长：${size} 字符，超过 AI_INPUT_CHARS=${this.#config.AI_INPUT_CHARS}`,
+        `记录请求识别的输入过长：${size} 字符，超过 AI_INPUT_CHARS=${this.#config.AI_INPUT_CHARS}`,
       );
     }
 

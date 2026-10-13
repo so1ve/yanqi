@@ -14,14 +14,14 @@ export async function taskStatus(store: Store, groupId: string, id: number) {
     id: job.id,
     kind: job.kind,
     description: asset
-      ? `消息 m${asset.messageId} 的${asset.kind}附件 #${asset.id}`
+      ? `解析消息 m${asset.messageId} 的附件 #${asset.id}（${asset.kind}）`
       : topic
         ? `整理「${topic.title}」`
         : job.kind === "detect"
-          ? "自动识别群里的讨论话题"
+          ? "识别讨论话题"
           : job.kind === "observe"
-            ? "识别群成员是否在请求记录"
-            : "处理群成员的对话请求",
+            ? "识别记录请求"
+            : "处理对话请求",
     state: job.state,
     attempts: job.attempts,
     progress: job.progress,
@@ -40,7 +40,7 @@ export async function taskStatus(store: Store, groupId: string, id: number) {
           error: asset.error,
           note:
             job.state === "done" && !asset.interpretation
-              ? "文件已保存，但没有内容识别结果；图片或语音需配置对应模型才能解析。"
+              ? "任务已结束，但没有识别结果。图片或语音需要配置对应模型才能解析，文件保存状态见 fileSaved。"
               : null,
         }
       : note

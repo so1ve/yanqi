@@ -79,7 +79,7 @@ export function recordTools(context: ToolContext) {
             : undefined;
 
           if (sources?.length === 0) {
-            return "这个范围内没有保存的群成员消息，原文档未改动。";
+            return "所选范围内没有已保存的群成员消息，文档未修改。";
           }
 
           topic = await store.recordings.revise(topic.id, {
@@ -98,7 +98,7 @@ export function recordTools(context: ToolContext) {
         }
 
         if (args.action === "hold") {
-          return `「${topic.title}」的纪要先不发，记录仍保存在本地。`;
+          return `已暂缓发送「${topic.title}」。`;
         }
 
         const result = await notes.arrange(topic, message.id);

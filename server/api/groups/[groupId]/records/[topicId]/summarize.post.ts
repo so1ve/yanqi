@@ -11,7 +11,7 @@ export default defineEventHandler(async (event) => {
   if (!bot.config.GROUP_IDS.includes(groupId)) {
     throw createError({
       statusCode: 409,
-      message: "请先启用这个群，再创建整理任务",
+      message: "请先在“群与成员”中启用该群的“保存消息”",
     });
   }
 
@@ -33,7 +33,7 @@ export default defineEventHandler(async (event) => {
     if (busy.length > 0) {
       throw createError({
         statusCode: 409,
-        message: "这篇纪要已经在整理队列中",
+        message: "这篇纪要正在排队或整理中",
       });
     }
 

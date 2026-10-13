@@ -18,10 +18,7 @@ async function openRecord(group: string, id: string): Promise<void> {
 </script>
 
 <template>
-  <PageHeading
-    description="全部群的归档与处理进度，一眼就能找到。"
-    title="记录工作台"
-  >
+  <PageHeading description="查看所有群的消息、纪要和任务进度。" title="概览">
     <NButton :loading @click="refresh">
       <template #icon><NIcon :component="Refresh" /></template>
       刷新
@@ -33,34 +30,30 @@ async function openRecord(group: string, id: string): Promise<void> {
         <div class="stat">
           <div class="stat-label">已保存消息</div>
           <div class="stat-value">{{ formatNumber(data.messages) }}</div>
-          <div class="stat-note">所有群的原始讨论</div>
+          <div class="stat-note">所有群的成员消息总数</div>
         </div>
         <div class="stat">
-          <div class="stat-label">纪要文档</div>
+          <div class="stat-label">纪要</div>
           <div class="stat-value">{{ formatNumber(data.records) }}</div>
-          <div class="stat-note">同一文档的版本合并计数</div>
+          <div class="stat-note">同一篇的多个版本计为一篇</div>
         </div>
         <div class="stat">
-          <div class="stat-label">正在处理 / 等待</div>
+          <div class="stat-label">排队 / 处理中</div>
           <div class="stat-value">{{ formatNumber(data.pending) }}</div>
           <div class="stat-note">
-            {{
-              data.failed
-                ? `${data.failed} 个任务需要查看`
-                : "暂无失败的后台任务"
-            }}
+            {{ data.failed ? `${data.failed} 个任务失败` : "没有失败任务" }}
           </div>
         </div>
         <div class="stat">
-          <div class="stat-label">启用的群</div>
+          <div class="stat-label">已启用的群</div>
           <div class="stat-value">
             {{ formatNumber(status?.groups.length) }}
           </div>
           <div class="stat-note">
             {{
               status?.running
-                ? "小栖正在留意新消息"
-                : "已暂停处理，记录仍可查看"
+                ? "机器人已启动"
+                : "机器人未启动，已有记录仍可查看"
             }}
           </div>
         </div>
@@ -93,7 +86,9 @@ async function openRecord(group: string, id: string): Promise<void> {
                 <StateTag :state="record.state" />
                 <span>
                   {{
-                    record.revision ? `第 ${record.revision} 版` : "正在整理"
+                    record.revision
+                      ? `第 ${record.revision} 版`
+                      : "尚未生成纪要"
                   }}
                 </span>
                 <time>{{ formatTime(record.lastActiveAt) }}</time>
@@ -101,9 +96,10 @@ async function openRecord(group: string, id: string): Promise<void> {
             </a>
           </div>
           <div v-else class="empty-state">
-            <h3>第一篇纪要，会出现在这里</h3>
+            <h3>还没有纪要</h3>
             <p>
-              先连接 NapCat 并启用一个群。也可以从已经保存的消息中创建纪要。
+              连接 NapCat
+              并启用群记录后，可以在群里让小栖整理讨论，也可以在“纪要”页新建。
             </p>
             <NuxtLink to="/settings"><NButton>连接 NapCat</NButton></NuxtLink>
           </div>
@@ -111,7 +107,7 @@ async function openRecord(group: string, id: string): Promise<void> {
         <div>
           <section class="panel">
             <div class="panel-header">
-              <h2>处理中的任务</h2>
+              <h2>排队和处理中的任务</h2>
               <NuxtLink to="/tasks">全部</NuxtLink>
             </div>
             <div v-for="task in data.tasks" :key="task.id" class="task-brief">
@@ -119,21 +115,18 @@ async function openRecord(group: string, id: string): Promise<void> {
               <div>
                 <h3>{{ kindNames[task.kind] ?? task.kind }}</h3>
                 <p>
-                  {{
-                    task.progress || `等待处理群 ${task.payload.groupId} 的内容`
-                  }}
+                  {{ task.progress || `群 ${task.payload.groupId}` }}
                 </p>
                 <StateTag :state="task.state" />
               </div>
             </div>
             <div v-if="data.tasks.length === 0" class="empty-state">
-              <h3>当前没有待处理任务</h3>
-              <p>新任务会自动更新在这里。</p>
+              <h3>没有待处理任务</h3>
             </div>
           </section>
           <section class="panel daily-usage">
             <div class="panel-body">
-              <h3>今天的模型调用</h3>
+              <h3>今日模型调用 / 上限</h3>
               <p>
                 <span>{{ data.day }} · 北京时间</span>
                 <span>

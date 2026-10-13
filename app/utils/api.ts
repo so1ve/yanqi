@@ -12,7 +12,7 @@ export function errorText(error: unknown): string {
   }
 
   if (error instanceof FetchError && !error.response) {
-    return "管理台未响应，请检查服务后重试。";
+    return "无法连接管理台，请检查网络和言栖服务。";
   }
 
   return error instanceof Error ? error.message : "操作失败";
@@ -34,7 +34,7 @@ export const formatTime = (time: number) =>
 export const kindNames: Record<string, string> = {
   intent: "处理请求",
   observe: "识别记录请求",
-  detect: "发现讨论",
+  detect: "识别讨论",
   summarize: "整理纪要",
   asset: "解析附件",
   text: "文字回复",

@@ -232,10 +232,10 @@ export class BackgroundTasks {
               error instanceof BudgetExceeded
                 ? error.message
                 : error instanceof AiError
-                  ? `这次对话在“${error.stage}”这一步失败了。`
+                  ? `${error.stage}失败，这次请求未完成。`
                   : error instanceof AiSizeError
-                    ? "AI 生成中途被服务截断，这次操作未完成。"
-                    : "执行这次操作失败了，详细原因已记入日志。",
+                    ? "AI 输出被截断，这次请求未完成。"
+                    : "这次请求未完成，具体原因请查看运行日志。",
           },
         );
       }

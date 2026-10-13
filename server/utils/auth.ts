@@ -51,7 +51,9 @@ export class Auth {
     const auth = new Auth(store);
 
     if (!(await auth.#account())) {
-      process.stdout.write(`首次设置管理密码，安装码：${auth.#setupCode}\n`);
+      process.stdout.write(
+        `首次登录管理台时请填写安装码：${auth.#setupCode}\n`,
+      );
     }
 
     return auth;
@@ -134,7 +136,7 @@ export class Auth {
       if (input.setupCode !== this.#setupCode) {
         throw createError({
           statusCode: 401,
-          message: "安装码不正确，请查看服务启动日志",
+          message: "安装码不正确，请从言栖启动日志中复制",
         });
       }
 

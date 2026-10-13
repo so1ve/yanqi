@@ -45,7 +45,7 @@ const columns = computed<DataTableColumns<Topic>>(() => [
         h(
           "div",
           { class: "cell-sub" },
-          row.description || row.focus || "等待整理讨论内容",
+          row.description || row.focus || "暂无简介",
         ),
       ]),
   },
@@ -91,7 +91,7 @@ async function create(): Promise<void> {
     );
     showCreate.value = false;
     await navigateTo(`/records/${result.topic.id}?group=${groupId.value}`);
-  }, "已安排整理，完成后会保存在这里");
+  }, "已安排整理");
 }
 </script>
 
@@ -126,11 +126,17 @@ async function create(): Promise<void> {
     <span class="right muted">{{ data?.total ?? 0 }} 篇</span>
   </form>
   <LoadState
-    description="在群里让小栖记录，或从已保存的历史消息中创建一篇。"
+    description="可以在群里让小栖整理讨论，也可以点击“新建纪要”选择已保存的消息。"
     :empty="!groupId || !data?.items.length"
     :error
     :loading="loading && !data"
-    title="这里还没有纪要"
+    :title="
+      !groupId
+        ? '请先选择一个群'
+        : searchQuery
+          ? '没有找到匹配的纪要'
+          : '还没有纪要'
+    "
     @retry="refresh"
   >
     <div class="panel">
@@ -165,7 +171,7 @@ async function create(): Promise<void> {
         <NInput
           v-model:value="focus"
           :autosize="{ minRows: 3, maxRows: 8 }"
-          placeholder="需要关注哪些问题、结论或建议？留空则整理全部内容。"
+          placeholder="例如：整理所有部署建议及其理由。留空则整理范围内的全部内容。"
           type="textarea"
         />
       </NFormItem>
@@ -185,7 +191,7 @@ async function create(): Promise<void> {
         />
       </NFormItem>
       <p class="form-help">
-        完成后仅在本地保存。机器人暂停时，任务会等启动后执行。
+        纪要只保存到本地。需要发到群里时，请在完成后点击“发送到群”。机器人未启动时，任务会等待启动。
       </p>
       <NSpace class="mt-24" justify="end">
         <NButton @click="showCreate = false">取消</NButton>

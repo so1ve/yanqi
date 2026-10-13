@@ -7,17 +7,17 @@ type NumericKey = {
 }[keyof Config];
 const fields: { key: NumericKey; label: string; min?: number }[] = [
   { key: "AI_TIMEOUT_MS", label: "普通请求超时（毫秒）" },
-  { key: "AI_MAX_OUTPUT_TOKENS", label: "普通请求最大输出 token" },
-  { key: "AI_THINKING_TIMEOUT_MS", label: "总结思考超时（毫秒）" },
-  { key: "AI_THINKING_MAX_OUTPUT_TOKENS", label: "总结思考与正文总输出 token" },
-  { key: "AI_INPUT_CHARS", label: "上下文字符预算", min: 4000 },
+  { key: "AI_MAX_OUTPUT_TOKENS", label: "普通请求输出上限（token）" },
+  { key: "AI_THINKING_TIMEOUT_MS", label: "思考请求超时（毫秒）" },
+  { key: "AI_THINKING_MAX_OUTPUT_TOKENS", label: "思考请求输出上限（token）" },
+  { key: "AI_INPUT_CHARS", label: "AI 输入预算（字符）", min: 4000 },
   { key: "AI_DAILY_CALL_LIMIT", label: "每日模型调用上限" },
-  { key: "DETECT_INTERVAL_MS", label: "讨论识别等待时间（毫秒）" },
-  { key: "DETECT_BATCH_SIZE", label: "每批讨论消息数" },
-  { key: "TOPIC_IDLE_MS", label: "讨论空闲整理时间（毫秒）" },
-  { key: "TOPIC_REOPEN_MS", label: "旧话题继续讨论的时间范围（毫秒）" },
+  { key: "DETECT_INTERVAL_MS", label: "每批消息最长收集时间（毫秒）" },
+  { key: "DETECT_BATCH_SIZE", label: "每批识别的消息数" },
+  { key: "TOPIC_IDLE_MS", label: "讨论暂停多久后整理（毫秒）" },
+  { key: "TOPIC_REOPEN_MS", label: "自动识别时回看旧话题的时间范围（毫秒）" },
   { key: "WORK_INTERVAL_MS", label: "后台轮询间隔（毫秒）" },
-  { key: "MAX_ATTACHMENT_BYTES", label: "附件最大字节数" },
+  { key: "MAX_ATTACHMENT_BYTES", label: "附件大小上限（字节）" },
   { key: "LOG_DETAIL_CHARS", label: "日志详情最大字符数" },
 ];
 function update(key: NumericKey, value: number | null): void {
@@ -31,7 +31,10 @@ function update(key: NumericKey, value: number | null): void {
   <section class="settings-section">
     <div class="section-title">
       <h2>运行参数</h2>
-      <p>DeepSeek 总结提取与合并启用思考，普通对话优先快速调用工具。</p>
+      <p>
+        使用 DeepSeek
+        官方服务时，整理和合并纪要会启用思考。输出上限包含思考内容、正文和工具参数。
+      </p>
     </div>
     <div class="form-grid">
       <NFormItem v-for="field in fields" :key="field.key" :label="field.label">
@@ -47,8 +50,8 @@ function update(key: NumericKey, value: number | null): void {
         <NSelect
           v-model:value="model.AI_RESPONSE_FORMAT"
           :options="[
-            { label: 'JSON Object', value: 'json_object' },
-            { label: 'JSON Schema', value: 'json_schema' },
+            { label: 'JSON 对象（json_object）', value: 'json_object' },
+            { label: 'JSON Schema（json_schema）', value: 'json_schema' },
           ]"
         />
       </NFormItem>
@@ -56,15 +59,18 @@ function update(key: NumericKey, value: number | null): void {
         <NSelect
           v-model:value="model.LOG_LEVEL"
           :options="[
-            { label: 'Info · 任务和调用过程', value: 'info' },
-            { label: 'Debug · 参数、结果及堆栈', value: 'debug' },
+            { label: '常规（info）：任务进度和调用结果', value: 'info' },
+            {
+              label: '调试（debug）：增加参数、结果片段和错误堆栈',
+              value: 'debug',
+            },
           ]"
         />
       </NFormItem>
-      <NFormItem label="接收请求的 QQ 表情 ID">
+      <NFormItem label="收到请求后的回应表情 ID">
         <NInput
           v-model:value="model.ACK_EMOJI_ID"
-          placeholder="128051（鲸鱼）；留空关闭"
+          placeholder="128051 为鲸鱼，留空关闭"
         />
       </NFormItem>
     </div>

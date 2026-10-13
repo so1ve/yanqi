@@ -188,7 +188,7 @@ export class AgentRuntime {
           if (++turns > 8) {
             throw new AiError(
               "处理对话",
-              `${purpose} agent 已达到单次请求的 8 轮调用上限`,
+              `${purpose} 已达到单次请求的 8 轮模型调用上限`,
             );
           }
 

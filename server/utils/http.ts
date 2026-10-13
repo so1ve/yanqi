@@ -40,7 +40,10 @@ export async function body<S extends TSchema>(
     value = Value.Default(schema, await new Response(stream).json());
   } catch (error) {
     if (error instanceof SyntaxError) {
-      throw createError({ statusCode: 400, message: "请求需要有效的 JSON" });
+      throw createError({
+        statusCode: 400,
+        message: "请求内容不是有效的 JSON",
+      });
     }
 
     throw error;
@@ -62,7 +65,7 @@ export function groupParam(event: H3Event): string {
   const id = getRouterParam(event, "groupId")!;
 
   if (!/^\d+$/.test(id)) {
-    throw createError({ statusCode: 400, message: "群号无效" });
+    throw createError({ statusCode: 400, message: "群号只能包含数字" });
   }
 
   return id;
@@ -111,7 +114,10 @@ export function search(event: H3Event): RegExp | undefined {
   }
 
   if (query.length > 200) {
-    throw createError({ statusCode: 400, message: "搜索内容过长" });
+    throw createError({
+      statusCode: 400,
+      message: "搜索内容不能超过 200 个字符",
+    });
   }
 
   return new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");

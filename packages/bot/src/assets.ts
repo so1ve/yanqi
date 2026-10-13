@@ -52,7 +52,7 @@ export async function collectAsset(
     }
 
     if (!path) {
-      await reportProgress(`正在下载${asset.kind}附件 #${id}`);
+      await reportProgress(`正在下载附件 #${id}（${asset.kind}）`);
       const url = /^https?:\/\//i.test(asset.reference)
         ? asset.reference
         : await messenger.getAsset(
@@ -128,7 +128,9 @@ export async function collectAsset(
     }
 
     if (asset.kind === "image" && config.AI_VISION_MODEL) {
-      await reportProgress(`正在识图，模型 ${config.AI_VISION_MODEL.model}`);
+      await reportProgress(
+        `正在识别图片，模型 ${config.AI_VISION_MODEL.model}`,
+      );
       if (!mime.startsWith("image/")) {
         const extension = path.split(".").at(-1);
 
@@ -156,8 +158,8 @@ export async function collectAsset(
     } else {
       await reportProgress(
         asset.kind === "image" || asset.kind === "audio"
-          ? "文件已保存；未配置对应模型，未解析内容"
-          : "附件文件已保存，不支持解析此文件类型",
+          ? "文件已保存。请配置对应模型后解析内容"
+          : "文件已保存。暂不支持解析此类文件",
       );
     }
   } catch (error) {

@@ -46,7 +46,7 @@ function download(): void {
 
 <template>
   <PageHeading
-    description="全部群的最近 1,000 条日志，包含任务、工具调用和发送过程。"
+    description="显示所有群最近 1,000 条日志。最新日志在前。"
     title="运行日志"
   >
     <NButton @click="download">
@@ -70,17 +70,17 @@ function download(): void {
       class="filter-level"
       :options="[
         { label: '全部级别', value: '' },
-        { label: 'Info', value: 'info' },
-        { label: 'Warn', value: 'warn' },
-        { label: 'Error', value: 'error' },
-        { label: 'Debug', value: 'debug' },
+        { label: '信息 · Info', value: 'info' },
+        { label: '警告 · Warn', value: 'warn' },
+        { label: '错误 · Error', value: 'error' },
+        { label: '调试 · Debug', value: 'debug' },
       ]"
     />
     <NButton class="right" @click="paused = !paused">
       <template #icon>
         <NIcon :component="paused ? PlayerPlay : PlayerPause" />
       </template>
-      {{ paused ? "继续更新" : "暂停更新" }}
+      {{ paused ? "恢复刷新" : "暂停刷新" }}
     </NButton>
   </div>
   <LoadState :error :loading="loading && !data" @retry="refresh">
@@ -93,12 +93,12 @@ function download(): void {
       </div>
       <div v-if="filtered.length === 0" class="empty-state">
         <h3 class="log-empty-title">没有符合条件的日志</h3>
-        <p>启动机器人或调整筛选后再看。</p>
       </div>
     </div>
     <p class="form-help">
-      最新日志在上方。此列表在后端重启后清空；更早的容器日志可用 docker compose
-      logs 查看。
+      服务重启后，此列表会清空。更早的日志请用
+      <code>docker compose logs yanqi</code>
+      查看。
     </p>
   </LoadState>
 </template>
