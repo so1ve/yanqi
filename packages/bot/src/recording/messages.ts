@@ -155,10 +155,11 @@ export async function conversationBefore(
   groupId: string,
   beforeId: number,
   budget: number,
+  afterId = 0,
 ): Promise<{ messages: ChatMessage[]; nextBeforeId: string | null }> {
   const messages = await contextWithin(
     store,
-    await store.messages.conversation(groupId, 40, beforeId - 1),
+    await store.messages.conversation(groupId, 40, beforeId - 1, afterId),
     budget,
   );
   const first = messages[0];
@@ -167,6 +168,7 @@ export async function conversationBefore(
         groupId,
         1,
         Number(first.id.slice(1)) - 1,
+        afterId,
       )
     : [];
 

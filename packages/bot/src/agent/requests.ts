@@ -23,6 +23,24 @@ export async function handleRequest(
     return;
   }
 
+  const conversation = await store.conversations.open(message.groupId);
+
+  if (message.id <= conversation.afterMessageId) {
+    return;
+  }
+
+  if (message.addressed && message.text.trim() === "#NEW#") {
+    await store.conversations.reset(message.groupId, message.id);
+    await store.deliveries.enqueue(`command:${message.id}`, {
+      kind: "text",
+      groupId: message.groupId,
+      content: "新对话开好啦！",
+    });
+    processPending();
+
+    return;
+  }
+
   const quote = message.replyTo
     ? await store.messages.quoted(message.groupId, message.replyTo)
     : null;
@@ -41,6 +59,7 @@ export async function handleRequest(
     message.groupId,
     message.id,
     Math.min(3000, Math.floor(config.AI_INPUT_CHARS / 4)),
+    conversation.afterMessageId,
   );
   const memory = await store.memories.context(message.groupId, message.userId);
   const tools = {
@@ -103,5 +122,6 @@ export async function handleRequest(
       today: beijingDate(message.sentAt),
     },
     tools,
+    conversation,
   );
 }

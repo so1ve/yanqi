@@ -1,4 +1,8 @@
-import type { AgentState, FinishTurn } from "@earendil-works/pi-agent-core";
+import type {
+  AgentMessage,
+  AgentState,
+  FinishTurn,
+} from "@earendil-works/pi-agent-core";
 import { Agent } from "@earendil-works/pi-agent-core";
 import type { ImageContent, Model, UserMessage } from "@earendil-works/pi-ai";
 import { streamSimple } from "@earendil-works/pi-ai/api/openai-completions";
@@ -9,6 +13,7 @@ import type { Static, TSchema } from "typebox";
 import * as Value from "typebox/value";
 
 import type { Config, ModelConfig } from "../config.ts";
+import type { Conversation } from "../storage/conversations.ts";
 import type { Store } from "../storage/store.ts";
 import { AiError } from "../utils/errors.ts";
 import { logContext, logDetail } from "../utils/logging.ts";
@@ -48,7 +53,7 @@ export class AgentRuntime {
     const content = JSON.stringify(input);
     const model = options.model ?? this.#config.AI_MODEL;
 
-    const text = await this.#run(
+    const { text } = await this.#run(
       purpose,
       `${boundary(this.#config.BOT_QQ)}\n${instructions}`,
       { role: "user", content, timestamp: Date.now() },
@@ -92,31 +97,53 @@ export class AgentRuntime {
     return parsed;
   }
 
-  public text(
+  public async text(
     purpose: string,
     instructions: string,
     input: unknown,
     options: RequestOptions = {},
   ): Promise<string> {
-    return this.#run(
+    const result = await this.#run(
       purpose,
       `${boundary(this.#config.BOT_QQ)}\n${instructions}`,
       { role: "user", content: JSON.stringify(input), timestamp: Date.now() },
       options,
     );
+
+    return result.text;
   }
 
-  public image(
+  public async image(
     image: ImageContent,
     model: ModelConfig,
     instructions: string,
   ): Promise<string> {
-    return this.#run(
+    const result = await this.#run(
       "image",
       `${boundary(this.#config.BOT_QQ)}\n${instructions}`,
       { role: "user", content: [image], timestamp: Date.now() },
       { model },
     );
+
+    return result.text;
+  }
+
+  public async converse(
+    instructions: string,
+    input: unknown,
+    conversation: Conversation,
+    options: RequestOptions,
+  ): Promise<AgentMessage[]> {
+    const result = await this.#run(
+      "intent",
+      `${boundary(this.#config.BOT_QQ)}\n当前会话属于 QQ 群 ${conversation.groupId}，只延续本群对话。\n${instructions}`,
+      { role: "user", content: JSON.stringify(input), timestamp: Date.now() },
+      options,
+      undefined,
+      conversation,
+    );
+
+    return result.messages;
   }
 
   async #run(
@@ -125,7 +152,8 @@ export class AgentRuntime {
     input: UserMessage,
     options: RequestOptions,
     schema?: TSchema,
-  ): Promise<string> {
+    conversation?: Pick<Conversation, "id" | "messages">,
+  ): Promise<{ text: string; messages: AgentMessage[] }> {
     const signal = options.signal
       ? AbortSignal.any([this.#signal, options.signal])
       : this.#signal;
@@ -151,6 +179,7 @@ export class AgentRuntime {
       task?.task,
       task && `group=${task.groupId}`,
       task?.requestId && `request=m${task.requestId}`,
+      conversation && `session=${conversation.id}`,
       `AI #${++this.#calls}`,
       purpose,
     ]
@@ -183,6 +212,7 @@ export class AgentRuntime {
     let failure: Error | undefined;
     let timeout: ReturnType<typeof setTimeout> | undefined;
     const agent = new Agent({
+      ...(conversation ? { sessionId: conversation.id } : {}),
       initialState: {
         model,
         thinkingLevel,
@@ -190,6 +220,7 @@ export class AgentRuntime {
           ? `${instructions}\n最终回复必须是符合以下 JSON Schema 的 JSON 对象：\n${JSON.stringify(schema)}`
           : instructions,
         tools,
+        messages: conversation?.messages ?? [],
       },
       toolExecution: "sequential",
       ...(options.finishTurn ? { finishTurn: options.finishTurn } : {}),
@@ -263,6 +294,7 @@ export class AgentRuntime {
         return params;
       },
     });
+    const previousMessages = agent.state.messages.length;
 
     logAgentEvents(agent, config, label);
     // 只限制每轮模型请求；工具等待结果期间不计入模型超时。
@@ -294,9 +326,9 @@ export class AgentRuntime {
     } finally {
       signal.removeEventListener("abort", abort);
       clearTimeout(timeout);
-      const messages = agent.state.messages.filter(
-        (message) => message.role === "assistant",
-      );
+      const messages = agent.state.messages
+        .slice(previousMessages)
+        .filter((message) => message.role === "assistant");
 
       await this.#store.usage
         .record(
@@ -364,6 +396,12 @@ export class AgentRuntime {
       throw new AiError("读取 AI 正文", `${purpose} 未返回文字`);
     }
 
-    return text;
+    return {
+      text,
+      // 系统提示词和工具定义使用本次配置，不能跟随旧会话重放。
+      messages: agent.state.messages.filter(
+        (message) => message.role !== "system",
+      ),
+    };
   }
 }

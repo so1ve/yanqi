@@ -313,12 +313,14 @@ export class Messages {
     groupId: string,
     limit: number,
     through: number,
+    after = 0,
   ): Promise<Message[]> {
     const rows = await this.#db
       .selectFrom("messages")
       .selectAll()
       .where("groupId", "=", groupId)
       .where("id", "<=", through)
+      .where("id", ">", after)
       .orderBy("id", "desc")
       .limit(limit)
       .execute();

@@ -1,5 +1,6 @@
 import type { Config } from "../config.ts";
 import { Assets } from "./assets.ts";
+import { Conversations } from "./conversations.ts";
 import { DeliveryQueue } from "./deliveries.ts";
 import { Groups } from "./groups.ts";
 import { JobQueue } from "./jobs.ts";
@@ -14,6 +15,7 @@ import { Usage } from "./usage.ts";
 export class Store {
   public readonly directory: string;
   public readonly messages: Messages;
+  public readonly conversations: Conversations;
   public readonly topics: Topics;
   public readonly recordings: Recordings;
   public readonly notes: SavedNotes;
@@ -27,6 +29,7 @@ export class Store {
   constructor(db: Database, directory: string, config: Config) {
     this.directory = directory;
     this.messages = new Messages(db, config);
+    this.conversations = new Conversations(db);
     this.topics = new Topics(db);
     this.recordings = new Recordings(db);
     this.notes = new SavedNotes(db);

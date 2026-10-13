@@ -20,6 +20,13 @@ export interface Tables {
     cursor: Generated<number>;
     aiEnabled: Generated<number>;
   };
+  conversations: {
+    groupId: string;
+    id: string;
+    afterMessageId: number;
+    summary: string;
+    messages: string;
+  };
   messages: Defaults<
     Omit<Message, "content" | "isBot" | "addressed" | "command"> & {
       content: Uint8Array;
@@ -103,6 +110,18 @@ export async function createTables(db: Database): Promise<void> {
     .addColumn("aiEnabled", "integer", (column) =>
       column.notNull().defaultTo(1),
     )
+    .execute();
+
+  await db.schema
+    .createTable("conversations")
+    .ifNotExists()
+    .addColumn("groupId", "text", (column) =>
+      column.primaryKey().references("groups.id"),
+    )
+    .addColumn("id", "text", (column) => column.notNull())
+    .addColumn("afterMessageId", "integer", (column) => column.notNull())
+    .addColumn("summary", "text", (column) => column.notNull())
+    .addColumn("messages", "text", (column) => column.notNull())
     .execute();
 
   await db.schema

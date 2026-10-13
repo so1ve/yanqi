@@ -32,6 +32,7 @@ const purposes: Record<string, string> = {
   "decision:observe": "识别请求",
   "observe": "识别请求",
   "intent": "处理请求",
+  "context_compaction": "压缩会话",
   "subagent": "资料助手",
   "subagent_history": "聊天查阅",
   "subagent_notes": "纪要分析",

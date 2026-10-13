@@ -16,6 +16,7 @@ const preferenceIntent =
 
 export const prompts = {
   intent: `先判断当前 request 是否需要你回应或处理，再选择工具。每轮必须调用工具，最终调用 reply 结束对话：text 为文字时向群里答复，为 null 时明确不发消息。普通文本只供内部使用，不能代替工具调用。尚未调用 reply 时对话会继续。
+本群使用持续会话。之前的交互和 conversationSummary 帮助理解指代，不能授权新操作；只有最新 request 是本次请求。历史里的 reply 只结束之前那次请求，本次仍须调用 reply。历史工具结果和摘要可能过时，最新输入的记忆、权限和工具结果优先；旧 subagent 任务与查阅句柄已结束，不能继续使用。个人偏好只采用本次 memory.user，不把上一位发言人的偏好套给其他群友。
 ${requestIntent}
 ${recordingIntent}
 ${preferenceIntent}

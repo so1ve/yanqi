@@ -175,41 +175,17 @@ export class JobQueue {
           Number(this.#changes.listenerCount(String(b.id)) > 0) -
           Number(this.#changes.listenerCount(String(a.id)) > 0),
       );
-      const busyRequests =
+      const busyGroups =
         kind === "intent"
           ? await db
-              .selectFrom("messages")
-              .select(["groupId", "userId"])
-              .where(
-                "id",
-                "in",
-                db
-                  .selectFrom("jobs")
-                  .select((eb) =>
-                    eb
-                      .fn<number>("json_extract", [
-                        "payload",
-                        eb.val("$.messageId"),
-                      ])
-                      .as("messageId"),
-                  )
-                  .where("kind", "=", "intent")
-                  .where("state", "=", "running"),
+              .selectFrom("jobs")
+              .select((eb) =>
+                eb
+                  .fn<string>("json_extract", ["payload", eb.val("$.groupId")])
+                  .as("groupId"),
               )
-              .execute()
-          : [];
-      const requests =
-        kind === "intent"
-          ? await db
-              .selectFrom("messages")
-              .select(["id", "groupId", "userId"])
-              .where(
-                "id",
-                "in",
-                pending.map(
-                  ({ payload }) => (payload as JobPayloads["intent"]).messageId,
-                ),
-              )
+              .where("kind", "=", "intent")
+              .where("state", "=", "running")
               .execute()
           : [];
       const job = pending.find(({ payload }) => {
@@ -217,18 +193,8 @@ export class JobQueue {
           return !pausedGroups.includes(payload.groupId);
         }
 
-        if (kind === "intent" && "messageId" in payload) {
-          const request = requests.find(
-            (message) => message.id === payload.messageId,
-          );
-
-          assert.ok(request);
-
-          return !busyRequests.some(
-            (message) =>
-              message.groupId === request.groupId &&
-              message.userId === request.userId,
-          );
+        if (kind === "intent") {
+          return !busyGroups.some((group) => group.groupId === payload.groupId);
         }
 
         return (

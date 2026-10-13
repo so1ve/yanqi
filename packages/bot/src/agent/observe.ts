@@ -17,10 +17,14 @@ export async function observeRequests(
   }
 
   const { groupId, messageIds } = job.payload;
+  const conversation = await store.conversations.open(groupId);
   const messages = (
     await Promise.all(messageIds.map((id) => store.messages.getRequest(id)))
   ).filter(
-    (message): message is Message => message !== null && !message.command,
+    (message): message is Message =>
+      message !== null &&
+      !message.command &&
+      message.id > conversation.afterMessageId,
   );
 
   if (messages.length === 0) {
@@ -29,7 +33,12 @@ export async function observeRequests(
 
   const context = await contextWithin(
     store,
-    await store.messages.conversation(groupId, 20, messages[0]!.id - 1),
+    await store.messages.conversation(
+      groupId,
+      20,
+      messages[0]!.id - 1,
+      conversation.afterMessageId,
+    ),
     Math.floor(config.AI_INPUT_CHARS / 4),
   );
   const chunks = await messageChunks(
