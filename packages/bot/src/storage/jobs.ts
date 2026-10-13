@@ -77,20 +77,13 @@ export class JobQueue {
       .execute();
   }
 
-  public cancelRequests(reason: string): Promise<void> {
-    return this.#db.transaction().execute(async (db) => {
-      await db
-        .updateTable("jobs")
-        .set({ state: "failed", lastError: reason })
-        .where("kind", "in", ["intent", "observe"])
-        .where("state", "in", ["pending", "running"])
-        .execute();
-      await db
-        .updateTable("messages")
-        .set({ awaitingReply: 0 })
-        .where("awaitingReply", "=", 1)
-        .execute();
-    });
+  public async cancelRequests(reason: string): Promise<void> {
+    await this.#db
+      .updateTable("jobs")
+      .set({ state: "failed", lastError: reason })
+      .where("kind", "in", ["intent", "observe"])
+      .where("state", "in", ["pending", "running"])
+      .execute();
   }
 
   public enqueue<K extends JobKind>(

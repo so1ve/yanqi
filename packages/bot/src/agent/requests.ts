@@ -1,5 +1,4 @@
 import type { Config } from "../config.ts";
-import type { Messenger } from "../onebot/messenger.ts";
 import {
   contextWithin,
   conversationBefore,
@@ -23,7 +22,6 @@ export async function handleRequest(
   store: Store,
   ai: Ai,
   notes: Notes,
-  messenger: Messenger,
   processPending: () => void,
 ): Promise<void> {
   const message = await store.messages.getRequest(messageId);
@@ -104,7 +102,7 @@ export async function handleRequest(
       today: beijingDate(message.sentAt),
     },
     [
-      replyTool(tools, messenger),
+      replyTool(tools),
       readTool(tools),
       ...recordTools(tools),
       followTool(tools),

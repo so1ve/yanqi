@@ -22,7 +22,6 @@ export interface IncomingMessage {
 export interface Message extends Omit<IncomingMessage, "noteId"> {
   id: number;
   command: boolean;
-  awaitingReply: boolean;
   recalledAt: number | null;
   noteId: number | null;
 }

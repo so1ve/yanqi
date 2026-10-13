@@ -138,7 +138,6 @@ export class BackgroundTasks {
             this.#store,
             this.#ai,
             this.#notes,
-            this.#messenger,
             () => this.run(),
           );
 

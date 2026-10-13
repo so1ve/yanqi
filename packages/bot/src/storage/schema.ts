@@ -20,17 +20,13 @@ export interface Tables {
     aiEnabled: Generated<number>;
   };
   messages: Defaults<
-    Omit<
-      Message,
-      "content" | "isBot" | "addressed" | "command" | "awaitingReply"
-    > & {
+    Omit<Message, "content" | "isBot" | "addressed" | "command"> & {
       content: Uint8Array;
       isBot: number;
       addressed: number;
       command: number;
-      awaitingReply: number;
     },
-    "id" | "isBot" | "addressed" | "command" | "awaitingReply"
+    "id" | "isBot" | "addressed" | "command"
   >;
   topics: Defaults<
     Topic,
@@ -136,9 +132,6 @@ export async function createTables(db: Database): Promise<void> {
     )
     .addColumn("role", "text", (column) => column.notNull())
     .addColumn("command", "integer", (column) => column.notNull().defaultTo(0))
-    .addColumn("awaitingReply", "integer", (column) =>
-      column.notNull().defaultTo(0),
-    )
     .addColumn("recalledAt", "integer")
     .addColumn("noteId", "integer")
     .addUniqueConstraint("messages_group_message", ["groupId", "messageId"])

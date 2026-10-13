@@ -13,7 +13,6 @@ export const decodeMessage = (row: MessageRow): Message => ({
   isBot: Boolean(row.isBot),
   addressed: Boolean(row.addressed),
   command: Boolean(row.command),
-  awaitingReply: Boolean(row.awaitingReply),
 });
 
 export class Messages {
@@ -73,16 +72,6 @@ export class Messages {
       }
 
       const canInteract = this.#canInteract(input);
-      const waiting = canInteract
-        ? await db
-            .selectFrom("messages")
-            .select("id")
-            .where("groupId", "=", input.groupId)
-            .where("userId", "=", input.userId)
-            .where("awaitingReply", "=", 1)
-            .where("recalledAt", "is", null)
-            .execute()
-        : [];
       const quote =
         canInteract && input.replyTo
           ? await db
@@ -93,21 +82,7 @@ export class Messages {
               .where("isBot", "=", 1)
               .executeTakeFirst()
           : undefined;
-      const command =
-        canInteract &&
-        (input.addressed || waiting.length > 0 || quote !== undefined);
-
-      if (waiting.length > 0) {
-        await db
-          .updateTable("messages")
-          .set({ awaitingReply: 0 })
-          .where(
-            "id",
-            "in",
-            waiting.map((item) => item.id),
-          )
-          .execute();
-      }
+      const command = canInteract && (input.addressed || quote !== undefined);
 
       const message = decodeMessage(
         await db
@@ -254,49 +229,6 @@ export class Messages {
           message.receivedAt + 1000,
         );
       }
-    });
-  }
-
-  public awaitReply(request: Message): Promise<Message | null> {
-    return this.#db.transaction().execute(async (db) => {
-      const following = await db
-        .selectFrom("messages")
-        .selectAll()
-        .where("groupId", "=", request.groupId)
-        .where("userId", "=", request.userId)
-        .where("id", ">", request.id)
-        .where("recalledAt", "is", null)
-        .orderBy("id")
-        .execute();
-      const next = following
-        .map(decodeMessage)
-        .find((message) => this.#canInteract(message));
-
-      if (next) {
-        if (next.command) {
-          return null;
-        }
-
-        await db
-          .updateTable("messages")
-          .set({ command: 1 })
-          .where("id", "=", next.id)
-          .execute();
-        await enqueueJob(db, "intent", `intent:${next.id}`, {
-          groupId: next.groupId,
-          messageId: next.id,
-        });
-
-        return { ...next, command: true };
-      }
-
-      await db
-        .updateTable("messages")
-        .set({ awaitingReply: 1 })
-        .where("id", "=", request.id)
-        .execute();
-
-      return null;
     });
   }
 
