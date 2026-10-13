@@ -200,6 +200,33 @@ export function createMessenger(config: Config, store: Store, ctx: Context) {
 
       throw new Error(`附件 ${kind} 未提供可下载地址`);
     },
+    async refreshImageURL(reference: string): Promise<string | null> {
+      const url = new URL(reference);
+      const appid = url.searchParams.get("appid");
+
+      // rkey 只能用于 QQ 的图片下载地址，不能交给消息里任意指定的主机。
+      if (
+        !["gchat.qpic.cn", "multimedia.nt.qq.com.cn"].includes(url.hostname) ||
+        url.pathname !== "/download" ||
+        (appid !== "1406" && appid !== "1407")
+      ) {
+        return null;
+      }
+
+      const keys: { type: number; rkey: string }[] =
+        await getBot().internal._get("nc_get_rkey");
+      const key = keys.find((key) => key.type === (appid === "1407" ? 20 : 10));
+      const rkey = key && new URLSearchParams(key.rkey).get("rkey");
+
+      if (!rkey) {
+        throw new Error("NapCat 没有返回可用的图片下载凭据");
+      }
+
+      url.protocol = "https:";
+      url.searchParams.set("rkey", rkey);
+
+      return url.href;
+    },
     getForward(reference: string) {
       return getBot().internal.getForwardMsg(reference);
     },

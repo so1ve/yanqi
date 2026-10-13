@@ -88,11 +88,24 @@ export async function collectAsset(
             asset.kind,
             asset.reference,
           );
-      const response = await fetch(url, {
+      const request = {
         signal: AbortSignal.any([signal, AbortSignal.timeout(60_000)]),
-      });
+      };
+      let response = await fetch(url, request);
+
+      if (asset.kind === "image" && [400, 401, 403].includes(response.status)) {
+        await response.body?.cancel();
+        const refreshed = await messenger.refreshImageURL(url);
+
+        if (refreshed) {
+          await reportProgress(`正在刷新图片地址并重试附件 #${id}`);
+          response = await fetch(refreshed, request);
+        }
+      }
 
       if (!response.ok || !response.body) {
+        await response.body?.cancel();
+
         throw new Error(`附件下载失败（HTTP ${response.status}）`);
       }
 
