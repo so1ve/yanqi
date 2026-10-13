@@ -79,9 +79,14 @@ function download(): void {
   </ListToolbar>
   <LoadState :error :loading="loading && !data" @retry="refresh">
     <div aria-label="运行日志" class="log-window">
-      <div v-for="entry in filtered" :key="entry.id" class="log-row">
+      <div
+        v-for="entry in filtered"
+        :key="entry.id"
+        class="log-row"
+        :class="entry.level"
+      >
         <time>{{ formatTime(entry.time) }}</time>
-        <span :class="entry.level">{{ entry.level.toUpperCase() }}</span>
+        <span class="level">{{ entry.level.toUpperCase() }}</span>
         <span class="source" :title="entry.name">{{ entry.name }}</span>
         <span class="content">{{ entry.text }}</span>
       </div>
@@ -107,36 +112,74 @@ function download(): void {
 }
 
 .log-window {
-  background: #202c3a;
+  background: #0d1117;
+  border: 1px solid #30363d;
   border-radius: 8px;
-  padding: 16px 0;
+  padding: 6px 0;
   max-height: calc(100vh - 270px);
   min-height: 380px;
   overflow: auto;
-  color: #bbc9d7;
+  color-scheme: dark;
+  color: #d1d9e0;
   font-family: "SFMono-Regular", Consolas, monospace;
   font-size: 12px;
+  line-height: 18px;
 }
 
 .log-row {
   display: grid;
   grid-template-columns: 110px 52px 120px minmax(0, 1fr);
-  gap: 12px;
-  padding: 7px 20px;
-  align-items: baseline;
+  column-gap: 10px;
+  padding: 2px 12px;
+  border-left: 2px solid transparent;
+  border-bottom: 1px solid #21262d;
+  align-items: start;
+}
+
+.log-row:nth-child(even) {
+  background: #151b23;
 }
 
 .log-row:hover {
-  background: #273546;
+  background: #212b38;
 }
 
 .log-row time {
-  color: #698196;
+  color: #8b949e;
   font-size: 11px;
+  white-space: nowrap;
+}
+
+.log-row .level {
+  font-weight: 600;
+}
+
+.log-row.info .level {
+  color: #79c0ff;
+}
+
+.log-row.debug .level {
+  color: #c4a7e7;
+}
+
+.log-row.warn {
+  border-left-color: #e3b341;
+}
+
+.log-row.warn .level {
+  color: #e3b341;
+}
+
+.log-row.error {
+  border-left-color: #ff7b72;
+}
+
+.log-row.error .level {
+  color: #ff7b72;
 }
 
 .log-row .source {
-  color: #8dc5c3;
+  color: #7ed9c6;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -147,16 +190,15 @@ function download(): void {
   overflow-wrap: anywhere;
 }
 
-.log-row .warn,
-.log-row .error {
-  color: #e9b26c;
+.log-window ::selection {
+  background: #365b82;
+  color: #fff;
 }
 
 @media (max-width: 760px) {
   .log-row {
-    grid-template-columns: 60px 40px 1fr;
-    padding: 9px 12px;
-    gap: 8px;
+    grid-template-columns: 90px 44px minmax(0, 1fr);
+    padding: 4px 10px;
   }
 
   .log-row .content {
@@ -165,6 +207,6 @@ function download(): void {
 }
 
 .log-window :deep(.empty-state h3) {
-  color: #bbc9d7;
+  color: #d1d9e0;
 }
 </style>
