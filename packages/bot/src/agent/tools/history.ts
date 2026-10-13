@@ -31,7 +31,7 @@ export function historyTool(context: ToolContext) {
   return tool(
     context,
     "history",
-    "读取本群本地原文。context 向前回溯，省略 beforeId 时从当前请求前开始；messages 按 scope 分页读完整聊天；note 分页读纪要；search 字面查聊天。page 从 0 开始，nextPage 和 nextBeforeId 用于继续读取。",
+    "读取本群本地原文。context 向前回溯，省略 beforeId 时从当前请求前开始；messages 按 scope 分页读完整聊天；note 分页读纪要；search 字面查聊天。分页结果包含总页数和正文字符数，聊天还包含消息总数；搜索的统计只覆盖命中消息。page 从 0 开始，nextPage 和 nextBeforeId 用于继续读取。",
     parameters,
     async (args) => {
       if (args.action === "context") {
@@ -59,6 +59,8 @@ export function historyTool(context: ToolContext) {
         return {
           topicId: topic.id,
           revision: note.revision,
+          contentChars: note.markdown.length,
+          totalPages: Math.ceil(note.markdown.length / size),
           page,
           nextPage: (page + 1) * size < note.markdown.length ? page + 1 : null,
           markdown: note.markdown.slice(page * size, (page + 1) * size),
@@ -78,6 +80,10 @@ export function historyTool(context: ToolContext) {
 
       return {
         sourceCount: sources.length,
+        contentChars: pages
+          .flat()
+          .reduce((sum, item) => sum + item.text.length, 0),
+        totalPages: pages.length,
         page,
         nextPage: page + 1 < pages.length ? page + 1 : null,
         messages: pages[page] ?? [],

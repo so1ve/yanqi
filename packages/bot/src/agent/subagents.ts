@@ -16,7 +16,12 @@ import { historyTool } from "./tools/history.ts";
 import { readTool } from "./tools/read.ts";
 
 const reportSchema = object({
-  brief: Type.String({ minLength: 1, maxLength: 1600 }),
+  brief: Type.String({
+    minLength: 1,
+    maxLength: 1600,
+    description:
+      "已查明的内容、工具返回的资料规模和仍需查阅的部分，供小栖判断后续工作。",
+  }),
   scope: Type.Optional(sourceScope),
   done: Type.Boolean(),
 });
@@ -38,8 +43,8 @@ const parameters = Type.Union([
 
 interface Work {
   task: string;
-  startedAt: number;
   state: "running" | "done" | "failed" | "cancelled";
+  updated: PromiseWithResolvers<void>;
   report?: Static<typeof reportSchema>;
   error?: string;
 }
@@ -62,7 +67,7 @@ export class Subagents {
     return tool(
       this.#context,
       "subagent",
-      "委派独立资料助手检索上下文、确定记录范围、比较纪要或提取信息。start 给出具体任务和可选 scope，不传整段历史，先等待最多 5 秒；助手自行查原文，只返回简报和必要 ID，不操作记录或发言。最多同时运行两个。wait 最多等待 30 秒，未结束时返回已有简报，可继续 wait；inspect 立即查看；cancel 放弃任务。最终 reply 前须完成或取消查阅任务。",
+      "委派独立资料助手检索上下文、确定记录范围、比较纪要或提取信息。start 给出具体任务和可选 scope，不传整段历史，先等待最多 5 秒；助手自行查原文，返回内容简报、资料规模和必要 ID，不操作记录或发言。最多同时运行两个。wait 最多等待 30 秒；有新简报或任务完成时立即返回，否则返回已有简报，可继续 wait。等待超时不说明内容很多。inspect 立即查看；cancel 放弃任务。最终 reply 前须完成或取消查阅任务。",
       parameters,
       async (args, signal) => {
         const id =
@@ -87,6 +92,7 @@ export class Subagents {
           try {
             await Promise.race([
               run.finished,
+              run.work.updated.promise,
               delay(args.action === "start" ? 5000 : 30_000, undefined, {
                 signal: signal
                   ? AbortSignal.any([signal, timer.signal])
@@ -99,12 +105,12 @@ export class Subagents {
         }
 
         signal?.throwIfAborted();
+        run.work.updated = Promise.withResolvers<void>();
 
         return {
           id,
           task: run.work.task,
           state: run.work.state,
-          elapsedMs: Date.now() - run.work.startedAt,
           brief: run.work.report?.brief ?? null,
           scope: run.work.report?.scope ?? null,
           error: run.work.error ?? null,
@@ -122,7 +128,11 @@ export class Subagents {
     }
 
     const id = `s${this.#runs.size + 1}`;
-    const work: Work = { task, startedAt: Date.now(), state: "running" };
+    const work: Work = {
+      task,
+      state: "running",
+      updated: Promise.withResolvers<void>(),
+    };
     const controller = new AbortController();
     const finished = this.#run(work, scope, controller.signal).then(
       () => {
@@ -151,10 +161,14 @@ export class Subagents {
     const report = tool(
       this.#context,
       "report",
-      "向小栖提供简报；done=true 交付最终结果并结束查阅。",
+      "向小栖提供内容简报和已知资料规模。done=false 立即交付中间简报并继续查阅；done=true 交付最终结果并结束查阅。",
       reportSchema,
       async (args) => {
         work.report = args;
+
+        if (!args.done) {
+          work.updated.resolve();
+        }
 
         return { state: args.done ? "done" : "running" };
       },
@@ -195,7 +209,7 @@ export class Subagents {
   public assertIdle(): void {
     if ([...this.#runs.values()].some(({ work }) => work.state === "running")) {
       throw new Error(
-        "还有查阅任务未完成。可用 notify 提示进度，继续 subagent(wait)；不再需要的任务先 cancel。reply 会结束对话。",
+        "还有查阅任务未完成，请继续 subagent(wait)；不再需要的任务先 cancel。reply 会结束对话。",
       );
     }
   }
