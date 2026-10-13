@@ -4,6 +4,7 @@ import type { AgentRuntime } from "./runtime.ts";
 import { Subagents } from "./subagents.ts";
 import type { ToolContext } from "./tools/context.ts";
 import { followTool } from "./tools/follow.ts";
+import { inspectRecordTool } from "./tools/inspect-record.ts";
 import { memoryTool } from "./tools/memory.ts";
 import { readTool } from "./tools/read.ts";
 import { recordTools } from "./tools/records.ts";
@@ -38,6 +39,7 @@ export class DialogAI {
             notifyTool(context),
             subagents.tool(),
             readTool(context),
+            inspectRecordTool(context),
             ...recordTools(context),
             followTool(context),
             taskTool(context),

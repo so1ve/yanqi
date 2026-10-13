@@ -8,12 +8,12 @@ import { contextWithin } from "../recording/messages.ts";
 import { sourceScope } from "../recording/sources.ts";
 import { failureMessage } from "../utils/errors.ts";
 import { beijingTime } from "../utils/time.ts";
-import { subagentPrompt } from "./prompts/subagent.ts";
+import { subagentPrompts } from "./prompts/subagent.ts";
 import type { AgentRuntime } from "./runtime.ts";
 import type { ToolContext } from "./tools/context.ts";
 import { object, tool } from "./tools/context.ts";
 import type { HistoryMetadata } from "./tools/history.ts";
-import { historyTools } from "./tools/history.ts";
+import { chatHistoryTools, noteHistoryTools } from "./tools/history.ts";
 import { readTool } from "./tools/read.ts";
 
 const reportSchema = object({
@@ -23,14 +23,24 @@ const reportSchema = object({
     description:
       "已查明的内容、工具返回的资料规模和仍需查阅的部分，供小栖判断后续工作。",
   }),
-  scope: Type.Optional(sourceScope),
   done: Type.Boolean(),
 });
+const historyReportSchema = object({
+  ...reportSchema.properties,
+  scope: Type.Optional(sourceScope),
+});
+const taskDescription = Type.String({ minLength: 1, maxLength: 2000 });
 const parameters = Type.Union([
   object({
     action: Type.Literal("start"),
-    task: Type.String({ minLength: 1, maxLength: 2000 }),
+    kind: Type.Literal("history"),
+    task: taskDescription,
     scope: Type.Optional(sourceScope),
+  }),
+  object({
+    action: Type.Literal("start"),
+    kind: Type.Literal("notes"),
+    task: taskDescription,
   }),
   object({
     action: Type.Union([
@@ -42,11 +52,13 @@ const parameters = Type.Union([
   }),
 ]);
 
+type Assignment = Extract<Static<typeof parameters>, { action: "start" }>;
+
 interface Work {
-  task: string;
+  assignment: Assignment;
   state: "running" | "done" | "failed" | "cancelled";
   updated: PromiseWithResolvers<void>;
-  report?: Static<typeof reportSchema>;
+  report?: Static<typeof historyReportSchema>;
   metadata?: HistoryMetadata;
   error?: string;
 }
@@ -69,13 +81,10 @@ export class Subagents {
     return tool(
       this.#context,
       "subagent",
-      "委派独立资料助手检索上下文、确定记录范围、比较纪要或提取信息。start 给出具体任务和可选 scope，不传整段历史，先等待最多 5 秒；助手先查元数据，再用句柄读正文，只返回元数据、内容简报和必要 ID，不操作记录或发言。最多同时运行两个。wait 最多等待 30 秒；有新元数据、简报或任务完成时立即返回，否则返回已有信息，可继续 wait。metadata 是资料规模和范围，不代表已读正文。等待超时不说明内容很多。inspect 立即查看；cancel 放弃任务。最终 reply 前须完成或取消查阅任务。",
+      "委派只读助手。start 必须选择 kind：history 查聊天、确定讨论范围或提取信息，可带 scope；notes 查已保存纪要、理解内容或比较版本，task 写明文档线索和版本。两类工具互不混用，不能修改数据、发言或再委派。任务同时涉及原文和纪要时分别委派并汇合简报。助手先查元数据，再用句柄读正文。最多同时运行两个。start 最多等 5 秒，wait 最多等 30 秒，有新元数据、简报或完成结果时立即返回，可继续 wait。metadata 表示资料规模和范围，不代表已读正文；等待超时不说明内容很多。inspect 立即查看；cancel 放弃任务。最终 reply 前须完成或取消查阅任务。",
       parameters,
       async (args, signal) => {
-        const id =
-          args.action === "start"
-            ? this.#start(args.task, args.scope)
-            : args.id;
+        const id = args.action === "start" ? this.#start(args) : args.id;
         const run = this.#runs.get(id);
 
         if (!run) {
@@ -111,7 +120,8 @@ export class Subagents {
 
         return {
           id,
-          task: run.work.task,
+          kind: run.work.assignment.kind,
+          task: run.work.assignment.task,
           state: run.work.state,
           metadata: run.work.metadata ?? null,
           brief: run.work.report?.brief ?? null,
@@ -122,7 +132,7 @@ export class Subagents {
     );
   }
 
-  #start(task: string, scope: Static<typeof sourceScope> | undefined): string {
+  #start(assignment: Assignment): string {
     if (
       [...this.#runs.values()].filter(({ work }) => work.state === "running")
         .length >= 2
@@ -132,12 +142,12 @@ export class Subagents {
 
     const id = `s${this.#runs.size + 1}`;
     const work: Work = {
-      task,
+      assignment,
       state: "running",
       updated: Promise.withResolvers<void>(),
     };
     const controller = new AbortController();
-    const finished = this.#run(work, scope, controller.signal).then(
+    const finished = this.#run(work, controller.signal).then(
       () => {
         work.state = "done";
       },
@@ -152,20 +162,18 @@ export class Subagents {
     return id;
   }
 
-  async #run(
-    work: Work,
-    scope: Static<typeof sourceScope> | undefined,
-    signal: AbortSignal,
-  ) {
+  async #run(work: Work, signal: AbortSignal) {
     const { message, store } = this.#context;
-    const quote = message.replyTo
-      ? await store.messages.quoted(message.groupId, message.replyTo)
-      : null;
+    const { assignment } = work;
+    const quote =
+      assignment.kind === "history" && message.replyTo
+        ? await store.messages.quoted(message.groupId, message.replyTo)
+        : null;
     const report = tool(
       this.#context,
       "report",
       "向小栖提供内容简报和已知资料规模。done=false 立即交付中间简报并继续查阅；done=true 交付最终结果并结束查阅。",
-      reportSchema,
+      assignment.kind === "history" ? historyReportSchema : reportSchema,
       async (args) => {
         work.report = args;
 
@@ -176,13 +184,26 @@ export class Subagents {
         return { state: args.done ? "done" : "running" };
       },
     );
+    const onMetadata = (metadata: HistoryMetadata) => {
+      work.metadata = metadata;
+      work.updated.resolve();
+    };
+
+    // 每次只注册该分工的工具；SDK 按此列表查找工具并校验参数后才执行。
+    const tools =
+      assignment.kind === "history"
+        ? chatHistoryTools(this.#context, onMetadata)
+        : [
+            readTool(this.#context),
+            ...noteHistoryTools(this.#context, onMetadata),
+          ];
 
     await this.#runtime.text(
-      "subagent",
-      subagentPrompt,
+      `subagent_${assignment.kind}`,
+      subagentPrompts[assignment.kind],
       {
-        task: work.task,
-        scope,
+        task: assignment.task,
+        ...(assignment.kind === "history" ? { scope: assignment.scope } : {}),
         quoted: quote ? await contextWithin(store, [quote], 1500) : [],
         request: {
           id: `m${message.id}`,
@@ -196,14 +217,7 @@ export class Subagents {
         signal,
         thinking: true,
         maxTurns: 16,
-        tools: [
-          ...historyTools(this.#context, (metadata) => {
-            work.metadata = metadata;
-            work.updated.resolve();
-          }),
-          readTool(this.#context),
-          report,
-        ],
+        tools: [...tools, report],
         finishTurn: ({ message }) => ({
           action:
             work.report?.done ||
