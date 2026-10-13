@@ -1,5 +1,4 @@
-import { readFile } from "node:fs/promises";
-import { resolve, sep } from "node:path";
+import { extname } from "node:path";
 
 import {
   createError,
@@ -8,6 +7,7 @@ import {
   setResponseHeader,
 } from "h3";
 
+import { readDataFile } from "~~/server/files";
 import { groupParam, integer, requireItem } from "~~/server/utils/http";
 
 export default defineEventHandler(async (event) => {
@@ -29,19 +29,13 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, message: "附件尚未下载" });
   }
 
-  const path = resolve(asset.path);
-
-  if (!path.startsWith(`${resolve(bot.store.directory)}${sep}`)) {
-    throw createError({ statusCode: 400, message: "附件不在当前数据目录中" });
-  }
-
-  const bytes = await readFile(path);
+  const bytes = await readDataFile(bot.store.directory, asset.path);
 
   setResponseHeader(event, "Content-Type", "application/octet-stream");
   setResponseHeader(
     event,
     "Content-Disposition",
-    `attachment; filename="asset-${id}${path.slice(path.lastIndexOf("."))}"`,
+    `attachment; filename="asset-${id}${extname(asset.path)}"`,
   );
 
   return bytes;

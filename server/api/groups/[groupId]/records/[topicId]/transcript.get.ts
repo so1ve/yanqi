@@ -1,13 +1,8 @@
-import { readFile } from "node:fs/promises";
-import { dirname, resolve, sep } from "node:path";
+import { dirname, join } from "node:path";
 
-import {
-  createError,
-  defineEventHandler,
-  getRouterParam,
-  setResponseHeader,
-} from "h3";
+import { defineEventHandler, getRouterParam, setResponseHeader } from "h3";
 
+import { readDataFile } from "~~/server/files";
 import {
   groupParam,
   integer,
@@ -38,13 +33,9 @@ export default defineEventHandler(async (event) => {
         )[0],
       )
     : requireItem((await bot.store.notes.latest(topic.id)) ?? undefined);
-  const path = resolve(dirname(note.path), "transcript.md");
-
-  if (!path.startsWith(`${resolve(bot.store.directory)}${sep}`)) {
-    throw createError({ statusCode: 400, message: "原文不在当前数据目录中" });
-  }
+  const path = join(dirname(note.path), "transcript.md");
 
   setResponseHeader(event, "Content-Type", "text/plain; charset=utf-8");
 
-  return await readFile(path, "utf8");
+  return (await readDataFile(bot.store.directory, path)).toString("utf8");
 });

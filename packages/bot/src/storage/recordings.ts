@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 
 import type { Message, Topic } from "../types.ts";
+import { enqueueJob } from "./jobs.ts";
 import type { Database } from "./schema.ts";
 import { linkMessages } from "./topic-sources.ts";
 
@@ -12,12 +13,12 @@ export class Recordings {
     this.#db = db;
   }
 
-  public createForGroup(
+  public createSummary(
     groupId: string,
     title: string,
     focus: string,
     messageIds: number[],
-  ): Promise<Topic> {
+  ): Promise<{ topic: Topic; taskId: number }> {
     return this.#db.transact(async (db) => {
       const topic = await db.create("topics", {
         id: randomUUID(),
@@ -35,7 +36,20 @@ export class Recordings {
       await linkMessages(db, topic.id, messageIds);
       const [saved] = await db.get("topics", { id: topic.id });
 
-      return saved!;
+      assert.ok(saved);
+      const taskId = await enqueueJob(
+        db,
+        "summarize",
+        `summarize:${saved.id}:${saved.generation}`,
+        {
+          groupId,
+          topicId: saved.id,
+          requested: true,
+          publish: false,
+        },
+      );
+
+      return { topic: saved, taskId };
     });
   }
 

@@ -250,8 +250,8 @@ export class JobQueue {
     );
   }
 
-  public async restart(groupId: string, id: number): Promise<void> {
-    await this.#db.transact((db) =>
+  public async restart(groupId: string, id: number): Promise<boolean> {
+    const result = await this.#db.transact((db) =>
       db.set(
         "jobs",
         {
@@ -269,6 +269,8 @@ export class JobQueue {
         },
       ),
     );
+
+    return result.matched === 1;
   }
 
   public async wait(

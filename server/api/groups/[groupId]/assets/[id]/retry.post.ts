@@ -15,11 +15,10 @@ export default defineEventHandler(async (event) => {
   );
   const job = await bot.store.jobs.forAsset(asset.id);
 
-  if (job.state === "running" || job.state === "pending") {
+  if (!(await bot.store.jobs.restart(groupId, job.id))) {
     throw createError({ statusCode: 409, message: "附件已经在处理中" });
   }
 
-  await bot.store.jobs.restart(groupId, job.id);
   bot.wake();
 
   return { taskId: job.id };

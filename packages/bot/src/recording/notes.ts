@@ -1,23 +1,16 @@
-import { randomUUID } from "node:crypto";
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 import { Logger } from "@koishijs/core";
 
 import type { Ai } from "../agent/ai.ts";
 import type { Config } from "../config.ts";
+import { topicDirectory, writeMarkdown } from "../storage/files.ts";
 import type { Store } from "../storage/store.ts";
 import type { Job, Note, Topic } from "../types.ts";
 import { publishNote } from "./publication.ts";
 import { Summarizer } from "./summary.ts";
 import { transcript } from "./transcript.ts";
-
-async function writeMarkdown(path: string, content: string): Promise<void> {
-  const temporary = `${path}.${randomUUID()}.part`;
-
-  await writeFile(temporary, content, { mode: 0o600 });
-  await rename(temporary, path);
-}
 
 export class Notes {
   #config: Config;
@@ -93,11 +86,7 @@ export class Notes {
       );
       const revision = topic.revision + 1;
       const directory = join(
-        this.#store.directory,
-        "groups",
-        topic.groupId,
-        "topics",
-        topic.id,
+        topicDirectory(this.#store.directory, topic),
         `v${revision}`,
       );
 

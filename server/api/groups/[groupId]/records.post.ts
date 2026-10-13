@@ -52,21 +52,16 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const topic = await bot.store.recordings.createForGroup(
+  const result = await bot.store.recordings.createSummary(
     groupId,
     input.title,
     input.focus,
     messages.map((message) => message.id),
-  );
-  const taskId = await bot.store.jobs.enqueue(
-    "summarize",
-    `summarize:${topic.id}:${topic.generation}`,
-    { groupId, topicId: topic.id, requested: true, publish: false },
   );
 
   bot.wake();
 
   setResponseStatus(event, 201);
 
-  return { topic, taskId };
+  return result;
 });
