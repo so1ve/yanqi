@@ -1,6 +1,7 @@
 export { Yanqi } from "./app.ts";
 export type { Config, ModelConfig } from "./config.ts";
 export { configSchema, configurationError, parseConfig } from "./config.ts";
+export { assetFileName } from "./storage/asset-files.ts";
 export { topicDirectory, writeMarkdown } from "./storage/files.ts";
 export { decodeJob, enqueueJob } from "./storage/jobs.ts";
 export {

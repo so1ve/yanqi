@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+
 import type { Bot, Context } from "@koishijs/core";
 import { Logger, h } from "@koishijs/core";
 import type { OneBot } from "koishi-plugin-adapter-onebot";
@@ -7,7 +9,7 @@ import type { Store } from "../storage/store.ts";
 import type { Asset, Message, Note, Segment } from "../types.ts";
 import { failureMessage } from "../utils/errors.ts";
 import { logDetail } from "../utils/logging.ts";
-import { renderQQ } from "./render.ts";
+import { renderQQ, renderQQParts } from "./render.ts";
 
 type ProtocolBot = Bot & { internal: OneBot.Internal };
 
@@ -113,13 +115,49 @@ export function createMessenger(config: Config, store: Store, ctx: Context) {
     },
     async sendNote(note: Note) {
       const bot = getBot();
-      const chunks = textParts(renderQQ(note.markdown), 1800);
-      const nodes = chunks.map((text) => ({
+      const contents: Segment[][] = [];
+
+      for (const part of renderQQParts(note.markdown)) {
+        if (part.kind === "text") {
+          contents.push(
+            ...textParts(part.text, 1800).map((text) => [
+              { type: "text", data: { text } },
+            ]),
+          );
+
+          continue;
+        }
+
+        const match =
+          /^(?:\.\.\/)+assets\/[a-f0-9]{2}\/[a-f0-9]{2}\/([a-f0-9]{64}\.[a-z0-9]+)$/.exec(
+            part.href,
+          );
+        const asset = match
+          ? await store.assets.file(note.groupId, match[1]!)
+          : undefined;
+
+        if (!asset?.path || asset.kind !== "image") {
+          throw new Error(`纪要图片不属于当前群或尚未保存：${part.href}`);
+        }
+
+        // NapCat 使用独立容器，通过文件内容传图，不传机器人容器内的路径。
+        contents.push([
+          {
+            type: "image",
+            data: {
+              file: `base64://${(await readFile(asset.path)).toString("base64")}`,
+            },
+          },
+          ...(part.text ? [{ type: "text", data: { text: part.text } }] : []),
+        ]);
+      }
+
+      const nodes = contents.map((content) => ({
         type: "node",
         data: {
           user_id: config.BOT_QQ,
           nickname: "言栖",
-          content: [{ type: "text", data: { text } }],
+          content,
         },
       }));
 
@@ -131,7 +169,13 @@ export function createMessenger(config: Config, store: Store, ctx: Context) {
         await saveOutgoing(
           note.groupId,
           String(id),
-          part.map((node) => node.data.content[0]!.data.text).join(""),
+          part
+            .flatMap((node) =>
+              node.data.content
+                .filter((segment) => segment.type === "text")
+                .map((segment) => String(segment.data.text)),
+            )
+            .join("\n"),
           [],
           note.id,
         );

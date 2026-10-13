@@ -7,15 +7,11 @@ const emit = defineEmits<{ transcript: [] }>();
 const props = defineProps<{ content: string; groupId?: string }>();
 const html = computed(() => {
   let rendered = marked.parse(props.content, { async: false });
-  rendered = rendered.replace(
-    /href="(?:\.\.\/)+assets\/([a-f0-9]{64}\.[a-z]+)"/g,
-    'href="/api/assets/$1"',
-  );
-
   if (props.groupId) {
     rendered = rendered.replace(
-      /href="(?:\.\.\/)+assets\/(\d+)\.[a-z]+"/g,
-      `href="/api/groups/${props.groupId}/assets/$1"`,
+      /(href|src)="(?:\.\.\/)+assets\/[a-f0-9]{2}\/[a-f0-9]{2}\/([a-f0-9]{64}\.[a-z0-9]+)"/g,
+      (_match, attribute: string, name: string) =>
+        `${attribute}="/api/groups/${props.groupId}/files/${name}${attribute === "src" ? "?preview=1" : ""}"`,
     );
   }
 

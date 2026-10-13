@@ -33,7 +33,7 @@ export class Store {
     this.topics = new Topics(db);
     this.recordings = new Recordings(db);
     this.notes = new SavedNotes(db);
-    this.assets = new Assets(db);
+    this.assets = new Assets(db, directory);
     this.usage = new Usage(db);
     this.groups = new Groups(db);
     this.jobs = new JobQueue(db);

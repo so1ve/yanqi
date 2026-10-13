@@ -67,6 +67,8 @@ export async function messageChunks(
         return {
           assetId: asset.id,
           kind: asset.kind,
+          imageRef:
+            asset.kind === "image" && asset.path ? `asset:${asset.id}` : null,
           taskId: job.id,
           state: job.state,
         };

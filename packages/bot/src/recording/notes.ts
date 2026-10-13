@@ -8,6 +8,7 @@ import type { Config } from "../config.ts";
 import { topicDirectory, writeMarkdown } from "../storage/files.ts";
 import type { Store } from "../storage/store.ts";
 import type { Job, Note, Topic } from "../types.ts";
+import { noteImages } from "./images.ts";
 import { publishNote } from "./publication.ts";
 import { Summarizer } from "./summary.ts";
 import { transcript } from "./transcript.ts";
@@ -91,6 +92,10 @@ export class Notes {
       );
 
       await mkdir(directory, { recursive: true });
+      const images = await this.#store.assets.images(
+        sources.map((message) => message.id),
+      );
+
       await writeMarkdown(
         join(directory, "transcript.md"),
         await transcript(this.#store, sources, directory),
@@ -123,7 +128,7 @@ export class Notes {
         excerpt = (outline || content).slice(0, 600);
         await writeMarkdown(
           path,
-          `${header}\n\n> 草稿：整理尚未完成。\n\n${content}\n\n${footer}`,
+          `${header}\n\n> 草稿：整理尚未完成。\n\n${noteImages(content, images, directory)}\n\n${footer}`,
         );
         await this.#store.jobs.reportProgress(
           job.id,
@@ -142,7 +147,7 @@ export class Notes {
         `正在合并相关观点。${excerpt ? `已整理内容摘录：${excerpt}。` : ""}草稿：${path}`,
       );
       content = await this.#summary.compose(topic, sections);
-      const markdown = `${header}\n\n${content || "所选原文中没有找到与整理要求相关的内容。"}\n\n${footer}`;
+      const markdown = `${header}\n\n${noteImages(content, images, directory) || "所选原文中没有找到与整理要求相关的内容。"}\n\n${footer}`;
 
       await writeMarkdown(path, markdown);
       note = await this.#store.notes.save(

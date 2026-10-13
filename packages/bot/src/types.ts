@@ -103,6 +103,7 @@ export interface ChatMessage {
   attachmentTasks: {
     assetId: number;
     kind: Asset["kind"];
+    imageRef: string | null;
     taskId: number;
     state: "pending" | "running" | "done" | "failed";
   }[];

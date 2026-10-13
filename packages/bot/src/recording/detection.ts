@@ -19,9 +19,26 @@ export async function detectTopics(
   )
     .slice(0, 15)
     .map(({ id, title, description }) => ({ id, title, description }));
+  const recent = await store.messages.conversation(
+    groupId,
+    20,
+    messages[0]!.id - 1,
+  );
+  const discussionIds = new Set(
+    [...messages, ...recent]
+      .filter(
+        (message) =>
+          !message.isBot &&
+          (message.text.trim() ||
+            message.content.some((segment) =>
+              ["audio", "forward", "record"].includes(segment.type),
+            )),
+      )
+      .map((message) => message.id),
+  );
   const context = await contextWithin(
     store,
-    await store.messages.conversation(groupId, 20, messages[0]!.id - 1),
+    recent,
     Math.floor(config.AI_INPUT_CHARS / 6),
   );
   const chunks = await messageChunks(
@@ -87,9 +104,15 @@ export async function detectTopics(
   await store.topics.commitDetection(
     groupId,
     messages.at(-1)!.id,
-    [...assignments.values()].map((assignment) => ({
-      ...assignment,
-      messageIds: [...assignment.messageIds],
-    })),
+    [...assignments.values()]
+      .filter(
+        (assignment) =>
+          !assignment.id.startsWith("new:") ||
+          [...assignment.messageIds].some((id) => discussionIds.has(id)),
+      )
+      .map((assignment) => ({
+        ...assignment,
+        messageIds: [...assignment.messageIds],
+      })),
   );
 }

@@ -2,6 +2,7 @@ import { rm, stat } from "node:fs/promises";
 import { resolve, sep } from "node:path";
 
 import type { Note } from "../types.ts";
+import { interpretationPath } from "./asset-files.ts";
 import { decodeJob } from "./jobs.ts";
 import type { Database } from "./schema.ts";
 
@@ -145,20 +146,22 @@ export async function purgeHistory(
             throw new Error("待清理附件不在数据目录中");
           }
 
-          const info = await stat(path).catch(
-            (error: NodeJS.ErrnoException) => {
-              if (error.code !== "ENOENT") {
-                throw error;
-              }
+          for (const file of [path, interpretationPath(path)]) {
+            const info = await stat(file).catch(
+              (error: NodeJS.ErrnoException) => {
+                if (error.code !== "ENOENT") {
+                  throw error;
+                }
 
-              return null;
-            },
-          );
+                return null;
+              },
+            );
 
-          await rm(path, { force: true });
-          if (info) {
-            result.files++;
-            result.bytes += info.size;
+            await rm(file, { force: true });
+            if (info) {
+              result.files++;
+              result.bytes += info.size;
+            }
           }
         }
 
