@@ -166,7 +166,7 @@ function download(): void {
           />
           <StateTag :state="data.topic.state" />
         </NSpace>
-        <NSpace>
+        <NSpace align="center" :wrap-item="false">
           <NButton
             :disabled="!data.note || editing"
             text
@@ -181,7 +181,7 @@ function download(): void {
           <NButton text @click="showRegenerate = true">重新整理</NButton>
           <NTooltip>
             <template #trigger>
-              <span>
+              <span class="delete-trigger">
                 <NButton
                   aria-label="删除纪要"
                   :disabled="status?.running"
@@ -286,5 +286,9 @@ function download(): void {
 
 .version-select {
   width: 230px;
+}
+
+.delete-trigger {
+  display: inline-flex;
 }
 </style>
