@@ -8,22 +8,25 @@ import { NuxtLink } from "#components";
 import StateTag from "~/components/StateTag.vue";
 import CreateDialog from "~/components/records/CreateDialog.vue";
 import { useApiData } from "~/composables/useApiData";
+import { positiveInteger, useQueryValue } from "~/composables/useQueryValue";
 import { useWorkspace } from "~/composables/useWorkspace";
 import type { Page } from "~/types/api";
 import { formatTime } from "~/utils/format";
 
 const { groupId, group } = useWorkspace();
-const query = ref("");
-const searchQuery = ref("");
-const page = ref(1);
+const searchQuery = useQueryValue("q", (value) => value ?? "", {
+  reset: ["page"],
+});
+const query = ref(searchQuery.value);
+const page = useQueryValue("page", (value) => positiveInteger(value) ?? 1);
+watch(searchQuery, (value) => {
+  query.value = value;
+});
 const { data, error, loading, refresh } = useApiData<Page<Topic>>(() =>
   groupId.value
     ? `groups/${groupId.value}/records?page=${page.value}&q=${encodeURIComponent(searchQuery.value)}`
     : "",
 );
-watch([groupId, searchQuery], () => {
-  page.value = 1;
-});
 const columns: DataTableColumns<Topic> = [
   {
     title: "纪要",

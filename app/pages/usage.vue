@@ -1,19 +1,29 @@
 <script setup lang="ts">
 import { Refresh } from "@vicons/tabler";
 import type { DataTableColumns } from "naive-ui";
-import { computed, h, ref } from "vue";
+import { computed, h } from "vue";
 
 import { useApiData } from "~/composables/useApiData";
+import { useQueryValue } from "~/composables/useQueryValue";
 import { useWorkspace } from "~/composables/useWorkspace";
 import type { Usage } from "~/types/api";
 import { formatNumber } from "~/utils/format";
 
 const { groupId, group } = useWorkspace();
-const day = ref(
-  new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Shanghai" }).format(
-    Date.now(),
-  ),
-);
+const today = new Intl.DateTimeFormat("sv-SE", {
+  timeZone: "Asia/Shanghai",
+}).format(Date.now());
+const day = useQueryValue("day", (value) => {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return today;
+  }
+  const date = new Date(value);
+
+  return Number.isFinite(date.getTime()) &&
+    date.toISOString().slice(0, 10) === value
+    ? value
+    : today;
+});
 const { data, loading, error, refresh } = useApiData<Usage>(() =>
   groupId.value ? `groups/${groupId.value}/usage?day=${day.value}` : "",
 );

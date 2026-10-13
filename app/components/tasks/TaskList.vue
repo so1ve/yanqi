@@ -1,21 +1,23 @@
 <script setup lang="ts">
 import type { DataTableColumns } from "naive-ui";
 import { NButton, useDialog } from "naive-ui";
-import { computed, h, ref, watch } from "vue";
+import { computed, h } from "vue";
 
 import StateTag from "~/components/StateTag.vue";
 import { useAction } from "~/composables/useAction";
 import { useApiData } from "~/composables/useApiData";
 import { usePoll } from "~/composables/usePoll";
+import { positiveInteger, useQueryValue } from "~/composables/useQueryValue";
 import type { Page, Task } from "~/types/api";
 import { api } from "~/utils/api";
 import { formatTime } from "~/utils/format";
 import { kindNames } from "~/utils/labels";
 
-const props = defineProps<{ groupId: string }>();
-const page = ref(1);
-const state = defineModel<string>("state", { required: true });
-const detailId = ref<number | null>(null);
+const props = defineProps<{ groupId: string; state: string }>();
+const page = useQueryValue("page", (value) => positiveInteger(value) ?? 1, {
+  reset: ["task"],
+});
+const detailId = useQueryValue("task", positiveInteger);
 const {
   data: tasks,
   loading: tasksLoading,
@@ -23,7 +25,7 @@ const {
   refresh,
 } = useApiData<Page<Task>>(() =>
   props.groupId
-    ? `groups/${props.groupId}/tasks?page=${page.value}&state=${state.value}`
+    ? `groups/${props.groupId}/tasks?page=${page.value}&state=${props.state}`
     : "",
 );
 const detail = computed(() =>
@@ -32,10 +34,6 @@ const detail = computed(() =>
 const { busy, run } = useAction();
 const dialog = useDialog();
 
-watch([() => props.groupId, state], () => {
-  page.value = 1;
-  detailId.value = null;
-});
 usePoll(refresh);
 defineExpose({ loading: tasksLoading, refresh });
 

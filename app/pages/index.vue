@@ -9,7 +9,7 @@ import { formatNumber, formatTime } from "~/utils/format";
 import { kindNames } from "~/utils/labels";
 
 const { data, loading, error, refresh } = useApiData<Overview>("overview");
-const { groups, status } = useWorkspace();
+const { groups, status, groupLink } = useWorkspace();
 usePoll(refresh, 10_000);
 </script>
 
@@ -52,7 +52,7 @@ usePoll(refresh, 10_000);
         <AppPanel>
           <template #header>
             <h2>最近的记录</h2>
-            <NuxtLink to="/records">
+            <NuxtLink :to="groupLink('/records')">
               查看纪要
               <NIcon :component="ArrowRight" />
             </NuxtLink>
@@ -89,14 +89,16 @@ usePoll(refresh, 10_000);
             description="连接 NapCat 并启用群记录后，可以在群里让小栖整理讨论，也可以在“纪要”页新建。"
             title="还没有纪要"
           >
-            <NuxtLink to="/settings"><NButton>连接 NapCat</NButton></NuxtLink>
+            <NuxtLink :to="groupLink('/settings')">
+              <NButton>连接 NapCat</NButton>
+            </NuxtLink>
           </EmptyState>
         </AppPanel>
         <div>
           <AppPanel>
             <template #header>
               <h2>排队和处理中的任务</h2>
-              <NuxtLink to="/tasks">全部</NuxtLink>
+              <NuxtLink :to="groupLink('/tasks')">全部</NuxtLink>
             </template>
             <div v-for="task in data.tasks" :key="task.id" class="task-brief">
               <span class="task-number">#{{ task.id }}</span>
@@ -125,7 +127,7 @@ usePoll(refresh, 10_000);
               :show-indicator="false"
               type="line"
             />
-            <NuxtLink class="cell-sub usage-link" to="/usage">
+            <NuxtLink class="cell-sub usage-link" :to="groupLink('/usage')">
               按模型查看 token 用量 →
             </NuxtLink>
           </AppPanel>

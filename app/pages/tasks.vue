@@ -1,13 +1,25 @@
 <script setup lang="ts">
-import { computed, ref, useTemplateRef } from "vue";
+import { computed, useTemplateRef } from "vue";
 
 import DeliveryList from "~/components/tasks/DeliveryList.vue";
 import TaskList from "~/components/tasks/TaskList.vue";
+import { useQueryValue } from "~/composables/useQueryValue";
 import { useWorkspace } from "~/composables/useWorkspace";
 
 const { groupId, group } = useWorkspace();
-const tab = ref("tasks");
-const state = ref("");
+const tab = useQueryValue(
+  "tab",
+  (value) => (value === "deliveries" ? "deliveries" : "tasks"),
+  { reset: ["page", "task"] },
+);
+const state = useQueryValue(
+  "state",
+  (value) =>
+    value && ["done", "failed", "pending", "running"].includes(value)
+      ? value
+      : "",
+  { reset: ["page", "task"] },
+);
 const tasks = useTemplateRef<InstanceType<typeof TaskList>>("tasks");
 const deliveries =
   useTemplateRef<InstanceType<typeof DeliveryList>>("deliveries");
@@ -45,12 +57,7 @@ const states = [
   </PageHeading>
   <PageTabs v-model:value="tab">
     <NTabPane name="tasks" tab="处理任务">
-      <TaskList
-        v-if="tab === 'tasks'"
-        v-model:state="state"
-        ref="tasks"
-        :group-id
-      />
+      <TaskList v-if="tab === 'tasks'" ref="tasks" :group-id :state />
     </NTabPane>
     <NTabPane name="deliveries" tab="群消息发送">
       <DeliveryList v-if="tab === 'deliveries'" ref="deliveries" :group-id />

@@ -7,18 +7,25 @@ import { computed, h, ref, watch } from "vue";
 import MemoryDialog from "~/components/memories/MemoryDialog.vue";
 import { useAction } from "~/composables/useAction";
 import { useApiData } from "~/composables/useApiData";
+import { positiveInteger, useQueryValue } from "~/composables/useQueryValue";
 import { useWorkspace } from "~/composables/useWorkspace";
 import type { Memory, Page } from "~/types/api";
 import { api } from "~/utils/api";
 import { formatTime } from "~/utils/format";
 
 const { groupId, group } = useWorkspace();
-const scope = ref<Memory["scope"]>("group");
-const page = ref(1);
-const query = ref("");
-const searchQuery = ref("");
-watch([groupId, scope, searchQuery], () => {
-  page.value = 1;
+const scope = useQueryValue(
+  "scope",
+  (value) => (value === "user" ? "user" : "group"),
+  { reset: ["page"] },
+);
+const page = useQueryValue("page", (value) => positiveInteger(value) ?? 1);
+const searchQuery = useQueryValue("q", (value) => value ?? "", {
+  reset: ["page"],
+});
+const query = ref(searchQuery.value);
+watch(searchQuery, (value) => {
+  query.value = value;
 });
 const { data, loading, error, refresh } = useApiData<Page<Memory>>(() => {
   if (scope.value === "group" && !groupId.value) {

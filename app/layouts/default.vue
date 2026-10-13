@@ -23,7 +23,7 @@ import type { Status } from "~/types/api";
 import { api, errorText } from "~/utils/api";
 
 const workspace = useWorkspace();
-const { groups, groupId, status } = workspace;
+const { groups, groupId, status, groupLink, selectGroup } = workspace;
 const route = useRoute();
 const { busy, run } = useAction();
 const open = ref(false);
@@ -76,12 +76,6 @@ async function logout(): Promise<void> {
     await navigateTo("/login");
   });
 }
-function changeGroup(id: string): void {
-  groupId.value = id;
-  if (route.path.startsWith("/records/")) {
-    void navigateTo("/records");
-  }
-}
 </script>
 
 <template>
@@ -93,7 +87,7 @@ function changeGroup(id: string): void {
       @click="open = false"
     />
     <aside class="sidebar" :class="{ 'is-open': open }">
-      <NuxtLink to="/"><AppBrand caption="管理台" /></NuxtLink>
+      <NuxtLink :to="groupLink('/')"><AppBrand caption="管理台" /></NuxtLink>
       <NButton
         aria-label="关闭导航"
         class="nav-close"
@@ -110,7 +104,7 @@ function changeGroup(id: string): void {
           :options
           placeholder="选择一个群"
           :value="groupId || null"
-          @update:value="changeGroup"
+          @update:value="selectGroup"
         />
       </div>
       <nav aria-label="主导航">
@@ -119,7 +113,7 @@ function changeGroup(id: string): void {
           :key="link.path"
           class="nav-link"
           :class="{ active: link.label === selected }"
-          :to="link.path"
+          :to="groupLink(link.path)"
           @click="open = false"
         >
           <NIcon :component="link.icon" />
@@ -136,7 +130,7 @@ function changeGroup(id: string): void {
         <NuxtLink
           class="nav-link"
           :class="{ active: route.path === '/settings' }"
-          to="/settings"
+          :to="groupLink('/settings')"
         >
           <NIcon :component="Settings" />
           <span>设置</span>

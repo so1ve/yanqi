@@ -1,14 +1,18 @@
 <script setup lang="ts">
 import { Refresh, Search } from "@vicons/tabler";
-import { computed, ref, useTemplateRef } from "vue";
+import { computed, ref, useTemplateRef, watch } from "vue";
 
 import MessageHistory from "~/components/messages/MessageHistory.vue";
+import { useQueryValue } from "~/composables/useQueryValue";
 import { useWorkspace } from "~/composables/useWorkspace";
 
 const { groupId, group } = useWorkspace();
 const history = useTemplateRef<InstanceType<typeof MessageHistory>>("history");
-const query = ref("");
-const searchQuery = ref("");
+const searchQuery = useQueryValue("q", (value) => value ?? "");
+const query = ref(searchQuery.value);
+watch(searchQuery, (value) => {
+  query.value = value;
+});
 const source = computed(
   () =>
     `groups/${groupId.value}/messages?q=${encodeURIComponent(searchQuery.value)}`,

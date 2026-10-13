@@ -7,6 +7,7 @@ import { computed, h, ref } from "vue";
 import UserAvatar from "~/components/UserAvatar.vue";
 import { useAction } from "~/composables/useAction";
 import { useApiData } from "~/composables/useApiData";
+import { positiveInteger, useQueryValue } from "~/composables/useQueryValue";
 import { useWorkspace } from "~/composables/useWorkspace";
 import type { Group, Member } from "~/types/api";
 import { api } from "~/utils/api";
@@ -31,7 +32,14 @@ const checked = computed(() => [
       .map((member) => member.id),
   ]),
 ]);
-const memberQuery = ref("");
+const memberQuery = useQueryValue("memberQ", (value) => value ?? "", {
+  replace: true,
+  reset: ["memberPage"],
+});
+const memberPage = useQueryValue(
+  "memberPage",
+  (value) => positiveInteger(value) ?? 1,
+);
 const filteredMembers = computed(
   () =>
     members.value?.filter((member) =>
@@ -130,9 +138,10 @@ async function save(): Promise<void> {
         :columns="memberColumns"
         :data="filteredMembers"
         :max-height="420"
-        :pagination="{ pageSize: 15 }"
+        :pagination="{ page: memberPage, pageSize: 15 }"
         :row-key="(row: Member) => row.id"
         @update:checked-row-keys="select"
+        @update:page="memberPage = $event"
       />
     </LoadState>
     <NSpace class="mt-20" justify="end">

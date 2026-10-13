@@ -8,6 +8,7 @@ import PasswordForm from "~/components/settings/PasswordForm.vue";
 import StorageForm from "~/components/settings/StorageForm.vue";
 import { useAction } from "~/composables/useAction";
 import { useApiData } from "~/composables/useApiData";
+import { useQueryValue } from "~/composables/useQueryValue";
 import { useWorkspace } from "~/composables/useWorkspace";
 import type { Settings } from "~/types/api";
 import { api } from "~/utils/api";
@@ -19,7 +20,14 @@ const napcatWebUrl = ref("");
 const admins = ref("");
 const { busy, run } = useAction();
 const workspace = useWorkspace();
-const tab = ref("connection");
+const tab = useQueryValue("tab", (value) =>
+  value &&
+  ["decision", "models", "persona", "runtime", "security", "storage"].includes(
+    value,
+  )
+    ? value
+    : "connection",
+);
 watch(data, (value) => {
   if (value) {
     draft.value = structuredClone(value.config);

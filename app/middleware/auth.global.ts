@@ -1,8 +1,11 @@
 import { defineNuxtRouteMiddleware, navigateTo } from "#imports";
 import { api } from "~/utils/api";
 
-export default defineNuxtRouteMiddleware(async (to) => {
-  if (to.path === "/login") {
+export default defineNuxtRouteMiddleware(async (to, from) => {
+  if (
+    to.path === "/login" ||
+    (to.path === from.path && from.matched.length > 0)
+  ) {
     return;
   }
 
@@ -11,10 +14,13 @@ export default defineNuxtRouteMiddleware(async (to) => {
       timeout: 5000,
     });
 
-    if (!session.authenticated) {
-      return navigateTo("/login");
+    if (session.authenticated) {
+      return;
     }
-  } catch {
-    return navigateTo("/login");
-  }
+  } catch {}
+
+  return navigateTo(
+    { path: "/login", query: { redirect: to.fullPath } },
+    { replace: true },
+  );
 });

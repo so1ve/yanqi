@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { ref } from "vue";
 
-import { definePageMeta, navigateTo } from "#imports";
+import { definePageMeta, navigateTo, useRoute } from "#imports";
 import { useAction } from "~/composables/useAction";
 import { useApiData } from "~/composables/useApiData";
 import { api } from "~/utils/api";
 
 definePageMeta({ layout: false });
+const route = useRoute();
 const { data, loading, error, refresh } = useApiData<{
   authenticated: boolean;
   setupRequired: boolean;
@@ -23,7 +24,17 @@ async function login(): Promise<void> {
       }),
     )
   ) {
-    await navigateTo(data.value?.setupRequired ? "/settings" : "/");
+    const redirect = route.query.redirect;
+    const destination =
+      typeof redirect === "string" &&
+      redirect.startsWith("/") &&
+      !redirect.startsWith("//") &&
+      !redirect.includes("\\")
+        ? redirect
+        : "/";
+    await navigateTo(data.value?.setupRequired ? "/settings" : destination, {
+      replace: true,
+    });
   }
 }
 </script>

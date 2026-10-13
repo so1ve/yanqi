@@ -1,17 +1,20 @@
 <script setup lang="ts">
 import { Download, PlayerPause, PlayerPlay, Refresh } from "@vicons/tabler";
-import { computed, ref } from "vue";
+import { computed } from "vue";
 
 import { useApiData } from "~/composables/useApiData";
 import { usePoll } from "~/composables/usePoll";
+import { useQueryValue } from "~/composables/useQueryValue";
 import type { LogEntry } from "~/types/api";
 import { downloadText } from "~/utils/download";
 import { formatTime } from "~/utils/format";
 
 const { data, loading, error, refresh } = useApiData<LogEntry[]>("logs");
-const query = ref("");
-const level = ref("");
-const paused = ref(false);
+const query = useQueryValue("q", (value) => value ?? "", { replace: true });
+const level = useQueryValue("level", (value) =>
+  value && ["debug", "error", "info", "warn"].includes(value) ? value : "",
+);
+const paused = useQueryValue("paused", (value) => (value === "1" ? "1" : ""));
 const filtered = computed(() =>
   (data.value ?? [])
     .filter(
@@ -70,7 +73,7 @@ function download(): void {
             { label: '调试 · Debug', value: 'debug' },
           ]"
         />
-        <NButton class="right" @click="paused = !paused">
+        <NButton class="right" @click="paused = paused ? '' : '1'">
           <template #icon>
             <NIcon :component="paused ? PlayerPlay : PlayerPause" />
           </template>

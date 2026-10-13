@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import type { DataTableColumns } from "naive-ui";
 import { NButton, useDialog } from "naive-ui";
-import { h, ref, watch } from "vue";
+import { h } from "vue";
 
 import StateTag from "~/components/StateTag.vue";
 import { useAction } from "~/composables/useAction";
 import { useApiData } from "~/composables/useApiData";
 import { usePoll } from "~/composables/usePoll";
+import { positiveInteger, useQueryValue } from "~/composables/useQueryValue";
 import { useWorkspace } from "~/composables/useWorkspace";
 import type { Delivery, Page } from "~/types/api";
 import { api } from "~/utils/api";
@@ -14,7 +15,7 @@ import { formatTime } from "~/utils/format";
 
 const props = defineProps<{ groupId: string }>();
 const { status } = useWorkspace();
-const page = ref(1);
+const page = useQueryValue("page", (value) => positiveInteger(value) ?? 1);
 const {
   data: deliveries,
   loading: deliveriesLoading,
@@ -26,12 +27,6 @@ const {
 const { busy, run } = useAction();
 const dialog = useDialog();
 
-watch(
-  () => props.groupId,
-  () => {
-    page.value = 1;
-  },
-);
 usePoll(refresh);
 defineExpose({ loading: deliveriesLoading, refresh });
 

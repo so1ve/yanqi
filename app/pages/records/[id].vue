@@ -18,6 +18,7 @@ import TranscriptView from "~/components/records/TranscriptView.vue";
 import { useAction } from "~/composables/useAction";
 import { useApiData } from "~/composables/useApiData";
 import { usePoll } from "~/composables/usePoll";
+import { positiveInteger, useQueryValue } from "~/composables/useQueryValue";
 import { useWorkspace } from "~/composables/useWorkspace";
 import type { RecordDetail } from "~/types/api";
 import { api } from "~/utils/api";
@@ -25,11 +26,8 @@ import { downloadText } from "~/utils/download";
 import { formatTime } from "~/utils/format";
 
 const route = useRoute();
-const { groupId, group, status } = useWorkspace();
-if (typeof route.query.group === "string" && /^\d+$/.test(route.query.group)) {
-  groupId.value = route.query.group;
-}
-const version = ref<number | null>(null);
+const { groupId, group, status, groupLink } = useWorkspace();
+const version = useQueryValue("version", positiveInteger);
 const base = computed(
   () =>
     `groups/${groupId.value}/records/${encodeURIComponent(String(route.params.id))}`,
@@ -39,7 +37,9 @@ const { data, loading, error, refresh } = useApiData<RecordDetail>(() =>
     ? `${base.value}${version.value ? `?version=${version.value}` : ""}`
     : "",
 );
-const tab = ref("note");
+const tab = useQueryValue("tab", (value) =>
+  value === "original" ? "original" : "note",
+);
 const editing = ref(false);
 const showRegenerate = ref(false);
 const { busy, run } = useAction();
@@ -63,8 +63,11 @@ const options = computed(
 );
 async function saved(): Promise<void> {
   editing.value = false;
-  version.value = null;
-  await refresh();
+  if (version.value === null) {
+    await refresh();
+  } else {
+    version.value = null;
+  }
 }
 
 function send(): void {
@@ -101,7 +104,7 @@ function remove(): void {
         "纪要已删除",
       );
       if (result) {
-        await navigateTo("/records");
+        await navigateTo(groupLink("/records"));
       }
 
       return result;
@@ -121,7 +124,7 @@ function download(): void {
 </script>
 
 <template>
-  <NuxtLink class="muted back-link" to="/records">
+  <NuxtLink class="muted back-link" :to="groupLink('/records')">
     <NIcon :component="ArrowLeft" />
     返回纪要列表
   </NuxtLink>
@@ -213,7 +216,7 @@ function download(): void {
       >
         <strong>任务 #{{ task.id }}</strong>
         · {{ task.lastError || task.progress || "等待整理" }}
-        <NuxtLink to="/tasks">查看任务</NuxtLink>
+        <NuxtLink :to="groupLink('/tasks')">查看任务</NuxtLink>
       </NAlert>
       <PageTabs v-model:value="tab">
         <NTabPane display-directive="show:lazy" name="note" tab="纪要正文">
@@ -235,7 +238,9 @@ function download(): void {
               description="完成后会自动显示，进度和错误可在“后台任务”中查看。"
               title="尚未生成第一版纪要"
             >
-              <NuxtLink to="/tasks"><NButton>查看任务</NButton></NuxtLink>
+              <NuxtLink :to="groupLink('/tasks')">
+                <NButton>查看任务</NButton>
+              </NuxtLink>
             </EmptyState>
           </AppPanel>
         </NTabPane>
