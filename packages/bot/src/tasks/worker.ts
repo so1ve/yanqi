@@ -1,7 +1,7 @@
 import { Logger } from "@koishijs/core";
 
 import type { Ai } from "../agent/ai.ts";
-import { observeRecordingRequests } from "../agent/observe.ts";
+import { observeRequests } from "../agent/observe.ts";
 import { handleRequest } from "../agent/requests.ts";
 import { AiSizeError, BudgetExceeded } from "../agent/usage.ts";
 import { collectAsset } from "../assets.ts";
@@ -152,7 +152,7 @@ export class BackgroundTasks {
         }
 
         case "observe": {
-          await observeRecordingRequests(
+          await observeRequests(
             job,
             this.#config,
             this.#store,

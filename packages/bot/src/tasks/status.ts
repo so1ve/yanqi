@@ -20,7 +20,7 @@ export async function taskStatus(store: Store, groupId: string, id: number) {
         : job.kind === "detect"
           ? "识别讨论话题"
           : job.kind === "observe"
-            ? "识别记录请求"
+            ? "识别请求"
             : "处理对话请求",
     state: job.state,
     attempts: job.attempts,

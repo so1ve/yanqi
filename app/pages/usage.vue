@@ -29,8 +29,8 @@ const totals = computed(() =>
   ),
 );
 const purposes: Record<string, string> = {
-  "decision:observe": "识别记录请求",
-  "observe": "识别记录请求",
+  "decision:observe": "识别请求",
+  "observe": "识别请求",
   "intent": "处理请求",
   "detect": "识别讨论",
   "summary": "整理纪要",

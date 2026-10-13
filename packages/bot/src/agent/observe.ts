@@ -5,7 +5,7 @@ import type { Store } from "../storage/store.ts";
 import type { Job, Message } from "../types.ts";
 import type { Ai } from "./ai.ts";
 
-export async function observeRecordingRequests(
+export async function observeRequests(
   job: Job<"observe">,
   config: Config,
   store: Store,
@@ -39,7 +39,7 @@ export async function observeRecordingRequests(
   );
 
   for (const chunk of chunks) {
-    const requestIds = await ai.decisions.recordingRequests(chunk, context);
+    const requestIds = await ai.decisions.selectRequests(chunk, context);
 
     const requests = await store.messages.scheduleRequests(
       groupId,

@@ -166,7 +166,7 @@ const states = [
     </NButton>
   </ListToolbar>
   <LoadState
-    description="记录请求、附件解析和纪要整理会显示在这里。"
+    description="对话请求、附件解析和纪要整理会显示在这里。"
     :empty="!tasks?.items.length"
     :error="tasksError"
     :loading="tasksLoading && !tasks"

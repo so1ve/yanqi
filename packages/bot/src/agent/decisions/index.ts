@@ -11,7 +11,7 @@ import type { AgentRuntime } from "../runtime.ts";
 import { reserveCall } from "../usage.ts";
 import { createClefDecision } from "./clef.ts";
 import { createJevDecision } from "./jev.ts";
-import { recordingRequests } from "./llm.ts";
+import { selectRequests } from "./llm.ts";
 import { createOpenAIDecision } from "./openai.ts";
 import type { EvaluateDecision } from "./types.ts";
 
@@ -62,7 +62,7 @@ export class Decisions {
     this.#signal = signal;
   }
 
-  public async recordingRequests(
+  public async selectRequests(
     messages: ChatMessage[],
     context: ChatMessage[],
   ): Promise<string[]> {
@@ -85,18 +85,19 @@ export class Decisions {
     candidates: string[],
   ): Promise<string[]> {
     if (!this.#evaluate) {
-      return recordingRequests(this.#runtime, state, candidates);
+      return selectRequests(this.#runtime, state, candidates);
     }
 
     const questions = Object.fromEntries(
       candidates.map((id) => [
         id,
         {
-          instructions: `${conversationPrompts.recordingRequests}\n本题只判断 messages 中 ID 为 ${id} 的消息。`,
+          instructions: `${conversationPrompts.requests}\n本题只判断 messages 中 ID 为 ${id} 的消息。`,
           criteria: {
-            process: "当前发言确实在要求小栖执行一项记录事务",
+            process:
+              "当前发言在直接叫小栖、向它提问、要求它回应、回答它的追问，或要求它执行记录事务",
             ignore:
-              "没有要求小栖执行；包括讨论记录功能、介绍权限、转述指令和闲聊",
+              "当前发言不需要小栖回应或执行；群友之间聊天，或只是在讨论它、介绍权限、转述指令",
           },
         },
       ]),
@@ -109,7 +110,7 @@ export class Decisions {
 
     if (size > this.#config.AI_INPUT_CHARS) {
       throw new Error(
-        `记录请求识别的输入过长：${size} 字符，超过 AI_INPUT_CHARS=${this.#config.AI_INPUT_CHARS}`,
+        `请求识别的输入过长：${size} 字符，超过 AI_INPUT_CHARS=${this.#config.AI_INPUT_CHARS}`,
       );
     }
 

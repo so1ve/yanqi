@@ -22,7 +22,7 @@ export function replyTool(context: ToolContext, messenger: Messenger) {
   return tool(
     context,
     "reply",
-    "当前消息需要你答复时，向 QQ 群发送一次回复并结束对话。群友之间的讨论和陈述不调用本工具，可直接静默结束。先完成必要的查询和操作，按问题所需详略回答，不发内部分析或无关状态。发纪要用 edit_record(action=send)。",
+    "向 QQ 群发送一次回复并结束对话。用户直接叫你、提问或要求回应时使用，不需要先有记录任务。群友之间的讨论和陈述可静默结束。先完成必要的查询和操作，按问题所需详略回答，不发内部分析或无关状态。发纪要用 edit_record(action=send)。",
     parameters,
     async ({ text, waitForReply }, signal) => {
       const key = `command:${message.id}`;

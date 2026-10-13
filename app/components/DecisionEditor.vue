@@ -21,11 +21,11 @@ function choose(provider: Config["DECISION_PROVIDER"]): void {
 <template>
   <section class="settings-section">
     <div class="section-title">
-      <h2>记录请求识别</h2>
+      <h2>请求识别</h2>
       <p>
-        识别未 @
-        小栖、但要求它执行记录事务的消息，交给主模型处理。仅讨论记录功能不会触发。@
-        小栖会直接交给主模型判断要做什么。两种方式都需要交互权限。
+        未 @ 时，直接叫小栖、向它提问、要求回复或记录，都会交给主模型处理。
+        群友之间聊天或只是谈到它时保持安静。@ 小栖会直接交给主模型判断要做什么。
+        两种方式都需要交互权限。
       </p>
     </div>
     <div aria-label="决策提供商" class="provider-grid" role="group">
@@ -85,7 +85,7 @@ function choose(provider: Config["DECISION_PROVIDER"]): void {
     </div>
     <NSpace align="center">
       <NSwitch v-model:value="model.AUTO_REPLY" />
-      <span>识别未 @ 的记录请求</span>
+      <span>识别未 @ 的请求</span>
     </NSpace>
   </section>
 </template>
