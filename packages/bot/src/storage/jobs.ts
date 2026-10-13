@@ -54,6 +54,31 @@ export class JobQueue {
     this.#db = db;
   }
 
+  public async recover(): Promise<void> {
+    await this.cancelRequests("服务重启，跳过旧对话");
+    await this.#db.set("jobs", { state: "running" }, { state: "pending" });
+  }
+
+  public cancelRequests(reason: string): Promise<void> {
+    return this.#db.transact(async (db) => {
+      await db.set(
+        "jobs",
+        {
+          $and: [
+            { $or: [{ kind: "intent" }, { kind: "observe" }] },
+            { $or: [{ state: "pending" }, { state: "running" }] },
+          ],
+        },
+        { state: "failed", lastError: reason },
+      );
+      await db.set(
+        "messages",
+        { awaitingReply: true },
+        { awaitingReply: false },
+      );
+    });
+  }
+
   public enqueue<K extends JobKind>(
     kind: K,
     key: string,

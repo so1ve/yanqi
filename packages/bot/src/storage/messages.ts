@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 
+import type { Config } from "../config.ts";
 import type { IncomingMessage, JobPayloads, Message } from "../types.ts";
 import { enqueueJob } from "./jobs.ts";
 import type { Database } from "./schema.ts";
@@ -7,24 +8,21 @@ import { linkMessages, messageChanged } from "./topic-sources.ts";
 
 export class Messages {
   #db: Database;
-  #adminIds: string[];
-  #groupAdmins: Record<string, string[]>;
+  #config: Pick<Config, "ADMIN_IDS" | "GROUP_ADMINS">;
 
   constructor(
     db: Database,
-    adminIds: string[],
-    groupAdmins: Record<string, string[]> = {},
+    config: Pick<Config, "ADMIN_IDS" | "GROUP_ADMINS">,
   ) {
     this.#db = db;
-    this.#adminIds = adminIds;
-    this.#groupAdmins = groupAdmins;
+    this.#config = config;
   }
 
   #canInteract(message: IncomingMessage | Message): boolean {
     return (
       !message.isBot &&
-      (this.#adminIds.includes(message.userId) ||
-        (this.#groupAdmins[message.groupId]?.includes(message.userId) ??
+      (this.#config.ADMIN_IDS.includes(message.userId) ||
+        (this.#config.GROUP_ADMINS[message.groupId]?.includes(message.userId) ??
           false) ||
         message.role === "owner" ||
         message.role === "admin")

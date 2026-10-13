@@ -17,7 +17,6 @@ import { Store } from "./storage/store.ts";
 export class Yanqi {
   #app: App;
   #config: Config;
-  #directory: string;
   #secretary: Secretary | null = null;
   #enabled: boolean;
   #connection: ForkScope | null = null;
@@ -25,7 +24,7 @@ export class Yanqi {
   #poll: (() => void) | null = null;
   #events = new Set<Promise<void>>();
   #operation: Promise<void> = Promise.resolve();
-  #store: Store;
+  public readonly store: Store;
   #logger = new Logger("yanqi");
 
   private constructor(
@@ -35,16 +34,16 @@ export class Yanqi {
     autostart: boolean,
   ) {
     this.#app = app;
-    this.#config = config;
-    this.#directory = directory;
+    this.#config = structuredClone(config);
     this.#enabled = autostart;
-    this.#store = this.#createStore();
+    this.store = new Store(app.database, directory, this.#config);
 
     const groups = app
       .platform("onebot")
       .intersect(
         (session) =>
           session.selfId === this.#config.BOT_QQ &&
+          session.guildId !== undefined &&
           this.#config.GROUP_IDS.includes(session.guildId),
       );
 
@@ -52,7 +51,7 @@ export class Yanqi {
       groups.on("message", (session: Session) =>
         this.#track(async () => {
           const secretary = this.#secretary;
-          const message = await saveMessage(session, this.#store, this.#config);
+          const message = await saveMessage(session, this.store, this.#config);
 
           // 只处理接收时正在运行的对话，暂停或更换配置后不重放旧请求。
           if (message && secretary && secretary === this.#secretary) {
@@ -61,7 +60,7 @@ export class Yanqi {
         }),
       ),
       groups.on("message-deleted", (session: Session) =>
-        this.#track(() => recallMessage(session, this.#store)),
+        this.#track(() => recallMessage(session, this.store)),
       ),
     ];
   }
@@ -87,22 +86,18 @@ export class Yanqi {
 
     const bot = new Yanqi(app, config, directory, autostart);
 
-    await bot.store.initialize();
+    await bot.store.jobs.recover();
     await bot.configure(config);
 
     return bot;
-  }
-
-  public get store(): Store {
-    return this.#store;
   }
 
   public get database() {
     return this.#app.database;
   }
 
-  public get config(): Config {
-    return structuredClone(this.#config);
+  public get config(): Readonly<Config> {
+    return this.#config;
   }
 
   public get running(): boolean {
@@ -132,28 +127,15 @@ export class Yanqi {
   public configure(config: Config): Promise<void> {
     return this.#change(async () => {
       await this.#stop();
-      const reconnect =
-        !this.#connection ||
-        config.BOT_QQ !== this.#config.BOT_QQ ||
-        config.ONEBOT_URL !== this.#config.ONEBOT_URL ||
-        config.ONEBOT_TOKEN !== this.#config.ONEBOT_TOKEN;
-
-      if (reconnect) {
-        this.#connection?.dispose();
-        this.#connection = null;
-        await this.#app.lifecycle.flush();
-      }
-
       await this.database.upsert(
         "groups",
         config.GROUP_IDS.map((id) => ({ id })),
       );
-      this.#config = structuredClone(config);
-      this.#store = this.#createStore();
+      Object.assign(this.#config, structuredClone(config));
       this.#logger.level =
         config.LOG_LEVEL === "debug" ? Logger.DEBUG : Logger.INFO;
-      if (reconnect && config.BOT_QQ && config.ONEBOT_TOKEN) {
-        this.#connection = this.#app.plugin(OneBotBot, {
+      if (config.BOT_QQ && config.ONEBOT_TOKEN) {
+        const connection: OneBotBot.Config = {
           ...Adapter.WsClientConfig(),
           protocol: "ws",
           endpoint: config.ONEBOT_URL,
@@ -161,10 +143,19 @@ export class Yanqi {
           token: config.ONEBOT_TOKEN,
           // 保留图文之间的原始空白，避免适配器自动插入空格。
           advanced: { splitMixedContent: false },
-        });
-        await this.#app.lifecycle.flush();
+        };
+
+        if (this.#connection) {
+          this.#connection.update(connection);
+        } else {
+          this.#connection = this.#app.plugin(OneBotBot, connection);
+        }
+      } else {
+        this.#connection?.dispose();
+        this.#connection = null;
       }
 
+      await this.#app.lifecycle.flush();
       if (this.#enabled) {
         const error = configurationError(config);
 
@@ -178,7 +169,7 @@ export class Yanqi {
   }
 
   public start(): Promise<void> {
-    return this.#change(async () => {
+    return this.#change(() => {
       const error = configurationError(this.#config);
 
       if (error) {
@@ -218,21 +209,12 @@ export class Yanqi {
     });
   }
 
-  #change(action: () => Promise<void>): Promise<void> {
+  #change(action: () => void | Promise<void>): Promise<void> {
     const operation = this.#operation.then(action);
 
     this.#operation = operation.catch(() => {});
 
     return operation;
-  }
-
-  #createStore(): Store {
-    return new Store(
-      this.#app.database,
-      this.#directory,
-      this.#config.ADMIN_IDS,
-      this.#config.GROUP_ADMINS,
-    );
   }
 
   #track(action: () => Promise<void>): Promise<void> {
@@ -250,7 +232,7 @@ export class Yanqi {
       return;
     }
 
-    const secretary = new Secretary(this.#app, this.#config, this.#store);
+    const secretary = new Secretary(this.#app, this.#config, this.store);
 
     this.#secretary = secretary;
     this.#poll = this.#app.setInterval(() => {
@@ -279,16 +261,7 @@ export class Yanqi {
     this.#poll?.();
     this.#poll = null;
     await Promise.all([secretary.stop(), ...this.#events]);
-    await this.database.set(
-      "jobs",
-      { state: "pending", $or: [{ kind: "intent" }, { kind: "observe" }] },
-      { state: "failed", lastError: "机器人已暂停，跳过旧对话" },
-    );
-    await this.database.set(
-      "messages",
-      { awaitingReply: true },
-      { awaitingReply: false },
-    );
+    await this.store.jobs.cancelRequests("机器人已暂停，跳过旧对话");
     this.#logger.info("言栖已暂停 AI 处理，继续保存群消息");
   }
 }
