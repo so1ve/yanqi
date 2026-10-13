@@ -22,7 +22,7 @@ export class Ai {
 
     this.decisions = new Decisions(config, store, runtime, signal);
     this.dialog = new DialogAI(config, runtime, style);
-    this.recording = new RecordingAI(runtime, style);
+    this.recording = new RecordingAI(runtime, style, store);
     this.media = new MediaAI(config, store, runtime, signal);
   }
 }

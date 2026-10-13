@@ -1,20 +1,30 @@
 import { Type } from "typebox";
 
+import {
+  memoryContent,
+  memoryKey,
+  memoryScope,
+} from "../../storage/memories.ts";
 import type { ToolContext } from "./context.ts";
 import { object, tool } from "./context.ts";
 
-const key = Type.String({ minLength: 1, maxLength: 60, pattern: "\\S" });
 const parameters = Type.Union([
   object({
     action: Type.Literal("recall"),
+    scope: memoryScope,
     query: Type.Optional(Type.String({ maxLength: 100 })),
   }),
   object({
     action: Type.Literal("remember"),
-    key,
-    content: Type.String({ minLength: 1, maxLength: 500, pattern: "\\S" }),
+    scope: memoryScope,
+    key: memoryKey,
+    content: memoryContent,
   }),
-  object({ action: Type.Literal("forget"), key }),
+  object({
+    action: Type.Literal("forget"),
+    scope: memoryScope,
+    key: memoryKey,
+  }),
 ]);
 
 export function memoryTool(context: ToolContext) {
@@ -23,33 +33,46 @@ export function memoryTool(context: ToolContext) {
   return tool(
     context,
     "memory",
-    "查询、保存或删除请求者在本群的长期记忆。recall 最多返回 6 项；remember 用相同 key 更新，每人最多 40 项；forget 不删除原始聊天和纪要。",
+    "查询、保存或删除记忆。scope=group 是当前群的共享约定和背景，scope=user 是当前请求者跨群使用的个人偏好。对话中主动保存长期有用的偏好与更正，不必等用户说记住。remember 用原 key 更新；forget 不删除聊天和纪要。每个范围最多 40 项。",
     parameters,
     async (args) => {
+      const owner = {
+        scope: args.scope,
+        ownerId: args.scope === "group" ? message.groupId : message.userId,
+      };
+
       switch (args.action) {
         case "recall": {
           const query = (args.query ?? "").trim();
-          const matches = (
-            await store.memories.list(message.groupId, message.userId)
-          ).filter(
+          const matches = (await store.memories.list(owner)).filter(
             (item) => item.key.includes(query) || item.content.includes(query),
           );
 
-          return { memories: matches.slice(0, 6), matches: matches.length };
+          return { scope: args.scope, memories: matches };
         }
 
         case "remember": {
           await store.memories.remember(
-            message,
+            owner,
             args.key.trim(),
             args.content.trim(),
+            message.id,
           );
 
-          return "记忆已保存。";
+          return {
+            saved: true,
+            scope: args.scope,
+            key: args.key,
+            content: args.content,
+          };
         }
 
         case "forget": {
-          const removed = await store.memories.forget(message, args.key.trim());
+          const removed = await store.memories.forget(
+            owner,
+            args.key.trim(),
+            message.id,
+          );
 
           return removed
             ? "这项记忆已删除，原始聊天和纪要仍保留。"

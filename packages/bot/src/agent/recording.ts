@@ -1,7 +1,9 @@
 import { Type } from "typebox";
 
+import type { Store } from "../storage/store.ts";
 import type { ChatMessage, Topic } from "../types.ts";
 import { beijingTime } from "../utils/time.ts";
+import { summaryMemory } from "./prompts/memory.ts";
 import { prompts } from "./prompts/recording.ts";
 import { summaryPrompts } from "./prompts/summary.ts";
 import type { AgentRuntime } from "./runtime.ts";
@@ -11,10 +13,12 @@ import { detectionSchema, publicationSchema } from "./schemas.ts";
 export class RecordingAI {
   #runtime: AgentRuntime;
   #persona: string;
+  #store: Store;
 
-  constructor(runtime: AgentRuntime, persona: string) {
+  constructor(runtime: AgentRuntime, persona: string, store: Store) {
     this.#runtime = runtime;
     this.#persona = persona;
+    this.#store = store;
   }
 
   public detect(
@@ -30,18 +34,16 @@ export class RecordingAI {
   }
 
   public async summarize(
-    {
-      title,
-      description,
-      focus,
-    }: Pick<Topic, "title" | "description" | "focus">,
+    topic: Topic,
     messages: ChatMessage[],
     context: ChatMessage[],
   ): Promise<string> {
+    const { title, description, focus } = topic;
     const input = {
       topic: { title, description },
       messages,
       context,
+      memory: await this.#store.memories.context(topic.groupId, topic.ownerId),
     };
 
     if (focus) {
@@ -51,7 +53,7 @@ export class RecordingAI {
           { markdown: Type.String() },
           { additionalProperties: false },
         ),
-        `${summaryPrompts.summarize}\n\n${summaryPrompts.focusedSummary}`,
+        `${summaryPrompts.summarize}\n\n${summaryPrompts.focusedSummary}\n${summaryMemory}`,
         { ...input, focus },
         { thinking: true },
       );
@@ -61,22 +63,28 @@ export class RecordingAI {
 
     return this.#runtime.text(
       "summary",
-      `${summaryPrompts.summarize}\n直接返回纪要正文，不返回 JSON。`,
+      `${summaryPrompts.summarize}\n${summaryMemory}\n直接返回纪要正文，不返回 JSON。`,
       input,
       { thinking: true },
     );
   }
 
-  public merge(sections: string[]): Promise<string> {
+  public async merge(topic: Topic, sections: string[]): Promise<string> {
     return this.#runtime.text(
       "summary_merge",
-      summaryPrompts.merge,
-      { sections },
+      `${summaryPrompts.merge}\n${summaryMemory}`,
+      {
+        sections,
+        memory: await this.#store.memories.context(
+          topic.groupId,
+          topic.ownerId,
+        ),
+      },
       { thinking: true },
     );
   }
 
-  public choosePublication(
+  public async choosePublication(
     topic: Topic,
     recording: { revision: number; sources: number; requested: boolean },
     context: ChatMessage[],
@@ -99,6 +107,10 @@ export class RecordingAI {
       context,
       request,
       recent,
+      memory: await this.#store.memories.context(
+        topic.groupId,
+        request[0]?.userId ?? topic.ownerId,
+      ),
       now: beijingTime(Date.now()),
     };
 

@@ -17,7 +17,7 @@ export function replyTool(context: ToolContext, subagents: Subagents) {
   return tool(
     context,
     "reply",
-    "结束本次对话。text 为文字时向 QQ 群回复一次，为 null 时不发消息。用户直接叫你、提问或要求回应时应答复；群友之间的讨论或其他工具已经交付结果时可用 null。先完成必要的查询和操作，按问题所需详略回答，不发内部分析或无关状态。发纪要用 edit_record(action=send)，随后用 null 结束。",
+    "结束本次对话。text 为文字时向 QQ 群回复一次，为 null 时不发消息。按当前请求和记忆决定是否回应；群友之间的讨论、安静保存记忆、约定减少接话或其他工具已经交付结果时可用 null。先完成必要的查询、记忆更新和操作，按问题所需详略回答，不发内部分析或无关状态。发纪要用 edit_record(action=send)，随后用 null 结束。",
     parameters,
     async ({ text }, signal) => {
       subagents.assertIdle();

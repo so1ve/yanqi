@@ -3,6 +3,12 @@ export type { Config, ModelConfig } from "./config.ts";
 export { configSchema, configurationError, parseConfig } from "./config.ts";
 export { topicDirectory, writeMarkdown } from "./storage/files.ts";
 export { decodeJob, enqueueJob } from "./storage/jobs.ts";
+export {
+  memoryContent,
+  memoryKey,
+  memoryOwner,
+  memoryScope,
+} from "./storage/memories.ts";
 export { decodeMessage } from "./storage/messages.ts";
 export { decodeNote } from "./storage/notes.ts";
 export type {

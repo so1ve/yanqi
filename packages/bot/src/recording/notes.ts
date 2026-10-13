@@ -141,7 +141,7 @@ export class Notes {
         job.id,
         `正在合并相关观点。${excerpt ? `已整理内容摘录：${excerpt}。` : ""}草稿：${path}`,
       );
-      content = await this.#summary.compose(sections);
+      content = await this.#summary.compose(topic, sections);
       const markdown = `${header}\n\n${content || "所选原文中没有找到与整理要求相关的内容。"}\n\n${footer}`;
 
       await writeMarkdown(path, markdown);

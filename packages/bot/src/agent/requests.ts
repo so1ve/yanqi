@@ -42,7 +42,7 @@ export async function handleRequest(
     message.id,
     Math.min(3000, Math.floor(config.AI_INPUT_CHARS / 4)),
   );
-  const memories = await store.memories.list(message.groupId, message.userId);
+  const memory = await store.memories.context(message.groupId, message.userId);
   const tools = {
     store,
     message,
@@ -93,7 +93,7 @@ export async function handleRequest(
           revision,
         }),
       ),
-      memory: { recent: memories.slice(0, 6), count: memories.length },
+      memory,
       now: beijingTime(message.sentAt),
       timeZone: "Asia/Shanghai",
       today: beijingDate(message.sentAt),

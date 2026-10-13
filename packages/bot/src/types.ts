@@ -108,11 +108,23 @@ export interface ChatMessage {
   }[];
 }
 
-export interface Memory {
+export type MemoryScope = "group" | "user";
+
+export interface MemoryOwner {
+  scope: MemoryScope;
+  ownerId: string;
+}
+
+export interface Memory extends MemoryOwner {
   key: string;
   content: string;
-  sourceId: string | null;
+  sourceMessageId: number | null;
   updatedAt: number;
+}
+
+export interface MemoryContext {
+  group: Pick<Memory, "key" | "content">[];
+  user: Pick<Memory, "key" | "content">[];
 }
 
 export interface Delivery {

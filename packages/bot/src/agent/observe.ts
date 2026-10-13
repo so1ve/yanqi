@@ -39,7 +39,11 @@ export async function observeRequests(
   );
 
   for (const chunk of chunks) {
-    const requestIds = await ai.decisions.selectRequests(chunk, context);
+    const requestIds = await ai.decisions.selectRequests(
+      groupId,
+      chunk,
+      context,
+    );
 
     const requests = await store.messages.scheduleRequests(
       groupId,

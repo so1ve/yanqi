@@ -67,12 +67,8 @@ export async function publishNote(
     topic = await store.topics.get(note.topicId);
     if (topic.directive === "send") {
       action = "send";
-    } else if (topic.directive === "hold") {
-      if (requested) {
-        action = "notify";
-      } else if (action === "send") {
-        action = "silent";
-      }
+    } else if (topic.directive === "hold" && action === "send") {
+      action = "silent";
     }
   }
 

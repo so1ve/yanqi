@@ -4,6 +4,7 @@ import type {
   Asset,
   Delivery,
   JobKind,
+  Memory,
   Message,
   Note,
   Topic,
@@ -84,14 +85,7 @@ export interface Tables {
     cacheWrite: number | null;
     durationMs: number | null;
   };
-  memories: {
-    groupId: string;
-    userId: string;
-    key: string;
-    content: string;
-    sourceMessageId: number | null;
-    updatedAt: number;
-  };
+  memories: Memory;
 }
 
 export type Database = Kysely<Tables>;
@@ -278,21 +272,30 @@ export async function createTables(db: Database): Promise<void> {
     .addColumn("durationMs", "integer")
     .execute();
 
-  await db.schema
-    .createTable("memories")
-    .ifNotExists()
-    .addColumn("groupId", "text", (column) =>
-      column.notNull().references("groups.id"),
-    )
-    .addColumn("userId", "text", (column) => column.notNull())
-    .addColumn("key", "text", (column) => column.notNull())
-    .addColumn("content", "text", (column) => column.notNull())
-    .addColumn("sourceMessageId", "integer", (column) =>
-      column.references("messages.id"),
-    )
-    .addColumn("updatedAt", "integer", (column) => column.notNull())
-    .addPrimaryKeyConstraint("memories_primary", ["groupId", "userId", "key"])
-    .execute();
+  await db.transaction().execute(async (db) => {
+    const table = (await db.introspection.getTables()).find(
+      ({ name }) => name === "memories",
+    );
+
+    // 旧记忆绑定群和成员，切换范围模型时清空；重建失败则回滚到旧表。
+    if (table?.columns.some(({ name }) => name === "groupId")) {
+      await db.schema.dropTable("memories").execute();
+    }
+
+    await db.schema
+      .createTable("memories")
+      .ifNotExists()
+      .addColumn("scope", "text", (column) => column.notNull())
+      .addColumn("ownerId", "text", (column) => column.notNull())
+      .addColumn("key", "text", (column) => column.notNull())
+      .addColumn("content", "text", (column) => column.notNull())
+      .addColumn("sourceMessageId", "integer", (column) =>
+        column.references("messages.id"),
+      )
+      .addColumn("updatedAt", "integer", (column) => column.notNull())
+      .addPrimaryKeyConstraint("memories_primary", ["scope", "ownerId", "key"])
+      .execute();
+  });
 
   await db.schema
     .createIndex("index:messages:groupId+id")

@@ -23,9 +23,10 @@ function choose(provider: Config["DECISION_PROVIDER"]): void {
     <div class="section-title">
       <h2>请求识别</h2>
       <p>
-        未 @ 时，直接叫小栖、向它提问、要求回复或记录，都会交给主模型处理。
-        群友之间聊天或只是谈到它时保持安静。@ 小栖会直接交给主模型判断要做什么。
-        两种方式都需要交互权限。
+        未 @
+        时，结合本群约定和发言人的个人偏好，判断是否需要回应、办事或更新记忆。
+        例如记住“这个群少说话”后，会减少接话，仍会处理具体请求和偏好更正。 @
+        小栖直接交给主模型判断，也可以选择不发言。两种方式都需要交互权限。
       </p>
     </div>
     <div aria-label="决策提供商" class="provider-grid" role="group">

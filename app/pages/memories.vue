@@ -2,7 +2,7 @@
 import { Plus, Search } from "@vicons/tabler";
 import type { DataTableColumns } from "naive-ui";
 import { NButton, useDialog } from "naive-ui";
-import { h, ref, watch } from "vue";
+import { computed, h, ref, watch } from "vue";
 
 import MemoryDialog from "~/components/memories/MemoryDialog.vue";
 import { useAction } from "~/composables/useAction";
@@ -13,23 +13,32 @@ import { api } from "~/utils/api";
 import { formatTime } from "~/utils/format";
 
 const { groupId, group } = useWorkspace();
+const scope = ref<Memory["scope"]>("group");
 const page = ref(1);
 const query = ref("");
 const searchQuery = ref("");
-watch([groupId, searchQuery], () => {
+watch([groupId, scope, searchQuery], () => {
   page.value = 1;
 });
-const { data, loading, error, refresh } = useApiData<Page<Memory>>(() =>
-  groupId.value
-    ? `groups/${groupId.value}/memories?page=${page.value}&q=${encodeURIComponent(searchQuery.value)}`
-    : "",
-);
-const editor = ref<{ groupId: string; memory?: Memory } | null>(null);
+const { data, loading, error, refresh } = useApiData<Page<Memory>>(() => {
+  if (scope.value === "group" && !groupId.value) {
+    return "";
+  }
+
+  const owner = scope.value === "group" ? `&ownerId=${groupId.value}` : "";
+
+  return `memories?scope=${scope.value}${owner}&page=${page.value}&q=${encodeURIComponent(searchQuery.value)}`;
+});
+const editor = ref<{
+  groupId: string;
+  scope: Memory["scope"];
+  memory?: Memory;
+} | null>(null);
 const { run } = useAction();
 const dialog = useDialog();
 
 function edit(memory?: Memory): void {
-  editor.value = { groupId: memory?.groupId ?? groupId.value, memory };
+  editor.value = { groupId: groupId.value, scope: scope.value, memory };
 }
 
 function remove(row: Memory): void {
@@ -40,16 +49,21 @@ function remove(row: Memory): void {
     negativeText: "取消",
     onPositiveClick: () =>
       run(async () => {
-        await api(`groups/${row.groupId}/memories`, {
+        await api("memories", {
           method: "DELETE",
-          body: { userId: row.userId, key: row.key },
+          body: { scope: row.scope, ownerId: row.ownerId, key: row.key },
         });
         await refresh();
       }, "已删除"),
   });
 }
-const columns: DataTableColumns<Memory> = [
-  { title: "成员", key: "userId", width: 135 },
+const columns = computed<DataTableColumns<Memory>>(() => [
+  {
+    title: scope.value === "group" ? "适用范围" : "成员 QQ 号",
+    key: "ownerId",
+    width: 135,
+    render: (row) => (row.scope === "group" ? "本群共享" : row.ownerId),
+  },
   {
     title: "记忆",
     key: "key",
@@ -106,25 +120,39 @@ const columns: DataTableColumns<Memory> = [
         ),
       ]),
   },
-];
+]);
 </script>
 
 <template>
   <PageHeading
-    :description="`${group?.name ?? '请先选择一个群'} · 查看和编辑成员的偏好与约定`"
+    :description="
+      scope === 'group'
+        ? `${group?.name ?? '请先选择一个群'} · 本群共同的约定与长期信息`
+        : '按 QQ 账号跨群使用的个人偏好，只影响与本人的交互'
+    "
     title="记忆"
   >
-    <NButton :disabled="!groupId" type="primary" @click="edit()">
+    <NButton
+      :disabled="scope === 'group' && !groupId"
+      type="primary"
+      @click="edit()"
+    >
       <template #icon><NIcon :component="Plus" /></template>
       添加记忆
     </NButton>
     <template #toolbar>
       <ListToolbar as="form" @submit.prevent="searchQuery = query">
+        <NRadioGroup v-model:value="scope" aria-label="记忆范围">
+          <NRadioButton value="group">群共享</NRadioButton>
+          <NRadioButton value="user">个人偏好</NRadioButton>
+        </NRadioGroup>
         <NInput
           v-model:value="query"
           class="search"
           clearable
-          placeholder="搜索内容、名称或 QQ 号"
+          :placeholder="
+            scope === 'group' ? '搜索内容或名称' : '搜索内容、名称或 QQ 号'
+          "
         >
           <template #prefix><NIcon :component="Search" /></template>
         </NInput>
@@ -133,12 +161,16 @@ const columns: DataTableColumns<Memory> = [
     </template>
   </PageHeading>
   <LoadState
-    description="可以让小栖记住你的偏好，也可以在这里添加。"
+    :description="
+      scope === 'group'
+        ? '向小栖说明本群的约定，它会在之后的判断和回复中使用。'
+        : '在对话中告诉小栖你的偏好，也可以在这里添加。'
+    "
     :empty="!data?.items.length"
     :error
     :loading="loading && !data"
     :title="
-      !groupId
+      scope === 'group' && !groupId
         ? '请先选择一个群'
         : searchQuery
           ? '没有找到匹配的记忆'
@@ -162,6 +194,7 @@ const columns: DataTableColumns<Memory> = [
     v-if="editor"
     :group-id="editor.groupId"
     :memory="editor.memory"
+    :scope="editor.scope"
     @close="editor = null"
     @saved="refresh"
   />

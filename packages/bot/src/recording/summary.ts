@@ -158,13 +158,13 @@ export class Summarizer {
     }
   }
 
-  async #merge(sections: string[]): Promise<string> {
+  async #merge(topic: Topic, sections: string[]): Promise<string> {
     if (sections.length === 1) {
       return sections[0]!;
     }
 
     try {
-      return await this.#ai.recording.merge(sections);
+      return await this.#ai.recording.merge(topic, sections);
     } catch (error) {
       if (!(error instanceof AiSizeError)) {
         throw error;
@@ -175,14 +175,17 @@ export class Summarizer {
         sections.length,
       );
       const middle = Math.ceil(sections.length / 2);
-      const first = await this.#merge(sections.slice(0, middle));
-      const second = await this.#merge(sections.slice(middle));
+      const first = await this.#merge(topic, sections.slice(0, middle));
+      const second = await this.#merge(topic, sections.slice(middle));
 
       return `${first}\n\n${second}`;
     }
   }
 
-  public async compose(sections: Note["sections"]): Promise<string> {
+  public async compose(
+    topic: Topic,
+    sections: Note["sections"],
+  ): Promise<string> {
     const paragraphs = sections
       .map((section) => section.content)
       .filter(Boolean);
@@ -195,7 +198,7 @@ export class Summarizer {
         return;
       }
 
-      chapters.push(await this.#merge(batch));
+      chapters.push(await this.#merge(topic, batch));
       batch = [];
     };
 

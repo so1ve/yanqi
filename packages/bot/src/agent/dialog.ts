@@ -1,5 +1,6 @@
 import type { Config } from "../config.ts";
 import { prompts } from "./prompts/conversation.ts";
+import { memoryInstructions } from "./prompts/memory.ts";
 import type { AgentRuntime } from "./runtime.ts";
 import { Subagents } from "./subagents.ts";
 import type { ToolContext } from "./tools/context.ts";
@@ -29,7 +30,7 @@ export class DialogAI {
     try {
       await this.#runtime.text(
         "intent",
-        `${prompts.intent}\n${prompts.memory}\n${this.#persona}`,
+        `${prompts.intent}\n${memoryInstructions}\n${this.#persona}`,
         state,
         {
           model: this.#config.AI_MODEL,

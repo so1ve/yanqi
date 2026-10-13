@@ -1,11 +1,33 @@
-import type { Memory, Message } from "../types.ts";
+import { Type } from "typebox";
+
+import type { Memory, MemoryContext, MemoryOwner } from "../types.ts";
 import type { Database } from "./schema.ts";
 
-async function assertActive(db: Database, request: Message) {
+export const memoryScope = Type.Enum(["group", "user"]);
+export const memoryKey = Type.String({
+  minLength: 1,
+  maxLength: 60,
+  pattern: "\\S",
+});
+export const memoryContent = Type.String({
+  minLength: 1,
+  maxLength: 500,
+  pattern: "\\S",
+});
+export const memoryOwner = {
+  scope: memoryScope,
+  ownerId: Type.String({ pattern: "^\\d+$" }),
+};
+
+async function assertActive(db: Database, sourceMessageId: number | null) {
+  if (sourceMessageId === null) {
+    return;
+  }
+
   const source = await db
     .selectFrom("messages")
     .select("recalledAt")
-    .where("id", "=", request.id)
+    .where("id", "=", sourceMessageId)
     .executeTakeFirstOrThrow();
 
   if (source.recalledAt !== null) {
@@ -20,48 +42,54 @@ export class Memories {
     this.#db = db;
   }
 
-  public async list(groupId: string, userId: string): Promise<Memory[]> {
-    const rows = await this.#db
+  public async list({ scope, ownerId }: MemoryOwner): Promise<Memory[]> {
+    return this.#db
       .selectFrom("memories")
       .selectAll()
-      .where("groupId", "=", groupId)
-      .where("userId", "=", userId)
+      .where("scope", "=", scope)
+      .where("ownerId", "=", ownerId)
       .orderBy("updatedAt", "desc")
       .orderBy("key")
       .execute();
+  }
 
-    return rows.map((row) => ({
-      key: row.key,
-      content: row.content,
-      sourceId: row.sourceMessageId === null ? null : `m${row.sourceMessageId}`,
-      updatedAt: row.updatedAt,
-    }));
+  public async context(
+    groupId: string,
+    userId?: string | null,
+  ): Promise<MemoryContext> {
+    const [group, user] = await Promise.all([
+      this.list({ scope: "group", ownerId: groupId }),
+      userId ? this.list({ scope: "user", ownerId: userId }) : [],
+    ]);
+    const content = ({ key, content }: Memory) => ({ key, content });
+
+    return { group: group.map(content), user: user.map(content) };
   }
 
   public async remember(
-    request: Message,
+    owner: MemoryOwner,
     key: string,
     content: string,
+    sourceMessageId: number | null,
   ): Promise<void> {
     await this.#db.transaction().execute(async (db) => {
-      await assertActive(db, request);
+      await assertActive(db, sourceMessageId);
       const current = await db
         .selectFrom("memories")
         .select("key")
-        .where("groupId", "=", request.groupId)
-        .where("userId", "=", request.userId)
+        .where("scope", "=", owner.scope)
+        .where("ownerId", "=", owner.ownerId)
         .execute();
 
       if (current.length >= 40 && !current.some((item) => item.key === key)) {
-        throw new Error("本群最多保存你的 40 项记忆，请先删除不再需要的条目");
+        throw new Error("这份记忆已有 40 项，请合并相关内容或删除过时条目");
       }
 
       const values = {
-        groupId: request.groupId,
-        userId: request.userId,
+        ...owner,
         key,
         content,
-        sourceMessageId: request.id,
+        sourceMessageId,
         updatedAt: Date.now(),
       };
 
@@ -69,19 +97,23 @@ export class Memories {
         .insertInto("memories")
         .values(values)
         .onConflict((conflict) =>
-          conflict.columns(["groupId", "userId", "key"]).doUpdateSet(values),
+          conflict.columns(["scope", "ownerId", "key"]).doUpdateSet(values),
         )
         .execute();
     });
   }
 
-  public async forget(request: Message, key: string): Promise<boolean> {
+  public async forget(
+    owner: MemoryOwner,
+    key: string,
+    sourceMessageId: number | null,
+  ): Promise<boolean> {
     return this.#db.transaction().execute(async (db) => {
-      await assertActive(db, request);
+      await assertActive(db, sourceMessageId);
       const result = await db
         .deleteFrom("memories")
-        .where("groupId", "=", request.groupId)
-        .where("userId", "=", request.userId)
+        .where("scope", "=", owner.scope)
+        .where("ownerId", "=", owner.ownerId)
         .where("key", "=", key)
         .executeTakeFirst();
 
