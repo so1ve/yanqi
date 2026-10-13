@@ -4,6 +4,7 @@ import type { ImageContent, Model, UserMessage } from "@earendil-works/pi-ai";
 import { streamSimple } from "@earendil-works/pi-ai/api/openai-completions";
 import { Logger } from "@koishijs/core";
 import { jsonrepair } from "jsonrepair";
+import type { ChatCompletionCreateParamsStreaming } from "openai/resources/chat/completions";
 import type { Static, TSchema } from "typebox";
 import * as Value from "typebox/value";
 
@@ -159,7 +160,8 @@ export class AgentRuntime {
       // reasoning 声明模型能力；thinkingLevel 控制是否启用思考。
       reasoning: isDeepSeek,
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      contextWindow: config.AI_INPUT_CHARS + maxTokens,
+      // 输入字符预算不是模型上下文容量。0 让 SDK 保留配置的输出额度。
+      contextWindow: 0,
       maxTokens,
       compat: {
         supportsStore: false,
@@ -195,20 +197,6 @@ export class AgentRuntime {
           calls.push(await reserveCall(config, this.#store, endpoint, purpose));
           timeout = setTimeout(() => agent.abort(), timeoutMs);
           timeout.unref();
-          this.#logger.info(
-            "%s 第 %s 轮请求：usage=%s provider=%s model=%s thinking=%s messages=%s chars=%s tools=%s maxTokens=%s timeout=%s ms",
-            label,
-            turns,
-            calls.at(-1),
-            new URL(endpoint.baseURL).origin,
-            modelId,
-            isDeepSeek ? thinkingLevel : "provider-default",
-            context.messages.length,
-            JSON.stringify(context.messages).length,
-            tools.length,
-            maxTokens,
-            timeoutMs,
-          );
 
           return streamSimple(model, context, {
             ...options,
@@ -225,22 +213,41 @@ export class AgentRuntime {
           throw error;
         }
       },
-      onPayload: schema
-        ? (payload) => ({
-            ...(payload as Record<string, unknown>),
-            response_format:
-              config.AI_RESPONSE_FORMAT === "json_schema"
-                ? {
-                    type: "json_schema",
-                    json_schema: {
-                      name: purpose,
-                      strict: true,
-                      schema,
-                    },
-                  }
-                : { type: "json_object" },
-          })
-        : undefined,
+      onPayload: (payload) => {
+        const params = payload as ChatCompletionCreateParamsStreaming;
+
+        if (schema) {
+          params.response_format =
+            config.AI_RESPONSE_FORMAT === "json_schema"
+              ? {
+                  type: "json_schema",
+                  json_schema: {
+                    name: purpose,
+                    strict: true,
+                    schema: { ...schema },
+                  },
+                }
+              : { type: "json_object" };
+        }
+
+        // 在 SDK 完成参数转换后记录，确保日志与实际请求一致。
+        this.#logger.info(
+          "%s 第 %s 轮请求：usage=%s provider=%s model=%s thinking=%s messages=%s chars=%s tools=%s max_tokens=%s timeout=%s ms",
+          label,
+          turns,
+          calls.at(-1),
+          new URL(endpoint.baseURL).origin,
+          params.model,
+          isDeepSeek ? thinkingLevel : "provider-default",
+          params.messages.length,
+          JSON.stringify(params.messages).length,
+          params.tools?.length ?? 0,
+          params.max_tokens,
+          timeoutMs,
+        );
+
+        return params;
+      },
     });
 
     logAgentEvents(agent, config, label);
@@ -321,7 +328,7 @@ export class AgentRuntime {
 
     if (result?.stopReason === "length") {
       throw new AiSizeError(
-        `${purpose} 输出被服务截断（model=${modelId}，outputTokens=${result.usage.output}，maxTokens=${maxTokens}）`,
+        `${purpose} 输出达到长度限制（model=${modelId}，finishReason=${result.rawStopReason ?? result.stopReason}，outputTokens=${result.usage.output}，maxTokens=${maxTokens}，responseId=${result.responseId ?? "未提供"}）`,
       );
     }
 

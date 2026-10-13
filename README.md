@@ -110,6 +110,9 @@ Compose 在宿主机所有网络接口上开放言栖的 `3210` 和 NapCat 的 `
 - 思考请求默认最多输出 32,768 token，超时 5 分钟，对应 `AI_THINKING_MAX_OUTPUT_TOKENS` 和 `AI_THINKING_TIMEOUT_MS`。
 - 普通请求默认最多输出 8,192 token，超时 2 分钟，对应 `AI_MAX_OUTPUT_TOKENS` 和 `AI_TIMEOUT_MS`。
 - 输出上限包含思考内容、正文和工具参数，与 QQ 回复长度不同。达到每日调用上限后，后台任务延后重试，消息继续保存。
+- `AI_INPUT_CHARS` 控制原文分段和检索结果的大小，不代表模型的上下文容量，也不会缩小每轮请求的输出额度。
+
+请求日志中的 `max_tokens` 来自实际发送的参数。响应日志保留服务返回的 `finish_reason` 和响应 ID，便于区分长度限制、连接中断和正常结束。
 
 结构化输出先按标准 JSON 解析，失败时用 [jsonrepair](https://github.com/josdejong/jsonrepair) 修复常见语法错误，再由 TypeBox 校验。缺少字段、类型错误或输出被截断仍按失败处理。
 

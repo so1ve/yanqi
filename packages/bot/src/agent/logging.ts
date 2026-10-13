@@ -34,9 +34,11 @@ export function logAgentEvents(
         );
 
         logger.info(
-          "%s 模型返回：stop=%s 输入=%s token 输出=%s token 正文=%s 字符 思考=%s 字符 工具=%s 参数=%s 字符 缓存读/写=%s/%s token 耗时=%s",
+          "%s 模型返回：stop=%s finish_reason=%s responseId=%s 输入=%s token 输出=%s token 正文=%s 字符 思考=%s 字符 工具=%s 参数=%s 字符 缓存读/写=%s/%s token 耗时=%s",
           label,
           message.stopReason,
+          message.rawStopReason ?? "未提供",
+          message.responseId ?? "未提供",
           message.usage.input,
           message.usage.output,
           text.length,

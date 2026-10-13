@@ -234,7 +234,7 @@ export class BackgroundTasks {
                 : error instanceof AiError
                   ? `${error.stage}失败，这次请求未完成。`
                   : error instanceof AiSizeError
-                    ? "AI 输出被截断，这次请求未完成。"
+                    ? "AI 输出达到长度限制，这次请求未完成。"
                     : "这次请求未完成，具体原因请查看运行日志。",
           },
         );
