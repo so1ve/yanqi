@@ -5,10 +5,10 @@ import type { ToolContext } from "./context.ts";
 import { object, tool } from "./context.ts";
 
 const parameters = object({
-  text: Type.String({
-    minLength: 1,
-    pattern: "\\S",
-  }),
+  text: Type.Union([
+    Type.String({ minLength: 1, pattern: "\\S" }),
+    Type.Null({ description: "明确决定不向群里发言时使用 null。" }),
+  ]),
   waitForReply: Type.Optional(
     Type.Boolean({
       description: "需要请求者补充信息时设为 true，其下一句无需 @ 即可继续。",
@@ -22,9 +22,13 @@ export function replyTool(context: ToolContext, messenger: Messenger) {
   return tool(
     context,
     "reply",
-    "向 QQ 群发送一次回复并结束对话。用户直接叫你、提问或要求回应时使用，不需要先有记录任务。群友之间的讨论和陈述可静默结束。先完成必要的查询和操作，按问题所需详略回答，不发内部分析或无关状态。发纪要用 edit_record(action=send)。",
+    "结束本次对话。text 为文字时向 QQ 群回复一次，为 null 时不发消息。用户直接叫你、提问或要求回应时应答复；群友之间的讨论或其他工具已经交付结果时可用 null。先完成必要的查询和操作，按问题所需详略回答，不发内部分析或无关状态。发纪要用 edit_record(action=send)，随后用 null 结束。",
     parameters,
     async ({ text, waitForReply }, signal) => {
+      if (text === null) {
+        return { state: "silent" };
+      }
+
       const key = `command:${message.id}`;
       const enqueued = await store.deliveries.enqueue(key, {
         kind: "text",
@@ -53,6 +57,5 @@ export function replyTool(context: ToolContext, messenger: Messenger) {
               : "QQ 尚未确认发送，回复已保留，不要重复回复或声称已发送。",
       };
     },
-    { terminate: true },
   );
 }

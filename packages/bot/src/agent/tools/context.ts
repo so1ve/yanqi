@@ -42,7 +42,6 @@ export const tool = <P extends TSchema>(
   description: string,
   parameters: P,
   execute: (args: Static<P>, signal?: AbortSignal) => Promise<unknown>,
-  options: { terminate?: boolean } = {},
 ): AgentTool<P> => ({
   name,
   label: name,
@@ -61,7 +60,6 @@ export const tool = <P extends TSchema>(
         },
       ],
       details: {},
-      terminate: options.terminate ?? false,
     };
   },
 });

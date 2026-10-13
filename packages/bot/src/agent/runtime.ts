@@ -1,4 +1,4 @@
-import type { AgentState } from "@earendil-works/pi-agent-core";
+import type { AgentState, FinishTurn } from "@earendil-works/pi-agent-core";
 import { Agent } from "@earendil-works/pi-agent-core";
 import type { ImageContent, Model, UserMessage } from "@earendil-works/pi-ai";
 import { streamSimple } from "@earendil-works/pi-ai/api/openai-completions";
@@ -20,6 +20,7 @@ interface RequestOptions {
   model?: ModelConfig;
   tools?: AgentState["tools"];
   thinking?: boolean;
+  finishTurn?: FinishTurn;
 }
 
 export class AgentRuntime {
@@ -185,6 +186,7 @@ export class AgentRuntime {
         tools,
       },
       toolExecution: "sequential",
+      ...(options.finishTurn ? { finishTurn: options.finishTurn } : {}),
       streamFn: async (_model, context, options) => {
         try {
           if (++turns > 8) {
@@ -216,6 +218,11 @@ export class AgentRuntime {
       onPayload: (payload) => {
         const params = payload as ChatCompletionCreateParamsStreaming;
 
+        // 主对话通过工具交付结果，包括明确决定不回复。
+        if (tools.length > 0) {
+          params.tool_choice = "required";
+        }
+
         if (schema) {
           params.response_format =
             config.AI_RESPONSE_FORMAT === "json_schema"
@@ -232,7 +239,7 @@ export class AgentRuntime {
 
         // 在 SDK 完成参数转换后记录，确保日志与实际请求一致。
         this.#logger.info(
-          "%s 第 %s 轮请求：usage=%s provider=%s model=%s thinking=%s messages=%s chars=%s tools=%s max_tokens=%s timeout=%s ms",
+          "%s 第 %s 轮请求：usage=%s provider=%s model=%s thinking=%s messages=%s chars=%s tools=%s tool_choice=%s max_tokens=%s timeout=%s ms",
           label,
           turns,
           calls.at(-1),
@@ -242,6 +249,7 @@ export class AgentRuntime {
           params.messages.length,
           JSON.stringify(params.messages).length,
           params.tools?.length ?? 0,
+          params.tool_choice ?? "default",
           params.max_tokens,
           timeoutMs,
         );
@@ -332,7 +340,7 @@ export class AgentRuntime {
       );
     }
 
-    // reply 通过 SDK 的 terminate 结束工具循环，不再请求一轮空的收尾回复。
+    // 工具会话通过 finishTurn 结束，末次结果可以是工具调用。
     if (result?.stopReason !== "stop" && result?.stopReason !== "toolUse") {
       throw new AiError(
         "获取 AI 回复",
@@ -345,7 +353,7 @@ export class AgentRuntime {
       .map((part) => part.text)
       .join("");
 
-    // 工具可以直接交付结果，不一定需要额外的文字答复。
+    // 工具调用的结果已经交付，不要求额外的文字答复。
     if (!text.trim() && tools.length === 0) {
       throw new AiError("读取 AI 正文", `${purpose} 未返回文字`);
     }

@@ -23,7 +23,24 @@ export class DialogAI {
       "intent",
       `${prompts.intent}\n${prompts.memory}\n${this.#persona}`,
       state,
-      { model: this.#config.AI_MODEL, tools },
+      {
+        model: this.#config.AI_MODEL,
+        tools,
+        finishTurn: ({ message, toolResults }) => {
+          if (
+            message.stopReason === "error" ||
+            message.stopReason === "aborted" ||
+            message.stopReason === "length" ||
+            toolResults.some(
+              (result) => result.toolName === "reply" && !result.isError,
+            )
+          ) {
+            return { action: "end" };
+          }
+
+          return { action: "continue" };
+        },
+      },
     );
   }
 }
