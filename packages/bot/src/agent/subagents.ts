@@ -77,7 +77,7 @@ export class Subagents {
     return tool(
       this.#context,
       "subagent",
-      "委派只读助手。start 必须选择 kind：history 查聊天、确定讨论范围或提取信息，可带 scope；notes 查已保存纪要、理解内容或比较版本，task 写明文档线索和版本。两类工具互不混用，不能修改数据、发言或再委派。任务同时涉及原文和纪要时分别委派并汇合简报。助手先查元数据，再用句柄读正文。最多同时运行两个。start 立即返回任务 ID；wait 等到新元数据、简报或完成结果才返回，不定时唤醒。metadata 表示资料规模和范围，不代表已读正文。cancel 放弃任务。最终 reply 前须完成或取消查阅任务。",
+      "委派只读助手。start 必须选择 kind：history 查聊天、确定讨论范围或提取信息，可带 scope；notes 查已保存纪要、理解内容或比较版本，task 写明文档线索和版本。两类工具互不混用，不能修改数据、发言或再委派。任务同时涉及原文和纪要时分别委派并汇合简报。助手先查元数据，再用句柄读正文。最多同时运行两个。start 立即返回任务 ID；wait 等到新元数据、简报或完成结果才返回，不定时唤醒。metadata 表示资料规模和范围，不代表已读正文。cancel 放弃任务。结束对话前须完成或取消查阅任务。",
       parameters,
       async (args, signal) => {
         const id = args.action === "start" ? this.#start(args) : args.id;
@@ -233,7 +233,7 @@ export class Subagents {
   public assertIdle(): void {
     if ([...this.#runs.values()].some(({ work }) => work.state === "running")) {
       throw new Error(
-        "还有查阅任务未完成，请继续 subagent(wait)；不再需要的任务先 cancel。reply 会结束对话。",
+        "还有查阅任务未完成，请继续 subagent(wait)；不再需要的任务先 cancel，再用 reply 或 skip_reply 结束对话。",
       );
     }
   }

@@ -16,7 +16,7 @@ import { inspectRecordTool } from "./tools/inspect-record.ts";
 import { memoryTool } from "./tools/memory.ts";
 import { readTool } from "./tools/read.ts";
 import { recordTools } from "./tools/records.ts";
-import { notifyTool, replyTool } from "./tools/reply.ts";
+import { notifyTool, replyTool, skipReplyTool } from "./tools/reply.ts";
 import { settingsTools } from "./tools/settings.ts";
 import { taskTool } from "./tools/tasks.ts";
 
@@ -63,6 +63,7 @@ export class DialogAI {
           maxTurns: 16,
           tools: [
             replyTool(context, subagents),
+            skipReplyTool(context, subagents),
             notifyTool(context),
             subagents.tool(),
             readTool(context),
@@ -79,7 +80,10 @@ export class DialogAI {
               message.stopReason === "aborted" ||
               message.stopReason === "length" ||
               toolResults.some(
-                (result) => result.toolName === "reply" && !result.isError,
+                (result) =>
+                  (result.toolName === "reply" ||
+                    result.toolName === "skip_reply") &&
+                  !result.isError,
               )
             ) {
               return { action: "end" };
