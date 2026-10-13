@@ -3,6 +3,7 @@ import { Type } from "typebox";
 import type { Store } from "../storage/store.ts";
 import type { ChatMessage, Topic } from "../types.ts";
 import { beijingTime } from "../utils/time.ts";
+import { chatSourceRules } from "./prompts/common.ts";
 import { summaryMemory } from "./prompts/memory.ts";
 import { prompts } from "./prompts/recording.ts";
 import { summaryPrompts } from "./prompts/summary.ts";
@@ -14,11 +15,18 @@ export class RecordingAI {
   #runtime: AgentRuntime;
   #persona: string;
   #store: Store;
+  #sourceRules: string;
 
-  constructor(runtime: AgentRuntime, persona: string, store: Store) {
+  constructor(
+    runtime: AgentRuntime,
+    persona: string,
+    store: Store,
+    botId: string,
+  ) {
     this.#runtime = runtime;
     this.#persona = persona;
     this.#store = store;
+    this.#sourceRules = chatSourceRules(botId);
   }
 
   public detect(
@@ -26,11 +34,16 @@ export class RecordingAI {
     context: ChatMessage[],
     topics: Pick<Topic, "id" | "title" | "description">[],
   ): Promise<Detection> {
-    return this.#runtime.json("detect", detectionSchema, prompts.detect, {
-      messages,
-      context,
-      topics,
-    });
+    return this.#runtime.json(
+      "detect",
+      detectionSchema,
+      `${this.#sourceRules}\n${prompts.detect}`,
+      {
+        messages,
+        context,
+        topics,
+      },
+    );
   }
 
   public async summarize(
@@ -42,7 +55,7 @@ export class RecordingAI {
     const result = await this.#runtime.json(
       "summary",
       Type.Object({ markdown: Type.String() }, { additionalProperties: false }),
-      `${summaryPrompts.summarize}\n\n${summaryPrompts.focusedSummary}\n${summaryMemory}`,
+      `${this.#sourceRules}\n${summaryPrompts.summarize}\n\n${summaryPrompts.focusedSummary}\n${summaryMemory}`,
       {
         topic: { title, description },
         focus,
@@ -62,7 +75,7 @@ export class RecordingAI {
   public async merge(topic: Topic, sections: string[]): Promise<string> {
     return this.#runtime.text(
       "summary_merge",
-      `${summaryPrompts.merge}\n${summaryMemory}`,
+      `${this.#sourceRules}\n${summaryPrompts.merge}\n${summaryMemory}`,
       {
         topic: { title: topic.title, description: topic.description },
         focus: topic.focus,
@@ -109,7 +122,7 @@ export class RecordingAI {
     return this.#runtime.json(
       "publication",
       publicationSchema,
-      `${prompts.publication}\n${this.#persona}`,
+      `${this.#sourceRules}\n${prompts.publication}\n${this.#persona}`,
       input,
     );
   }

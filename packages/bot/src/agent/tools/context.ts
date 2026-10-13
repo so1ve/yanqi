@@ -7,10 +7,16 @@ import type { Notes } from "../../recording/notes.ts";
 import type { Store } from "../../storage/store.ts";
 import type { Message } from "../../types.ts";
 
-export interface ToolContext {
-  config: Config;
+export interface RequestContext {
   store: Store;
   message: Message;
+}
+
+export interface ReadContext extends RequestContext {
+  config: Config;
+}
+
+export interface ToolContext extends ReadContext {
   notes: Notes;
   wake: () => void;
 }
@@ -37,7 +43,7 @@ export const revision = Type.Optional(
 );
 
 export const tool = <P extends TSchema>(
-  context: ToolContext,
+  context: RequestContext,
   name: string,
   description: string,
   parameters: P,
@@ -67,13 +73,13 @@ export const tool = <P extends TSchema>(
 export async function assertActive({
   store,
   message,
-}: ToolContext): Promise<void> {
+}: RequestContext): Promise<void> {
   if ((await store.messages.get(message.id)).recalledAt !== null) {
     throw new Error("这次请求已撤回");
   }
 }
 
-export async function getTopic({ store, message }: ToolContext, id: string) {
+export async function getTopic({ store, message }: RequestContext, id: string) {
   const topic = await store.topics.get(id);
 
   if (topic.groupId !== message.groupId) {

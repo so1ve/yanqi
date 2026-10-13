@@ -1,7 +1,7 @@
 import { Type } from "typebox";
 
 import { beijingTime } from "../../utils/time.ts";
-import type { ToolContext } from "./context.ts";
+import type { RequestContext } from "./context.ts";
 import { getTopic, object, tool, topicId } from "./context.ts";
 
 const parameters = Type.Union([
@@ -12,7 +12,7 @@ const parameters = Type.Union([
   }),
 ]);
 
-export function readTool(context: ToolContext) {
+export function readTool(context: RequestContext) {
   const { store, message } = context;
 
   return tool(

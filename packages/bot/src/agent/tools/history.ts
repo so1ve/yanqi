@@ -10,7 +10,7 @@ import {
 import type { HistoryAvailability } from "../../storage/messages.ts";
 import type { ChatMessage } from "../../types.ts";
 import { beijingTime } from "../../utils/time.ts";
-import type { ToolContext } from "./context.ts";
+import type { ReadContext } from "./context.ts";
 import { getTopic, object, revision, tool, topicId } from "./context.ts";
 
 const chatParameters = Type.Union([
@@ -49,7 +49,7 @@ export interface HistoryMetadata {
 type Page = { messages: ChatMessage[] } | { markdown: string };
 type OnMetadata = (metadata: HistoryMetadata) => void;
 
-function historyReader(context: ToolContext, onMetadata: OnMetadata) {
+function historyReader(context: ReadContext, onMetadata: OnMetadata) {
   const reads = new Map<string, () => Promise<Page[]>>();
 
   return {
@@ -101,7 +101,7 @@ function historyReader(context: ToolContext, onMetadata: OnMetadata) {
   };
 }
 
-export function chatHistoryTools(context: ToolContext, onMetadata: OnMetadata) {
+export function chatHistoryTools(context: ReadContext, onMetadata: OnMetadata) {
   const { store, message, config } = context;
   const history = historyReader(context, onMetadata);
 
@@ -179,7 +179,7 @@ export function chatHistoryTools(context: ToolContext, onMetadata: OnMetadata) {
   ];
 }
 
-export function noteHistoryTools(context: ToolContext, onMetadata: OnMetadata) {
+export function noteHistoryTools(context: ReadContext, onMetadata: OnMetadata) {
   const { store, config } = context;
   const history = historyReader(context, onMetadata);
 

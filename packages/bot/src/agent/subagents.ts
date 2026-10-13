@@ -1,60 +1,21 @@
 import assert from "node:assert/strict";
 import { addAbortListener } from "node:events";
 
-import type { Static } from "typebox";
-import { Type } from "typebox";
-
-import { contextWithin } from "../recording/messages.ts";
-import { sourceScope } from "../recording/sources.ts";
 import { failureMessage } from "../utils/errors.ts";
 import { beijingTime } from "../utils/time.ts";
-import { subagentPrompts } from "./prompts/subagent.ts";
+import { chatSourceRules } from "./prompts/common.ts";
 import type { AgentRuntime } from "./runtime.ts";
-import type { ToolContext } from "./tools/context.ts";
-import { object, tool } from "./tools/context.ts";
+import type { SubagentAssignment, SubagentReport } from "./subagent-roles.ts";
+import { subagentParameters, subagentRoles } from "./subagent-roles.ts";
+import type { ReadContext } from "./tools/context.ts";
+import { tool } from "./tools/context.ts";
 import type { HistoryMetadata } from "./tools/history.ts";
-import { chatHistoryTools, noteHistoryTools } from "./tools/history.ts";
-import { readTool } from "./tools/read.ts";
-
-const reportSchema = object({
-  brief: Type.String({
-    minLength: 1,
-    maxLength: 1600,
-    description:
-      "已查明的内容、工具返回的资料规模和仍需查阅的部分，供小栖判断后续工作。",
-  }),
-  done: Type.Boolean(),
-});
-const historyReportSchema = object({
-  ...reportSchema.properties,
-  scope: Type.Optional(sourceScope),
-});
-const taskDescription = Type.String({ minLength: 1, maxLength: 2000 });
-const parameters = Type.Union([
-  object({
-    action: Type.Literal("start"),
-    kind: Type.Literal("history"),
-    task: taskDescription,
-    scope: Type.Optional(sourceScope),
-  }),
-  object({
-    action: Type.Literal("start"),
-    kind: Type.Literal("notes"),
-    task: taskDescription,
-  }),
-  object({
-    action: Type.Union([Type.Literal("wait"), Type.Literal("cancel")]),
-    id: Type.String(),
-  }),
-]);
-
-type Assignment = Extract<Static<typeof parameters>, { action: "start" }>;
 
 interface Work {
-  assignment: Assignment;
+  assignment: SubagentAssignment;
   state: "running" | "done" | "failed" | "cancelled";
   updated: PromiseWithResolvers<void>;
-  report?: Static<typeof historyReportSchema>;
+  report?: SubagentReport;
   metadata?: HistoryMetadata;
   error?: string;
 }
@@ -62,23 +23,27 @@ interface Work {
 // 查阅任务只属于当前对话；持久化纪要仍由原有后台队列负责。
 export class Subagents {
   #runtime: AgentRuntime;
-  #context: ToolContext;
+  #context: ReadContext;
   #runs = new Map<
     string,
     { work: Work; controller: AbortController; finished: Promise<void> }
   >();
 
-  constructor(runtime: AgentRuntime, context: ToolContext) {
+  constructor(runtime: AgentRuntime, context: ReadContext) {
     this.#runtime = runtime;
     this.#context = context;
   }
 
   public tool() {
+    const roles = Object.values(subagentRoles)
+      .map((role) => role.description)
+      .join("；");
+
     return tool(
       this.#context,
       "subagent",
-      "委派只读助手。start 必须选择 kind：history 查聊天、确定讨论范围或提取信息，可带 scope；notes 查已保存纪要、理解内容或比较版本，task 写明文档线索和版本。两类工具互不混用，不能修改数据、发言或再委派。任务同时涉及原文和纪要时分别委派并汇合简报。助手先查元数据，再用句柄读正文。最多同时运行两个。start 立即返回任务 ID；wait 等到新元数据、简报或完成结果才返回，不定时唤醒。metadata 表示资料规模和范围，不代表已读正文。cancel 放弃任务。结束对话前须完成或取消查阅任务。",
-      parameters,
+      `委派只读助手。start 必须选择 kind：${roles}。各分工的工具互不混用，不能修改数据、发言或再委派。任务同时涉及原文和纪要时分别委派并汇合简报。助手先查元数据，再用句柄读正文。最多同时运行两个。start 立即返回任务 ID；wait 等到新元数据、简报或完成结果才返回，不定时唤醒。metadata 表示资料规模和范围，不代表已读正文。cancel 放弃任务。结束对话前须完成或取消查阅任务。`,
+      subagentParameters,
       async (args, signal) => {
         const id = args.action === "start" ? this.#start(args) : args.id;
         const run = this.#runs.get(id);
@@ -124,7 +89,7 @@ export class Subagents {
     );
   }
 
-  #start(assignment: Assignment): string {
+  #start(assignment: SubagentAssignment): string {
     if (
       [...this.#runs.values()].filter(({ work }) => work.state === "running")
         .length >= 2
@@ -155,17 +120,14 @@ export class Subagents {
   }
 
   async #run(work: Work, signal: AbortSignal) {
-    const { message, store } = this.#context;
+    const { message } = this.#context;
     const { assignment } = work;
-    const quote =
-      assignment.kind === "history" && message.replyTo
-        ? await store.messages.quoted(message.groupId, message.replyTo)
-        : null;
+    const role = subagentRoles[assignment.kind];
     const report = tool(
       this.#context,
       "report",
       "向小栖提供内容简报和已知资料规模。done=false 立即交付中间简报并继续查阅；done=true 交付最终结果并结束查阅。",
-      assignment.kind === "history" ? historyReportSchema : reportSchema,
+      role.report,
       async (args) => {
         work.report = args;
 
@@ -181,30 +143,14 @@ export class Subagents {
       work.updated.resolve();
     };
 
-    // 每次只注册该分工的工具；SDK 按此列表查找工具并校验参数后才执行。
-    const tools =
-      assignment.kind === "history"
-        ? chatHistoryTools(this.#context, onMetadata)
-        : [
-            readTool(this.#context),
-            ...noteHistoryTools(this.#context, onMetadata),
-          ];
+    const tools = role.tools(this.#context, onMetadata);
 
     await this.#runtime.text(
       `subagent_${assignment.kind}`,
-      subagentPrompts[assignment.kind],
+      `${chatSourceRules(this.#context.config.BOT_QQ)}\n${role.instructions}`,
       {
         task: assignment.task,
-        ...(assignment.kind === "history"
-          ? {
-              scope: assignment.scope,
-              availableHistory: await store.messages.availableHistory(
-                message.groupId,
-                message.id,
-              ),
-            }
-          : {}),
-        quoted: quote ? await contextWithin(store, [quote], 1500) : [],
+        ...(await role.input(this.#context, assignment)),
         request: {
           id: `m${message.id}`,
           author: message.displayName,

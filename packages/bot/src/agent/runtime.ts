@@ -18,7 +18,6 @@ import type { Store } from "../storage/store.ts";
 import { AiError } from "../utils/errors.ts";
 import { logContext, logDetail } from "../utils/logging.ts";
 import { logAgentEvents } from "./logging.ts";
-import { boundary } from "./prompts/common.ts";
 import { AiSizeError, reserveCall } from "./usage.ts";
 
 interface RequestOptions {
@@ -55,7 +54,7 @@ export class AgentRuntime {
 
     const { text } = await this.#run(
       purpose,
-      `${boundary(this.#config.BOT_QQ)}\n${instructions}`,
+      instructions,
       { role: "user", content, timestamp: Date.now() },
       options,
       schema,
@@ -105,7 +104,7 @@ export class AgentRuntime {
   ): Promise<string> {
     const result = await this.#run(
       purpose,
-      `${boundary(this.#config.BOT_QQ)}\n${instructions}`,
+      instructions,
       { role: "user", content: JSON.stringify(input), timestamp: Date.now() },
       options,
     );
@@ -120,7 +119,7 @@ export class AgentRuntime {
   ): Promise<string> {
     const result = await this.#run(
       "image",
-      `${boundary(this.#config.BOT_QQ)}\n${instructions}`,
+      instructions,
       { role: "user", content: [image], timestamp: Date.now() },
       { model },
     );
@@ -136,7 +135,7 @@ export class AgentRuntime {
   ): Promise<AgentMessage[]> {
     const result = await this.#run(
       "intent",
-      `${boundary(this.#config.BOT_QQ)}\n当前会话属于 QQ 群 ${conversation.groupId}，只延续本群对话。\n${instructions}`,
+      instructions,
       { role: "user", content: JSON.stringify(input), timestamp: Date.now() },
       options,
       undefined,

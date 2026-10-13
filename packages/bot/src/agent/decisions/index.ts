@@ -6,7 +6,7 @@ import type { Config } from "../../config.ts";
 import type { Store } from "../../storage/store.ts";
 import type { ChatMessage } from "../../types.ts";
 import { logContext, logDetail } from "../../utils/logging.ts";
-import { speakerIdentity } from "../prompts/common.ts";
+import { chatSourceRules } from "../prompts/common.ts";
 import { prompts as conversationPrompts } from "../prompts/conversation.ts";
 import type { AgentRuntime } from "../runtime.ts";
 import { reserveCall } from "../usage.ts";
@@ -108,8 +108,10 @@ export class Decisions {
     state: Record<string, unknown>,
     candidates: string[],
   ): Promise<string[]> {
+    const rules = `${chatSourceRules(this.#config.BOT_QQ)}\n${conversationPrompts.requests}`;
+
     if (!this.#evaluate) {
-      return selectRequests(this.#runtime, state, candidates);
+      return selectRequests(this.#runtime, rules, state, candidates);
     }
 
     const questions = Object.fromEntries(
@@ -127,7 +129,7 @@ export class Decisions {
       ]),
     );
     const decisionInput = {
-      rules: `${speakerIdentity(this.#config.BOT_QQ)}\n${conversationPrompts.requests}`,
+      rules,
       ...state,
     };
     const input = JSON.stringify(decisionInput);
