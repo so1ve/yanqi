@@ -11,8 +11,8 @@ import {
 } from "h3";
 import { Type } from "typebox";
 
-import type { ControlStore } from "./control";
-import { body } from "./http";
+import type { ManagementDatabase } from "./database";
+import { body } from "./utils/http";
 
 const derive = promisify(scrypt);
 const digest = (value: string) =>
@@ -39,16 +39,21 @@ async function verifyPassword(
 }
 
 export class Auth {
-  #store: ControlStore;
+  #db: ManagementDatabase;
   #setupCode = randomBytes(18).toString("base64url");
   #failures: number[] = [];
 
-  private constructor(store: ControlStore) {
-    this.#store = store;
+  private constructor(db: ManagementDatabase) {
+    this.#db = db;
   }
 
-  public static async open(store: ControlStore): Promise<Auth> {
-    const auth = new Auth(store);
+  public static async open(db: ManagementDatabase): Promise<Auth> {
+    const auth = new Auth(db);
+
+    await db
+      .deleteFrom("sessions")
+      .where("expiresAt", "<", Date.now())
+      .execute();
 
     if (!(await auth.#account())) {
       process.stdout.write(
@@ -60,7 +65,7 @@ export class Auth {
   }
 
   #account() {
-    return this.#store.db
+    return this.#db
       .selectFrom("accounts")
       .selectAll()
       .where("id", "=", 1)
@@ -71,7 +76,7 @@ export class Auth {
     const token = randomBytes(32).toString("base64url");
     const maxAge = 7 * 86_400;
 
-    await this.#store.db
+    await this.#db
       .insertInto("sessions")
       .values({ id: digest(token), expiresAt: Date.now() + maxAge * 1000 })
       .execute();
@@ -89,7 +94,7 @@ export class Auth {
 
     return Boolean(
       token &&
-      (await this.#store.db
+      (await this.#db
         .selectFrom("sessions")
         .select("id")
         .where("id", "=", digest(token))
@@ -142,7 +147,7 @@ export class Auth {
 
       const password = await hashPassword(input.password);
 
-      await this.#store.db
+      await this.#db
         .insertInto("accounts")
         .values({ id: 1, password })
         .execute();
@@ -160,7 +165,7 @@ export class Auth {
     const token = getCookie(event, cookieName);
 
     if (token) {
-      await this.#store.db
+      await this.#db
         .deleteFrom("sessions")
         .where("id", "=", digest(token))
         .execute();
@@ -184,7 +189,7 @@ export class Auth {
 
     const password = await hashPassword(input.password);
 
-    await this.#store.db.transaction().execute(async (db) => {
+    await this.#db.transaction().execute(async (db) => {
       await db
         .updateTable("accounts")
         .set({ password })

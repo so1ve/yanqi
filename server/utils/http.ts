@@ -1,21 +1,7 @@
-import type { Yanqi } from "@yanqi/bot";
 import type { H3Event } from "h3";
 import { createError, getQuery, getRequestWebStream, getRouterParam } from "h3";
 import type { Static, TSchema } from "typebox";
 import * as Value from "typebox/value";
-
-import type { Auth } from "./auth";
-import type { ControlStore } from "./control";
-import type { LogBuffer } from "./logs";
-
-declare module "h3" {
-  interface H3EventContext {
-    bot: Yanqi;
-    control: ControlStore;
-    auth: Auth;
-    logs: LogBuffer;
-  }
-}
 
 export async function body<S extends TSchema>(
   event: H3Event,

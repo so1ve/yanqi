@@ -175,7 +175,7 @@ function changeGroup(id: string): void {
             {{ status?.connected ? "NapCat 已连接" : "NapCat 未连接" }}
           </span>
           <span class="runtime-label">
-            {{ status?.running ? "机器人已启动" : "机器人未启动" }}
+            {{ status?.running ? "AI 处理中" : "AI 处理已暂停" }}
           </span>
           <NButton
             :loading="busy"
@@ -183,7 +183,7 @@ function changeGroup(id: string): void {
             :type="status?.running ? 'default' : 'primary'"
             @click="toggle"
           >
-            {{ status?.running ? "停止机器人" : "启动机器人" }}
+            {{ status?.running ? "暂停 AI" : "启动 AI" }}
           </NButton>
         </div>
       </div>

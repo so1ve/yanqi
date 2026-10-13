@@ -1,5 +1,3 @@
-import { $ } from "@koishijs/core";
-
 import { Assets } from "./assets.ts";
 import { DeliveryQueue } from "./deliveries.ts";
 import { Groups } from "./groups.ts";
@@ -46,22 +44,26 @@ export class Store {
     this.memories = new Memories(db);
   }
 
-  public async initialize(groups: string[]): Promise<void> {
-    await this.#db.upsert(
-      "groups",
-      groups.map((id) => ({ id })),
-    );
-    // 重启后跳过旧消息的请求识别，避免迟到的回复；新请求仍会带上近期上下文。
+  public async initialize(): Promise<void> {
+    // 不重放旧对话，后台整理和附件任务可以继续。
     await this.#db.set(
       "jobs",
-      { kind: "observe", $or: [{ state: "pending" }, { state: "running" }] },
+      {
+        $and: [
+          { $or: [{ kind: "intent" }, { kind: "observe" }] },
+          { $or: [{ state: "pending" }, { state: "running" }] },
+        ],
+      },
       {
         state: "failed",
-        lastError: "服务重启，跳过旧消息的记录请求识别",
+        lastError: "服务重启，跳过旧对话",
       },
     );
-    await this.#db.set("jobs", { state: "running" }, (row) => ({
-      state: $.if($.eq(row.kind, "intent"), "failed", "pending"),
-    }));
+    await this.#db.set("jobs", { state: "running" }, { state: "pending" });
+    await this.#db.set(
+      "messages",
+      { awaitingReply: true },
+      { awaitingReply: false },
+    );
   }
 }

@@ -1,13 +1,13 @@
-import type { Context, Logger, Session } from "@koishijs/core";
+import type { Context, Logger } from "@koishijs/core";
 
 import { Ai } from "./agent/ai.ts";
 import type { Config } from "./config.ts";
-import { incomingMessage } from "./onebot/message.ts";
 import type { Messenger } from "./onebot/messenger.ts";
 import { createMessenger } from "./onebot/messenger.ts";
 import { Notes } from "./recording/notes.ts";
 import type { Store } from "./storage/store.ts";
 import { BackgroundTasks } from "./tasks/worker.ts";
+import type { Message } from "./types.ts";
 import { failureMessage } from "./utils/errors.ts";
 import { logDetail } from "./utils/logging.ts";
 
@@ -37,59 +37,28 @@ export class Secretary {
     this.#logger = ctx.logger("yanqi");
   }
 
-  public async handleMessage(session: Session): Promise<void> {
+  public async handleMessage(message: Message): Promise<void> {
     try {
-      const message = await this.#store.messages.capture(
-        incomingMessage(session),
-      );
-
-      if (message) {
-        if (message.command) {
-          void this.#messenger.acknowledge(message);
-        } else if (this.#config.AUTO_REPLY) {
-          await this.#store.messages.observe(message);
-        }
-
-        this.#logger[message.command ? "info" : "debug"](
-          "消息 m%s 已保存：group=%s qqMessage=%s user=%s addressed=%s bot=%s chars=%s",
-          message.id,
-          message.groupId,
-          message.messageId,
-          message.userId,
-          message.addressed,
-          message.isBot,
-          message.text.length,
-        );
-        this.processPending();
-      } else {
-        this.#logger.debug(
-          "忽略重复消息：group=%s qqMessage=%s",
-          session.guildId,
-          session.messageId,
-        );
+      if (message.command) {
+        await this.#store.jobs.enqueue("intent", `intent:${message.id}`, {
+          groupId: message.groupId,
+          messageId: message.id,
+        });
+        void this.#messenger.acknowledge(message);
+      } else if (this.#config.AUTO_REPLY) {
+        await this.#store.messages.observe(message);
       }
+
+      this.processPending();
     } catch (error) {
       this.#logger.warn(
         "处理群消息失败：group=%s qqMessage=%s %s",
-        session.guildId,
-        session.messageId,
+        message.groupId,
+        message.messageId,
         logDetail(failureMessage(error), this.#config),
       );
       this.#logger.debug("群消息异常：%s", logDetail(error, this.#config));
     }
-  }
-
-  public async handleRecall(session: Session): Promise<void> {
-    await this.#store.messages.recall(
-      session.guildId!,
-      session.messageId!,
-      session.onebot!.time * 1000,
-    );
-    this.#logger.info(
-      "消息撤回：group=%s qqMessage=%s",
-      session.guildId,
-      session.messageId,
-    );
   }
 
   public async checkTopics(): Promise<void> {

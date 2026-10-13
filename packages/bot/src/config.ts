@@ -108,13 +108,13 @@ export function parseConfig(input: unknown): Config {
   return config;
 }
 
-export function assertConfigured(config: Config): void {
+export function configurationError(config: Config): string | undefined {
   if (!config.BOT_QQ || !config.ONEBOT_TOKEN) {
-    throw new Error("请先在设置中填写机器人 QQ 号和 OneBot Token");
+    return "请先在设置中填写机器人 QQ 号和 OneBot Token";
   }
 
   if (config.GROUP_IDS.length === 0) {
-    throw new Error("请至少启用一个记录群");
+    return "请至少启用一个记录群";
   }
 
   if (
@@ -122,16 +122,14 @@ export function assertConfigured(config: Config): void {
     !config.AI_MODEL.apiKey ||
     !config.AI_MODEL.model
   ) {
-    throw new Error("请填写主模型的服务地址、API Key 和模型名称");
+    return "请填写主模型的服务地址、API Key 和模型名称";
   }
 
   for (const key of ["AI_VISION_MODEL", "AI_AUDIO_MODEL"] as const) {
     const model = config[key];
 
     if (model && (!model.baseURL || !model.apiKey || !model.model)) {
-      throw new Error(
-        `请填写${key === "AI_VISION_MODEL" ? "视觉" : "语音"}模型的服务地址、API Key 和模型名称`,
-      );
+      return `请填写${key === "AI_VISION_MODEL" ? "视觉" : "语音"}模型的服务地址、API Key 和模型名称`;
     }
   }
 
@@ -139,6 +137,6 @@ export function assertConfigured(config: Config): void {
     config.DECISION_PROVIDER !== "llm" &&
     (!config.DECISION_URL || !config.DECISION_API_KEY || !config.DECISION_MODEL)
   ) {
-    throw new Error("请填写请求识别服务的地址、API Key 和模型名称");
+    return "请填写请求识别服务的地址、API Key 和模型名称";
   }
 }

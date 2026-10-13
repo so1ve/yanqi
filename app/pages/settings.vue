@@ -11,7 +11,7 @@ import { api } from "~/utils/api";
 
 const { data, loading, error, refresh } = useApiData<Settings>("settings");
 const draft = ref<Config | null>(null);
-const autostart = ref(false);
+const autostart = ref(true);
 const napcatWebUrl = ref("");
 const admins = ref("");
 const { busy, run } = useAction();
@@ -135,7 +135,12 @@ async function password(): Promise<void> {
             </div>
             <div class="section-title mt-16"><h2>启动与交互权限</h2></div>
             <NFormItem label="服务启动时自动运行机器人">
-              <NSwitch v-model:value="autostart" />
+              <div>
+                <NSwitch v-model:value="autostart" />
+                <p class="form-help">
+                  默认开启。首次填齐连接、模型和记录群后自动运行。
+                </p>
+              </div>
             </NFormItem>
             <NFormItem label="全局管理员 QQ 号">
               <div class="w-full">

@@ -27,7 +27,7 @@ export default defineEventHandler(async (event) => {
     if (busy.length > 0 || bot.running) {
       throw createError({
         statusCode: 409,
-        message: "请先停止机器人，再删除纪要",
+        message: "请先暂停 AI，再删除纪要",
       });
     }
 

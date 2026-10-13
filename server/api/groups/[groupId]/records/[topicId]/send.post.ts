@@ -13,7 +13,7 @@ export default defineEventHandler(async (event) => {
   if (!bot.running || !bot.online) {
     throw createError({
       statusCode: 409,
-      message: "请先启动机器人并连接 NapCat",
+      message: "请先启动 AI 处理并连接 NapCat",
     });
   }
 

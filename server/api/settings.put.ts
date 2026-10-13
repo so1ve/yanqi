@@ -1,17 +1,17 @@
 import type { Config } from "@yanqi/bot";
-import { assertConfigured, configSchema, parseConfig } from "@yanqi/bot";
+import { configurationError, parseConfig } from "@yanqi/bot";
 import { createError, defineEventHandler } from "h3";
 import { Type } from "typebox";
 
 import { body } from "~~/server/utils/http";
 
 export default defineEventHandler(async (event) => {
-  const { bot, control } = event.context;
+  const { bot, settings } = event.context;
 
   const input = await body(
     event,
     Type.Object({
-      config: configSchema,
+      config: Type.Unknown(),
       autostart: Type.Boolean(),
       napcatWebUrl: Type.String(),
     }),
@@ -24,7 +24,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: (error as Error).message });
   }
 
-  const { config: current } = await control.settings();
+  const { config: current } = await settings.load();
 
   config.GROUP_IDS = current.GROUP_IDS;
   config.GROUP_ADMINS = current.GROUP_ADMINS;
@@ -40,23 +40,14 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  if (bot.running || input.autostart) {
-    try {
-      assertConfigured(config);
-    } catch (error) {
-      throw createError({ statusCode: 400, message: (error as Error).message });
-    }
+  const error = bot.running && configurationError(config);
+
+  if (error) {
+    throw createError({ statusCode: 400, message: error });
   }
 
-  await control.save(config, input.autostart, input.napcatWebUrl);
-  try {
-    await bot.configure(config);
-  } catch (error) {
-    throw createError({
-      statusCode: 500,
-      message: `设置已保存，但应用失败：${(error as Error).message}`,
-    });
-  }
+  await settings.save({ ...input, config });
+  await bot.configure(config);
 
   return {
     config,

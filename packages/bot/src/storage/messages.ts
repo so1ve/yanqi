@@ -146,12 +146,7 @@ export class Messages {
           });
         }
 
-        if (command) {
-          await enqueueJob(db, "intent", `intent:${message.id}`, {
-            groupId: input.groupId,
-            messageId: message.id,
-          });
-        } else {
+        if (!command) {
           const topics = await db.get("topics", {
             groupId: input.groupId,
             mode: "manual",

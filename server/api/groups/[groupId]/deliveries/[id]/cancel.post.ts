@@ -19,7 +19,7 @@ export default defineEventHandler(async (event) => {
   if (bot.running) {
     throw createError({
       statusCode: 409,
-      message: "请先停止机器人，避免取消时消息已经发出",
+      message: "请先暂停 AI，避免取消时消息已经发出",
     });
   }
 

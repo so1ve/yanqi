@@ -191,7 +191,8 @@ async function create(): Promise<void> {
         />
       </NFormItem>
       <p class="form-help">
-        纪要只保存到本地。需要发到群里时，请在完成后点击“发送到群”。机器人未启动时，任务会等待启动。
+        纪要只保存到本地。需要发到群里时，请在完成后点击“发送到群”。AI
+        暂停时，任务会等待恢复。
       </p>
       <NSpace class="mt-24" justify="end">
         <NButton @click="showCreate = false">取消</NButton>

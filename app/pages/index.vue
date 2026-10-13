@@ -53,7 +53,7 @@ async function openRecord(group: string, id: string): Promise<void> {
             {{
               status?.running
                 ? "机器人已启动"
-                : "机器人未启动，已有记录仍可查看"
+                : "AI 已暂停，NapCat 在线时仍保存群消息"
             }}
           </div>
         </div>

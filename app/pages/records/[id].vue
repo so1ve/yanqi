@@ -228,7 +228,7 @@ function download(): void {
                 </NButton>
               </span>
             </template>
-            停止机器人后可删除纪要
+            暂停 AI 后可删除纪要
           </NTooltip>
         </NSpace>
       </div>

@@ -245,7 +245,7 @@ const states = [
         </div>
       </LoadState>
       <p class="form-help">
-        对话请求不能重试，请在群里重新提出。要中断正在执行的任务，请停止机器人。
+        对话请求不能重试，请在群里重新提出。要中断正在执行的任务，请暂停 AI。
       </p>
     </NTabPane>
     <NTabPane name="deliveries" tab="群消息发送">
@@ -274,7 +274,7 @@ const states = [
         </div>
       </LoadState>
       <p class="form-help">
-        停止机器人后，可以取消尚未发送的消息。已经发出的消息不能在这里撤回。
+        暂停 AI 后，可以取消尚未发送的消息。已经发出的消息不能在这里撤回。
       </p>
     </NTabPane>
   </NTabs>

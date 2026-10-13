@@ -1,33 +1,28 @@
 import { resolve } from "node:path";
 
-import { Logger } from "@koishijs/core";
 import { Yanqi } from "@yanqi/bot";
 
-import { Auth } from "../utils/auth";
-import { ControlStore } from "../utils/control";
-import { LogBuffer } from "../utils/logs";
+import { Auth } from "../auth";
+import { openDatabase } from "../database";
+import { LogBuffer } from "../logs";
+import { Settings } from "../settings";
 
 const directory = resolve("data");
-const control = await ControlStore.open(directory);
-const saved = await control.settings();
-const bot = await Yanqi.open(saved.config, directory);
-const logs = new LogBuffer(() => bot.config);
-const auth = await Auth.open(control);
+const db = await openDatabase(directory);
+const settings = new Settings(db);
+const saved = await settings.load();
+let bot: Yanqi;
+const logs = new LogBuffer(() => bot?.config ?? saved.config);
+const auth = await Auth.open(db);
 
-if (saved.autostart) {
-  try {
-    await bot.start();
-  } catch (error) {
-    new Logger("yanqi:web").warn("自动启动失败：%s", String(error));
-  }
-}
+bot = await Yanqi.open(saved.config, directory, saved.autostart);
 
 export default defineNitroPlugin((nitro) => {
   nitro.hooks.hook("request", (event) => {
-    Object.assign(event.context, { bot, control, auth, logs });
+    Object.assign(event.context, { bot, settings, auth, logs });
   });
   nitro.hooks.hook("close", async () => {
     await bot.close();
-    await control.close();
+    await db.destroy();
   });
 });

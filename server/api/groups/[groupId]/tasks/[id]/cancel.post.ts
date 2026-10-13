@@ -17,7 +17,7 @@ export default defineEventHandler(async (event) => {
     if (job.state === "running") {
       throw createError({
         statusCode: 409,
-        message: "任务正在执行。需要中断时，请先停止机器人",
+        message: "任务正在执行。需要中断时，请先暂停 AI",
       });
     }
 

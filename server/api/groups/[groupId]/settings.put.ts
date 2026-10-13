@@ -4,7 +4,7 @@ import { Type } from "typebox";
 import { body, groupParam } from "~~/server/utils/http";
 
 export default defineEventHandler(async (event) => {
-  const { bot, control } = event.context;
+  const { bot, settings } = event.context;
   const groupId = groupParam(event);
 
   const input = await body(
@@ -17,8 +17,8 @@ export default defineEventHandler(async (event) => {
       }),
     }),
   );
-  const settings = await control.settings();
-  const { config } = settings;
+  const saved = await settings.load();
+  const { config } = saved;
 
   config.GROUP_IDS = input.enabled
     ? [...new Set([...config.GROUP_IDS, groupId])]
@@ -27,14 +27,14 @@ export default defineEventHandler(async (event) => {
   if (config.GROUP_IDS.length === 0 && bot.running) {
     throw createError({
       statusCode: 409,
-      message: "请先停止机器人，再停用最后一个群",
+      message: "请先暂停 AI，再停用最后一个群",
     });
   }
 
   await bot.database.upsert("groups", [
     { id: groupId, aiEnabled: input.automatic },
   ]);
-  await control.save(config, settings.autostart, settings.napcatWebUrl);
+  await settings.save(saved);
   await bot.configure(config);
 
   return { ok: true };
