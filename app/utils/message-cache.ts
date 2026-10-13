@@ -27,11 +27,31 @@ interface MessageCache extends DBSchema {
 let database: ReturnType<typeof openDB<MessageCache>> | undefined;
 
 const openCache = () =>
-  (database ??= openDB<MessageCache>("yanqi-messages", 1, {
-    upgrade(db) {
-      db.createObjectStore("messages", { keyPath: ["groupId", "id"] });
-      db.createObjectStore("histories");
-      db.createObjectStore("bookmarks");
+  (database ??= openDB<MessageCache>("yanqi-messages", 2, {
+    upgrade(db, oldVersion, _newVersion, transaction) {
+      if (oldVersion === 0) {
+        db.createObjectStore("messages", { keyPath: ["groupId", "id"] });
+        db.createObjectStore("histories");
+        db.createObjectStore("bookmarks");
+      } else {
+        // 只重新读取附件消息；普通文本、阅读位置与已加载范围继续保留。
+        const request = transaction.objectStore("messages").openCursor();
+
+        void (async () => {
+          let cursor = await request;
+
+          while (cursor) {
+            if (
+              cursor.value.assets.length > 0 ||
+              cursor.value.content.some((segment) => segment.type === "forward")
+            ) {
+              await cursor.delete();
+            }
+
+            cursor = await cursor.continue();
+          }
+        })();
+      }
     },
   }));
 

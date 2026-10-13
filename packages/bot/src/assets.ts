@@ -6,6 +6,11 @@ import { pipeline } from "node:stream/promises";
 
 import type { Ai } from "./agent/ai.ts";
 import type { Config } from "./config.ts";
+import {
+  attachmentReference,
+  expandForward,
+  forwardAttachments,
+} from "./onebot/content.ts";
 import type { Messenger } from "./onebot/messenger.ts";
 import { assetPath, imageFormat } from "./storage/asset-files.ts";
 import type { Store } from "./storage/store.ts";
@@ -26,12 +31,24 @@ export async function collectAsset(
 
   await mkdir(directory, { recursive: true });
   let path = asset.path;
+  let interpretation = asset.interpretation;
 
   try {
     if (asset.kind === "forward") {
       await reportProgress(`正在读取合并转发，附件 #${id}`);
-      const forwarded = await messenger.getForward(asset.reference);
-      const content = JSON.stringify(forwarded);
+      const embedded = message.content.find(
+        (segment) =>
+          segment.type === "forward" &&
+          attachmentReference(segment)?.reference === asset.reference,
+      )?.data.content;
+      const forwarded = await expandForward(
+        asset.reference,
+        interpretation ? JSON.parse(interpretation) : embedded,
+        (reference) => messenger.getForward(reference),
+        config.MAX_ATTACHMENT_BYTES,
+        signal,
+      );
+      const content = JSON.stringify(forwarded.messages);
       const hash = createHash("sha256").update(content).digest("hex");
       const target = assetPath(store.directory, `${hash}.json`);
       const temporary = `${target}.${randomUUID()}.part`;
@@ -47,8 +64,17 @@ export async function collectAsset(
       }
 
       path = target;
+      interpretation = content;
+      await store.assets.capture(
+        message,
+        forwardAttachments(forwarded.messages),
+      );
       await store.assets.save(id, "saved", path, content, null);
-      await reportProgress("合并转发内容已保存");
+      if (forwarded.errors.length > 0) {
+        throw new Error(`部分嵌套转发读取失败：${forwarded.errors.join("；")}`);
+      }
+
+      await reportProgress("转发内容已展开，卡片内的附件已交给后台解析");
 
       return;
     }
@@ -184,7 +210,7 @@ export async function collectAsset(
       id,
       path ? "saved" : "failed",
       path,
-      asset.interpretation,
+      interpretation,
       failureMessage(error),
     );
 

@@ -1,34 +1,13 @@
 <script setup lang="ts">
 import { CornerUpLeft } from "@vicons/tabler";
-import { computed } from "vue";
 
 import UserAvatar from "~/components/UserAvatar.vue";
-import MessageAttachment from "~/components/messages/MessageAttachment.vue";
+import MessageContent from "~/components/messages/MessageContent.vue";
 import type { Message } from "~/types/api";
 import { formatMessageTime, formatTime } from "~/utils/format";
 
 const emit = defineEmits<{ updated: [] }>();
-const props = defineProps<{ message: Message; continued: boolean }>();
-const parts = computed(() =>
-  props.message.content
-    .filter((segment) => segment.type !== "reply")
-    .map((segment) => ({
-      segment,
-      asset: props.message.assets.find(
-        (asset) =>
-          asset.kind === (segment.type === "record" ? "audio" : segment.type) &&
-          asset.reference ===
-            String(
-              [
-                segment.data.url,
-                segment.data.id,
-                segment.data.file_id,
-                segment.data.file,
-              ].find(Boolean) ?? "",
-            ),
-      ),
-    })),
-);
+defineProps<{ message: Message; continued: boolean }>();
 </script>
 
 <template>
@@ -69,39 +48,18 @@ const parts = computed(() =>
         <p
           v-if="
             message.text &&
-            !parts.some(({ segment }) => segment.type === 'text')
+            !message.content.some((segment) => segment.type === 'text')
           "
           class="message-text"
         >
           {{ message.text }}
         </p>
-        <template v-for="({ segment, asset }, index) in parts" :key="index">
-          <span v-if="segment.type === 'text'" class="message-text">
-            {{ segment.data.text }}
-          </span>
-          <span
-            v-else-if="segment.type === 'at'"
-            class="marker"
-            :title="
-              segment.data.qq === 'all' ? undefined : String(segment.data.qq)
-            "
-          >
-            @{{ segment.data.name }}
-          </span>
-          <span v-else-if="segment.type === 'face'" class="marker">
-            [表情 {{ segment.data.id }}]
-          </span>
-          <MessageAttachment
-            v-else-if="asset"
-            :asset
-            :group-id="message.groupId"
-            @updated="emit('updated')"
-          />
-          <details v-else class="segment">
-            <summary>{{ segment.type }} 消息</summary>
-            <pre>{{ JSON.stringify(segment.data, null, 2) }}</pre>
-          </details>
-        </template>
+        <MessageContent
+          :assets="message.assets"
+          :content="message.content"
+          :group-id="message.groupId"
+          @updated="emit('updated')"
+        />
         <p
           v-if="
             !message.text &&
@@ -249,30 +207,6 @@ const parts = computed(() =>
 
 .recalled {
   color: #99702d;
-}
-
-.marker {
-  padding: 1px 6px;
-  border-radius: 4px;
-  color: #37767a;
-  background: #eef5f5;
-  font-size: 12px;
-  overflow-wrap: anywhere;
-}
-
-.segment {
-  margin-top: 8px;
-  color: #617482;
-  font-size: 12px;
-}
-
-.segment summary {
-  cursor: pointer;
-}
-
-.segment pre {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 
 .empty-content {

@@ -7,6 +7,7 @@ import type { Ai } from "../agent/ai.ts";
 import type { Config } from "../config.ts";
 import { topicDirectory, writeMarkdown } from "../storage/files.ts";
 import type { Store } from "../storage/store.ts";
+import { waitForAsset } from "../tasks/assets.ts";
 import type { Job, Note, Topic } from "../types.ts";
 import { noteImages } from "./images.ts";
 import { publishNote } from "./publication.ts";
@@ -19,12 +20,14 @@ export class Notes {
   #ai: Ai;
   #summary: Summarizer;
   #logger = new Logger("yanqi:notes");
+  #signal: AbortSignal;
 
-  constructor(config: Config, store: Store, ai: Ai) {
+  constructor(config: Config, store: Store, ai: Ai, signal: AbortSignal) {
     this.#config = config;
     this.#store = store;
     this.#ai = ai;
     this.#summary = new Summarizer(config, store, ai);
+    this.#signal = signal;
   }
 
   public async arrange(topic: Topic, requestId: number) {
@@ -58,6 +61,24 @@ export class Notes {
 
   public async generate(job: Job<"summarize">): Promise<void> {
     const { topicId, requested } = job.payload;
+    const pendingSources = await this.#store.topics.messages(topicId);
+
+    await this.#store.jobs.reportProgress(
+      job.id,
+      "正在读取原文及转发卡片中的附件",
+    );
+    await Promise.all(
+      pendingSources.map(async (message) => {
+        const assets = await this.#store.assets.forMessage(message.id);
+
+        await Promise.all(
+          assets.map((asset) =>
+            waitForAsset(this.#store, message.groupId, asset.id, this.#signal),
+          ),
+        );
+      }),
+    );
+    // 附件解析会更新原文版本，完成后再读取本次整理的范围与版本。
     const topic = await this.#store.topics.get(topicId);
     const generation = topic.generation;
 
@@ -92,9 +113,8 @@ export class Notes {
       );
 
       await mkdir(directory, { recursive: true });
-      const images = await this.#store.assets.images(
-        sources.map((message) => message.id),
-      );
+      const images = () =>
+        this.#store.assets.images(sources.map((message) => message.id));
 
       await writeMarkdown(
         join(directory, "transcript.md"),
@@ -128,7 +148,7 @@ export class Notes {
         excerpt = (outline || content).slice(0, 600);
         await writeMarkdown(
           path,
-          `${header}\n\n> 草稿：整理尚未完成。\n\n${noteImages(content, images, directory)}\n\n${footer}`,
+          `${header}\n\n> 草稿：整理尚未完成。\n\n${noteImages(content, await images(), directory)}\n\n${footer}`,
         );
         await this.#store.jobs.reportProgress(
           job.id,
@@ -147,7 +167,7 @@ export class Notes {
         `正在合并相关观点。${excerpt ? `已整理内容摘录：${excerpt}。` : ""}草稿：${path}`,
       );
       content = await this.#summary.compose(topic, sections);
-      const markdown = `${header}\n\n${noteImages(content, images, directory) || "所选原文中没有找到与整理要求相关的内容。"}\n\n${footer}`;
+      const markdown = `${header}\n\n${noteImages(content, await images(), directory) || "所选原文中没有找到与整理要求相关的内容。"}\n\n${footer}`;
 
       await writeMarkdown(path, markdown);
       note = await this.#store.notes.save(

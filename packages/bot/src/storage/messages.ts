@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { Config } from "../config.ts";
 import type { IncomingMessage, JobPayloads, Message } from "../types.ts";
 import { beijingTime } from "../utils/time.ts";
+import { captureAssets } from "./assets.ts";
 import { enqueueJob } from "./jobs.ts";
 import { decodeContent, encodeContent } from "./message-content.ts";
 import type { Database, MessageRow } from "./schema.ts";
@@ -114,47 +115,7 @@ export class Messages {
       );
 
       if (!input.isBot) {
-        for (const segment of input.content) {
-          const kind = segment.type === "record" ? "audio" : segment.type;
-
-          if (
-            kind !== "audio" &&
-            kind !== "file" &&
-            kind !== "forward" &&
-            kind !== "image" &&
-            kind !== "video"
-          ) {
-            continue;
-          }
-
-          const reference = String(
-            segment.data.url ||
-              segment.data.id ||
-              segment.data.file_id ||
-              segment.data.file ||
-              "",
-          );
-
-          if (!reference) {
-            continue;
-          }
-
-          const asset = await db
-            .insertInto("assets")
-            .values({ messageId: message.id, kind, reference })
-            .onConflict((conflict) =>
-              conflict.columns(["messageId", "kind", "reference"]).doNothing(),
-            )
-            .returning("id")
-            .executeTakeFirst();
-
-          if (asset) {
-            await enqueueJob(db, "asset", `asset:${asset.id}`, {
-              assetId: asset.id,
-              groupId: input.groupId,
-            });
-          }
-        }
+        await captureAssets(db, message, input.content);
 
         if (!command) {
           const topics = await db

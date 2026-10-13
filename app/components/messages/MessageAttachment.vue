@@ -71,9 +71,7 @@ async function retry(): Promise<void> {
       重新解析
     </NButton>
     <details v-if="asset.interpretation" class="interpretation">
-      <summary>
-        {{ asset.kind === "forward" ? "查看转发内容" : "查看识别内容" }}
-      </summary>
+      <summary>查看识别内容</summary>
       <p>{{ asset.interpretation }}</p>
     </details>
   </section>

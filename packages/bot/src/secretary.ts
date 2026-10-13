@@ -24,7 +24,7 @@ export class Secretary {
     this.#store = store;
     this.#messenger = createMessenger(config, store, ctx);
     const ai = new Ai(config, store, this.#controller.signal);
-    const notes = new Notes(config, store, ai);
+    const notes = new Notes(config, store, ai, this.#controller.signal);
 
     this.#tasks = new BackgroundTasks(
       config,

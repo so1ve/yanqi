@@ -1,5 +1,6 @@
 import { Type } from "typebox";
 
+import { waitForAsset } from "../../tasks/assets.ts";
 import { taskStatus } from "../../tasks/status.ts";
 import type { ToolContext } from "./context.ts";
 import { object, tool } from "./context.ts";
@@ -73,9 +74,22 @@ export function taskTool(context: ToolContext) {
           if (job.state === "done" && !asset.interpretation && canParse) {
             await store.jobs.restart(message.groupId, id);
           }
+
+          if (action === "retry" && asset.kind === "forward") {
+            for (const child of await store.assets.inForward(asset)) {
+              const task = await store.jobs.forAsset(child.id);
+
+              if (task.state === "failed") {
+                await store.jobs.restart(message.groupId, task.id);
+              }
+            }
+          }
         }
 
-        const waiting = store.jobs.wait(message.groupId, id, signal);
+        const waiting =
+          job.kind === "asset" && "assetId" in job.payload
+            ? waitForAsset(store, message.groupId, job.payload.assetId, signal)
+            : store.jobs.wait(message.groupId, id, signal);
 
         wake();
         await waiting;

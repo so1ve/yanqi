@@ -9,6 +9,21 @@ export async function taskStatus(store: Store, groupId: string, id: number) {
   const topic =
     "topicId" in payload ? await store.topics.get(payload.topicId) : null;
   const note = topic ? await store.notes.find(topic.id) : null;
+  const attachments = asset
+    ? await Promise.all(
+        (await store.assets.inForward(asset)).map(async (child) => {
+          const task = await store.jobs.forAsset(child.id);
+
+          return {
+            assetId: child.id,
+            kind: child.kind,
+            taskId: task.id,
+            state: task.state,
+            error: child.error,
+          };
+        }),
+      )
+    : [];
 
   return {
     id: job.id,
@@ -55,7 +70,24 @@ export async function taskStatus(store: Store, groupId: string, id: number) {
           assetId: asset.id,
           messageId: `m${asset.messageId}`,
           fileSaved: asset.path !== null,
-          interpretation: asset.interpretation,
+          interpretation:
+            asset.kind === "forward" ? null : asset.interpretation,
+          ...(asset.kind === "forward"
+            ? {
+                attachments: {
+                  total: attachments.length,
+                  completed: attachments.filter((item) => item.state === "done")
+                    .length,
+                  pending: attachments.filter(
+                    (item) =>
+                      item.state === "pending" || item.state === "running",
+                  ).length,
+                  failed: attachments.filter((item) => item.error),
+                },
+                content:
+                  "转发原文及图片引用可通过上下文查询工具读取。wait 会等待卡片内的附件解析。",
+              }
+            : {}),
           error: asset.error,
           note:
             job.state === "done" && !asset.interpretation

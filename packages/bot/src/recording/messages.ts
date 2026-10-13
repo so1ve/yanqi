@@ -1,6 +1,8 @@
+import { attachmentReference } from "../onebot/content.ts";
 import type { Store } from "../storage/store.ts";
 import type { Asset, ChatMessage, Message } from "../types.ts";
 import { beijingTime } from "../utils/time.ts";
+import { contentText } from "./content.ts";
 
 async function messageText(
   store: Store,
@@ -14,39 +16,7 @@ async function messageText(
     return `[已发送纪要：${topic.title}，话题 ID：${topic.id}，第 ${note.revision} 版]\n${topic.description}`;
   }
 
-  const attachments = assets
-    .filter((asset) => asset.interpretation)
-    .map(
-      (asset) =>
-        `${asset.kind === "audio" ? `[附件 #${asset.id} 语音转写]` : `[附件 #${asset.id} ${asset.kind} 的识别结果，非用户发言]`}\n${asset.interpretation}`,
-    )
-    .join("\n");
-  const segments = message.content.flatMap((segment) => {
-    if (["at", "reply", "text"].includes(segment.type)) {
-      return [];
-    }
-
-    if (
-      ["audio", "file", "forward", "image", "record", "video"].includes(
-        segment.type,
-      )
-    ) {
-      return [
-        {
-          type: segment.type,
-          data: {
-            name: segment.data.name,
-            summary: segment.data.summary,
-            sub_type: segment.data.sub_type,
-          },
-        },
-      ];
-    }
-
-    return [segment];
-  });
-
-  return `${message.text}${segments.length > 0 ? `\n[消息片段] ${JSON.stringify(segments)}` : ""}${attachments ? `\n${attachments}` : ""}`;
+  return contentText(message.content, assets) || message.text;
 }
 
 export async function messageChunks(
@@ -60,19 +30,32 @@ export async function messageChunks(
 
   for (const message of messages) {
     const assets = await store.assets.forMessage(message.id);
-    const attachmentTasks = await Promise.all(
-      assets.map(async (asset) => {
-        const job = await store.jobs.forAsset(asset.id);
+    const references = message.content.flatMap((segment) => {
+      const ref = attachmentReference(segment);
 
-        return {
-          assetId: asset.id,
-          kind: asset.kind,
-          imageRef:
-            asset.kind === "image" && asset.path ? `asset:${asset.id}` : null,
-          taskId: job.id,
-          state: job.state,
-        };
-      }),
+      return ref ? [ref] : [];
+    });
+    const attachmentTasks = await Promise.all(
+      // 卡片的 wait 会等待卡片内的附件；不在每个文本分片重复附上所有图片任务。
+      assets
+        .filter((asset) =>
+          references.some(
+            (ref) =>
+              ref.kind === asset.kind && ref.reference === asset.reference,
+          ),
+        )
+        .map(async (asset) => {
+          const job = await store.jobs.forAsset(asset.id);
+
+          return {
+            assetId: asset.id,
+            kind: asset.kind,
+            imageRef:
+              asset.kind === "image" && asset.path ? `asset:${asset.id}` : null,
+            taskId: job.id,
+            state: job.state,
+          };
+        }),
     );
     const text = `${message.recalledAt ? `[该消息已于 ${beijingTime(message.recalledAt)} 撤回；以下为留存原文]\n` : ""}${await messageText(store, message, assets)}`;
     const quote = message.replyTo

@@ -1,14 +1,50 @@
 import assert from "node:assert/strict";
 
-import type { Asset } from "../types.ts";
+import {
+  attachmentReference,
+  forwardAttachments,
+  forwardMessages,
+} from "../onebot/content.ts";
+import type { Asset, Segment } from "../types.ts";
 import {
   assetPath,
   interpretationPath,
   readInterpretation,
 } from "./asset-files.ts";
 import { writeMarkdown } from "./files.ts";
+import { enqueueJob } from "./jobs.ts";
 import type { Database } from "./schema.ts";
 import { messageChanged } from "./topic-sources.ts";
+
+export async function captureAssets(
+  db: Database,
+  message: { id: number; groupId: string },
+  content: Iterable<Segment>,
+): Promise<void> {
+  for (const segment of content) {
+    const reference = attachmentReference(segment);
+
+    if (!reference) {
+      continue;
+    }
+
+    const asset = await db
+      .insertInto("assets")
+      .values({ messageId: message.id, ...reference })
+      .onConflict((conflict) =>
+        conflict.columns(["messageId", "kind", "reference"]).doNothing(),
+      )
+      .returning("id")
+      .executeTakeFirst();
+
+    if (asset) {
+      await enqueueJob(db, "asset", `asset:${asset.id}`, {
+        assetId: asset.id,
+        groupId: message.groupId,
+      });
+    }
+  }
+}
 
 export class Assets {
   #db: Database;
@@ -18,6 +54,37 @@ export class Assets {
   constructor(db: Database, directory: string) {
     this.#db = db;
     this.#directory = directory;
+  }
+
+  public capture(
+    message: { id: number; groupId: string },
+    content: Iterable<Segment>,
+  ): Promise<void> {
+    return this.#db
+      .transaction()
+      .execute((db) => captureAssets(db, message, content));
+  }
+
+  public async inForward(asset: Asset): Promise<Asset[]> {
+    if (asset.kind !== "forward" || !asset.interpretation) {
+      return [];
+    }
+
+    const references = new Set(
+      [
+        ...forwardAttachments(
+          forwardMessages(JSON.parse(asset.interpretation)),
+        ),
+      ].map((segment) => {
+        const ref = attachmentReference(segment)!;
+
+        return `${ref.kind}:${ref.reference}`;
+      }),
+    );
+
+    return (await this.forMessage(asset.messageId)).filter((child) =>
+      references.has(`${child.kind}:${child.reference}`),
+    );
   }
 
   public async file(groupId: string, name: string): Promise<Asset | undefined> {
