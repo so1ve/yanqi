@@ -63,7 +63,6 @@ export async function messageChunks(
         author: message.displayName,
         userId: message.userId,
         isBot: message.isBot,
-        command: message.command,
         mentions: message.content
           .filter((segment) => segment.type === "at")
           .map((segment) => String(segment.data.qq)),

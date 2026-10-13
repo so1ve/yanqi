@@ -16,8 +16,9 @@ export async function recordingRequests(
       },
       { additionalProperties: false },
     ),
-    `${conversationPrompts.recordingRequests}\n只判断 candidateIds 中的消息，其他消息仅作上下文。返回 {"requestIds":["记录相关的消息 ID"]}；没有相关消息时返回空数组。`,
+    `${conversationPrompts.recordingRequests}\n只判断 candidateIds 中的消息，其他消息仅作上下文。返回 {"requestIds":["有执行意图的消息 ID"]}；没有记录请求时返回空数组。`,
     { ...input, candidateIds },
+    { thinking: true },
   );
 
   return result.requestIds;

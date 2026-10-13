@@ -32,7 +32,7 @@ export function followTool(context: ToolContext) {
   return tool(
     context,
     "follow",
-    "开始或结束连续记录。只有要继续记录后续讨论时才 start；include 可在开始或结束时把已讨论的内容并入同一份记录。每位请求者在本群最多同时发起一段；stop 不填 topicId 时选请求者的记录，也可指定本群其他记录。只回顾已有内容用 record。",
+    "按用户当前的要求开始或结束连续记录。只有明确要求记录后续讨论时才 start，提到开始记录不等于要求执行；include 可在开始或结束时把已讨论的内容并入同一份记录。每位请求者在本群最多同时发起一段；stop 不填 topicId 时选请求者的记录，也可指定本群其他记录。只回顾已有内容用 record。",
     parameters,
     async (args) => {
       const owned = await store.topics.following(

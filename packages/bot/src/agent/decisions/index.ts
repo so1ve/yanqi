@@ -16,7 +16,7 @@ import { createOpenAIDecision } from "./openai.ts";
 import type { EvaluateDecision } from "./types.ts";
 
 const choiceSchema = Type.Object({
-  choice: Type.Enum(["related", "unrelated"]),
+  choice: Type.Enum(["process", "ignore"]),
   confidence: Type.Number({ minimum: 0, maximum: 1 }),
 });
 
@@ -94,8 +94,9 @@ export class Decisions {
         {
           instructions: `${conversationPrompts.recordingRequests}\n本题只判断 messages 中 ID 为 ${id} 的消息。`,
           criteria: {
-            related: "要求记录聊天内容，或提及群聊记录、纪要及相关操作",
-            unrelated: "不涉及群聊记录，如日常聊天或纯技术讨论",
+            process: "当前发言确实在要求小栖执行一项记录事务",
+            ignore:
+              "没有要求小栖执行；包括讨论记录功能、介绍权限、转述指令和闲聊",
           },
         },
       ]),
@@ -154,7 +155,7 @@ export class Decisions {
         throw new Error(`决策服务返回的消息 ${id} 的选项或置信度格式不正确`);
       }
 
-      const forward = answer.choice === "related";
+      const forward = answer.choice === "process";
 
       this.#logger.info(
         "%s %s：choice=%s confidence=%s 转交主 Agent=%s",

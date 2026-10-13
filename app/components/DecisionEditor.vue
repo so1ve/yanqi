@@ -23,8 +23,9 @@ function choose(provider: Config["DECISION_PROVIDER"]): void {
     <div class="section-title">
       <h2>记录请求识别</h2>
       <p>
-        识别未 @ 小栖的记录请求，交给主模型处理。@
-        小栖时直接处理。两种方式都需要交互权限。
+        识别未 @
+        小栖、但要求它执行记录事务的消息，交给主模型处理。仅讨论记录功能不会触发。@
+        小栖会直接交给主模型判断要做什么。两种方式都需要交互权限。
       </p>
     </div>
     <div aria-label="决策提供商" class="provider-grid" role="group">

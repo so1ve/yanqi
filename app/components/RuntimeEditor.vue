@@ -33,7 +33,7 @@ function update(key: NumericKey, value: number | null): void {
       <h2>运行参数</h2>
       <p>
         使用 DeepSeek
-        官方服务时，整理和合并纪要会启用思考。输出上限包含思考内容、正文和工具参数。
+        官方服务时，请求识别、整理和合并纪要会启用思考，普通回复关闭思考。输出上限包含思考内容、正文和工具参数。
       </p>
     </div>
     <FormGrid>
