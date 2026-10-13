@@ -411,8 +411,7 @@ export class Messages {
       .where((eb) =>
         eb(eb.fn<number>("contains_text", ["text", eb.val(query)]), ">", 0),
       )
-      .orderBy("id", "desc")
-      .limit(8)
+      .orderBy("id")
       .execute();
 
     return rows.map(decodeMessage);

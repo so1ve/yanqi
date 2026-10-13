@@ -65,10 +65,11 @@ export function logAgentEvents(
 
       case "tool_execution_start": {
         logger.info(
-          "%s 工具开始：%s call=%s",
+          "%s 工具开始：%s call=%s 参数=%s",
           label,
           event.toolName,
           event.toolCallId,
+          logDetail(JSON.stringify(event.args), config).slice(0, 500),
         );
         logger.debug(
           "%s 工具参数：call=%s\n%s",
