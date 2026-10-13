@@ -1,8 +1,12 @@
 import type { Store } from "../storage/store.ts";
-import type { ChatMessage, Message } from "../types.ts";
+import type { Asset, ChatMessage, Message } from "../types.ts";
 import { beijingTime } from "../utils/time.ts";
 
-async function messageText(store: Store, message: Message): Promise<string> {
+async function messageText(
+  store: Store,
+  message: Message,
+  assets: Asset[],
+): Promise<string> {
   if (message.noteId !== null) {
     const note = await store.notes.get(message.noteId);
     const topic = await store.topics.get(note.topicId);
@@ -10,29 +14,37 @@ async function messageText(store: Store, message: Message): Promise<string> {
     return `[已发送纪要：${topic.title}，话题 ID：${topic.id}，第 ${note.revision} 版]\n${topic.description}`;
   }
 
-  const attachments = (
-    await Promise.all(
-      (await store.assets.forMessage(message.id)).map(async (asset) => {
-        const job = await store.jobs.forAsset(asset.id);
-
-        return `[附件 #${asset.id} ${asset.kind}；任务 #${job.id} ${job.state}；文件${asset.path ? "已保存" : "未保存"}]\n${asset.interpretation ?? asset.error ?? (job.state === "done" ? "任务已结束，但没有识别结果；可用 task 等待解析" : "内容尚未解析，用 task 等待后读取最新结果")}`;
-      }),
+  const attachments = assets
+    .filter((asset) => asset.interpretation)
+    .map(
+      (asset) =>
+        `${asset.kind === "audio" ? `[附件 #${asset.id} 语音转写]` : `[附件 #${asset.id} ${asset.kind} 的识别结果，非用户发言]`}\n${asset.interpretation}`,
     )
-  ).join("\n");
-  const segments = message.content.filter(
-    (segment) =>
-      ![
-        "at",
-        "audio",
-        "file",
-        "forward",
-        "image",
-        "record",
-        "reply",
-        "text",
-        "video",
-      ].includes(segment.type),
-  );
+    .join("\n");
+  const segments = message.content.flatMap((segment) => {
+    if (["at", "reply", "text"].includes(segment.type)) {
+      return [];
+    }
+
+    if (
+      ["audio", "file", "forward", "image", "record", "video"].includes(
+        segment.type,
+      )
+    ) {
+      return [
+        {
+          type: segment.type,
+          data: {
+            name: segment.data.name,
+            summary: segment.data.summary,
+            sub_type: segment.data.sub_type,
+          },
+        },
+      ];
+    }
+
+    return [segment];
+  });
 
   return `${message.text}${segments.length > 0 ? `\n[消息片段] ${JSON.stringify(segments)}` : ""}${attachments ? `\n${attachments}` : ""}`;
 }
@@ -47,7 +59,20 @@ export async function messageChunks(
   let size = 2;
 
   for (const message of messages) {
-    const text = `${message.recalledAt ? `[该消息已于 ${beijingTime(message.recalledAt)} 撤回；以下为留存原文]\n` : ""}${await messageText(store, message)}`;
+    const assets = await store.assets.forMessage(message.id);
+    const attachmentTasks = await Promise.all(
+      assets.map(async (asset) => {
+        const job = await store.jobs.forAsset(asset.id);
+
+        return {
+          assetId: asset.id,
+          kind: asset.kind,
+          taskId: job.id,
+          state: job.state,
+        };
+      }),
+    );
+    const text = `${message.recalledAt ? `[该消息已于 ${beijingTime(message.recalledAt)} 撤回；以下为留存原文]\n` : ""}${await messageText(store, message, assets)}`;
     const quote = message.replyTo
       ? await store.messages.quoted(message.groupId, message.replyTo)
       : null;
@@ -68,6 +93,7 @@ export async function messageChunks(
           .map((segment) => String(segment.data.qq)),
         time: beijingTime(message.sentAt),
         text: text.slice(index * length, (index + 1) * length),
+        attachmentTasks,
         replyTo: quote
           ? `m${quote.id}`
           : message.replyTo

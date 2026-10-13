@@ -100,6 +100,12 @@ export interface ChatMessage {
   time: string;
   text: string;
   replyTo: string | null;
+  attachmentTasks: {
+    assetId: number;
+    kind: Asset["kind"];
+    taskId: number;
+    state: "pending" | "running" | "done" | "failed";
+  }[];
 }
 
 export interface Memory {

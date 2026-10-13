@@ -20,6 +20,13 @@ const choiceSchema = Type.Object({
   confidence: Type.Number({ minimum: 0, maximum: 1 }),
 });
 
+function decisionMessage(message: ChatMessage) {
+  // 决策只读聊天内容，后台附件任务留给主 Agent 处理。
+  const { attachmentTasks, ...content } = message;
+
+  return content;
+}
+
 function createIndependentDecision(config: Config): EvaluateDecision | null {
   switch (config.DECISION_PROVIDER) {
     case "llm": {
@@ -66,7 +73,10 @@ export class Decisions {
     messages: ChatMessage[],
     context: ChatMessage[],
   ): Promise<string[]> {
-    const input = { messages, context };
+    const input = {
+      messages: messages.map(decisionMessage),
+      context: context.map(decisionMessage),
+    };
     const ids = [...new Set(messages.map((message) => message.id))];
     const selected: string[] = [];
 
@@ -95,9 +105,9 @@ export class Decisions {
           instructions: `${conversationPrompts.requests}\n本题只判断 messages 中 ID 为 ${id} 的消息。`,
           criteria: {
             process:
-              "当前发言在直接叫小栖、向它提问、要求它回应、回答它的追问，或要求它执行记录事务",
+              "当前发言是在叫小栖、向它提问、要求它回应或执行事务，或补充它正在等待的必要资料；仅分享内容或表达情绪不属于请求",
             ignore:
-              "当前发言不需要小栖回应或执行；群友之间聊天，或只是在讨论它、介绍权限、转述指令",
+              "没有需要小栖执行或回答的当前请求；包括聊天、分享图片或表情、表达情绪、谈论机器人、转述指令，或无法确定是在要求它处理",
           },
         },
       ]),
