@@ -84,10 +84,8 @@ export function recordTools(context: ToolContext) {
           }
 
           await store.topics.setDirective(topic.id, "send", message.id);
-          await store.deliveries.enqueue(
-            `requested:${message.id}:${topic.id}:${note.revision}`,
-            { kind: "note", note, repeat: true },
-          );
+          const delivery = await store.deliveries.enqueueNote(note, message.id);
+
           wake();
 
           return {
@@ -95,7 +93,8 @@ export function recordTools(context: ToolContext) {
             title: topic.title,
             revision: note.revision,
             path: note.path,
-            state: "sending",
+            state: "saved",
+            delivery,
           };
         }
 

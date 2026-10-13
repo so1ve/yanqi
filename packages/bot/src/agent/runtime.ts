@@ -265,7 +265,7 @@ export class AgentRuntime {
     });
 
     logAgentEvents(agent, config, label);
-    // 只限制每轮模型请求；等待后台任务由工具自己的期限控制。
+    // 只限制每轮模型请求；工具等待结果期间不计入模型超时。
     agent.subscribe((event) => {
       if (event.type === "message_end" && event.message.role === "assistant") {
         clearTimeout(timeout);

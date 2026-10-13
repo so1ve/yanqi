@@ -26,7 +26,7 @@ export function taskTool(context: ToolContext) {
   return tool(
     context,
     "task",
-    "inspect 查看指定任务；wait 最多等 30 秒并读取结果或已有进度，未完成可以继续等；retry 重试指定失败任务并等待。询问附件内容时先等对应任务。status 查看本群任务状态；retry_failed 重试本群失败的后台任务和发送。对话请求不能重试或等待。",
+    "inspect 查看指定任务；wait 等到完成、失败、取消或安排延后重试才返回，不定时唤醒。retry 重试指定失败任务并等待。询问附件内容时先等对应任务。status 查看本群后台任务和近期纪要结果；retry_failed 重试本群失败的后台任务和发送。对话请求不能重试或等待，其失败不代表后台整理失败。不要循环 inspect 或 status；需要结果时用 wait，已安排延后重试时说明原因和时间后结束。",
     parameters,
     async (args, signal) => {
       if (args.action === "status") {
@@ -75,7 +75,7 @@ export function taskTool(context: ToolContext) {
           }
         }
 
-        const waiting = store.jobs.wait(message.groupId, id, 30_000, signal);
+        const waiting = store.jobs.wait(message.groupId, id, signal);
 
         wake();
         await waiting;

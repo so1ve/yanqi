@@ -28,14 +28,14 @@ export function replyTool(context: ToolContext, subagents: Subagents) {
 
       const key = `command:${message.id}`;
 
-      await store.deliveries.enqueue(key, {
+      const delivery = await store.deliveries.enqueue(key, {
         kind: "text",
         groupId: message.groupId,
         content: text,
       });
 
       wake();
-      const state = await store.deliveries.wait(key, signal);
+      const state = await store.deliveries.wait(delivery.id, signal);
 
       return {
         state,
@@ -44,7 +44,7 @@ export function replyTool(context: ToolContext, subagents: Subagents) {
             ? "答复已发到 QQ 群，本次对话结束。"
             : state === "failed"
               ? "QQ 发送失败，回复已保留，可以重试发送。"
-              : "QQ 尚未确认发送，回复已保留，不要重复回复或声称已发送。",
+              : "回复已取消，不要声称已发送。",
       };
     },
   );
@@ -60,7 +60,7 @@ export function notifyTool(context: ToolContext) {
     object({ text: Type.String({ minLength: 1, pattern: "\\S" }) }),
     async ({ text }, signal) => {
       const key = `progress:${message.id}`;
-      const added = await store.deliveries.enqueue(key, {
+      const delivery = await store.deliveries.enqueue(key, {
         kind: "text",
         groupId: message.groupId,
         content: text,
@@ -69,8 +69,7 @@ export function notifyTool(context: ToolContext) {
       wake();
 
       return {
-        state: await store.deliveries.wait(key, signal),
-        repeated: !added,
+        state: await store.deliveries.wait(delivery.id, signal),
         message: "本次请求的进度提示只发送一次，请继续处理。",
       };
     },

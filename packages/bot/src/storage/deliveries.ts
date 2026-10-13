@@ -1,4 +1,4 @@
-import { setTimeout as delay } from "node:timers/promises";
+import { EventEmitter, on } from "node:events";
 
 import { Logger } from "@koishijs/core";
 
@@ -13,13 +13,24 @@ type Outgoing =
 export class DeliveryQueue {
   #db: Database;
   #logger = new Logger("yanqi:delivery");
+  #changes = new EventEmitter();
 
   constructor(db: Database) {
     this.#db = db;
   }
 
-  public enqueue(key: string, outgoing: Outgoing): Promise<boolean> {
-    return this.#db.transaction().execute(async (db) => {
+  public enqueueNote(note: Note, requestId?: number) {
+    return this.enqueue(
+      requestId === undefined
+        ? `auto-note:${note.id}`
+        : `requested:${requestId}:note:${note.id}`,
+      { kind: "note", note, repeat: requestId !== undefined },
+    );
+  }
+
+  public async enqueue(key: string, outgoing: Outgoing) {
+    let cancelled: { id: number }[] = [];
+    const delivery = await this.#db.transaction().execute(async (db) => {
       const note = outgoing.kind === "text" ? null : outgoing.note;
       const repeat = outgoing.kind === "note" && outgoing.repeat;
       let existing = await db
@@ -29,27 +40,23 @@ export class DeliveryQueue {
         .executeTakeFirst();
 
       if (note && outgoing.kind === "note") {
-        await db
+        cancelled = await db
           .updateTable("deliveries")
           .set({ state: "cancelled" })
           .where("noteId", "=", note.id)
           .where("kind", "=", "text")
           .where("state", "=", "pending")
+          .returning("id")
           .execute();
       }
 
-      if (!existing && note) {
-        existing = (
-          await db
-            .selectFrom("deliveries")
-            .selectAll()
-            .where("noteId", "=", note.id)
-            .execute()
-        ).find((item) =>
-          repeat
-            ? item.kind === "note" && item.state === "pending"
-            : item.state === "pending" || item.state === "done",
-        );
+      if (!existing && note && !repeat) {
+        existing = await db
+          .selectFrom("deliveries")
+          .selectAll()
+          .where("noteId", "=", note.id)
+          .where("state", "in", ["pending", "done"])
+          .executeTakeFirst();
       }
 
       if (existing) {
@@ -59,7 +66,7 @@ export class DeliveryQueue {
           existing.id,
         );
 
-        return false;
+        return existing;
       }
 
       const delivery = await db
@@ -91,8 +98,14 @@ export class DeliveryQueue {
         delivery.noteId,
       );
 
-      return true;
+      return delivery;
     });
+
+    for (const { id } of cancelled) {
+      this.#changes.emit(String(id));
+    }
+
+    return { id: delivery.id, kind: delivery.kind, state: delivery.state };
   }
 
   public async isPending(id: number): Promise<boolean> {
@@ -106,27 +119,40 @@ export class DeliveryQueue {
     );
   }
 
-  public async wait(key: string, signal?: AbortSignal) {
-    const deadline = Date.now() + 40_000;
+  public async wait(id: number, signal?: AbortSignal) {
+    const changes = on(this.#changes, String(id), { signal });
 
-    while (true) {
-      signal?.throwIfAborted();
-      const delivery = await this.#db
-        .selectFrom("deliveries")
-        .select("state")
-        .where("key", "=", key)
-        .executeTakeFirst();
+    try {
+      while (true) {
+        signal?.throwIfAborted();
+        const delivery = await this.#db
+          .selectFrom("deliveries")
+          .select("state")
+          .where("id", "=", id)
+          .executeTakeFirstOrThrow();
 
-      if (!delivery) {
-        throw new Error("回复尚未提交发送");
+        if (delivery.state !== "pending") {
+          return delivery.state;
+        }
+
+        await changes.next();
       }
-
-      if (delivery.state !== "pending" || Date.now() >= deadline) {
-        return delivery.state;
-      }
-
-      await delay(100, undefined, { signal });
+    } finally {
+      await changes.return!();
     }
+  }
+
+  public forRequest(requestId: number) {
+    return this.#db
+      .selectFrom("deliveries")
+      .select(["id", "kind", "state", "noteId", "topicId"])
+      .where((eb) =>
+        eb.or([
+          eb("key", "like", `requested:${requestId}:%`),
+          eb("key", "=", `command:${requestId}`),
+        ]),
+      )
+      .execute();
   }
 
   public forNote(noteId: number) {
@@ -158,6 +184,7 @@ export class DeliveryQueue {
       .set({ state: "done" })
       .where("id", "=", id)
       .execute();
+    this.#changes.emit(String(id));
   }
 
   public async cancel(id: number): Promise<void> {
@@ -167,6 +194,7 @@ export class DeliveryQueue {
       .where("id", "=", id)
       .where("state", "=", "pending")
       .execute();
+    this.#changes.emit(String(id));
   }
 
   public async fail(id: number): Promise<void> {
@@ -175,6 +203,7 @@ export class DeliveryQueue {
       .set({ state: "failed" })
       .where("id", "=", id)
       .execute();
+    this.#changes.emit(String(id));
   }
 
   public async retryFailed(groupId: string): Promise<number> {

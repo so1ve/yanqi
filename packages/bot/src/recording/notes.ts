@@ -31,18 +31,17 @@ export class Notes {
     const record = { topicId: topic.id, title: topic.title };
 
     if (note?.generation === topic.generation) {
-      if (topic.directive === "send") {
-        await this.#store.deliveries.enqueue(
-          `requested:${requestId}:${topic.id}`,
-          { kind: "note", note, repeat: true },
-        );
-      }
+      const delivery =
+        topic.directive === "send"
+          ? await this.#store.deliveries.enqueueNote(note, requestId)
+          : null;
 
       return {
         ...record,
         revision: note.revision,
         path: note.path,
-        state: topic.directive === "send" ? "sending" : "saved",
+        state: "saved",
+        delivery,
       };
     }
 

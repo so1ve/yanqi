@@ -222,6 +222,18 @@ export class BackgroundTasks {
         logDetail(error, this.#config),
       );
       if (job.kind === "intent") {
+        const deliveries = await this.#store.deliveries.forRequest(
+          job.payload.messageId,
+        );
+
+        if (
+          deliveries.some(
+            ({ state }) => state === "pending" || state === "done",
+          )
+        ) {
+          return;
+        }
+
         await this.#store.deliveries.enqueue(
           `command:${job.payload.messageId}`,
           {
@@ -231,10 +243,10 @@ export class BackgroundTasks {
               error instanceof BudgetExceeded
                 ? error.message
                 : error instanceof AiError
-                  ? `${error.stage}失败，这次请求未完成。`
+                  ? `${error.stage}时出错，本次对话已中断。`
                   : error instanceof AiSizeError
-                    ? "AI 输出达到长度限制，这次请求未完成。"
-                    : "这次请求未完成，具体原因请查看运行日志。",
+                    ? "AI 输出达到长度限制，本次对话已中断。"
+                    : "本次对话已中断，具体原因请查看运行日志。",
           },
         );
       }

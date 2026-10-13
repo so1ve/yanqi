@@ -96,10 +96,10 @@ export async function publishNote(
   );
 
   if (action === "send") {
-    await store.deliveries.enqueue(`auto-note:${note.id}`, {
-      kind: "note",
+    await store.deliveries.enqueueNote(
       note,
-    });
+      topic.directiveMessageId ?? undefined,
+    );
   } else if (action === "notify") {
     await store.deliveries.enqueue(`ack:${note.id}`, {
       kind: "saved",

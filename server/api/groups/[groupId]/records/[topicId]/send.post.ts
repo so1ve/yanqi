@@ -50,13 +50,16 @@ export default defineEventHandler(async (event) => {
     .set({ directive: "send" })
     .where("id", "=", topic.id)
     .execute();
-  const queued = await bot.store.deliveries.enqueue(`console:${randomUUID()}`, {
-    kind: "note",
-    note,
-    repeat: true,
-  });
+  const delivery = await bot.store.deliveries.enqueue(
+    `console:${randomUUID()}`,
+    {
+      kind: "note",
+      note,
+      repeat: true,
+    },
+  );
 
   bot.wake();
 
-  return { queued };
+  return { queued: delivery.state === "pending" };
 });

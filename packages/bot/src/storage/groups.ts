@@ -75,6 +75,7 @@ export class Groups {
         .select((eb) => eb.fn.countAll<number>().as("count"))
         .executeTakeFirstOrThrow(),
       jobs
+        .where("kind", "not in", ["intent", "observe"])
         .where("state", "in", ["pending", "running"])
         .select((eb) => eb.fn.countAll<number>().as("count"))
         .executeTakeFirstOrThrow(),

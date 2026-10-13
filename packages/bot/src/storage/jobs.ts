@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { setTimeout as delay } from "node:timers/promises";
+import { EventEmitter, on } from "node:events";
 
 import { Logger } from "@koishijs/core";
 
@@ -62,7 +62,7 @@ export async function enqueueJob<K extends JobKind>(
 
 export class JobQueue {
   #db: Database;
-  #waiting = new Set<number>();
+  #changes = new EventEmitter();
 
   constructor(db: Database) {
     this.#db = db;
@@ -172,7 +172,8 @@ export class JobQueue {
       // 等待工具所需的任务优先，其他任务仍按入队顺序处理。
       pending.sort(
         (a, b) =>
-          Number(this.#waiting.has(b.id)) - Number(this.#waiting.has(a.id)),
+          Number(this.#changes.listenerCount(String(b.id)) > 0) -
+          Number(this.#changes.listenerCount(String(a.id)) > 0),
       );
       const busyRequests =
         kind === "intent"
@@ -295,7 +296,10 @@ export class JobQueue {
     const rows = await this.#db
       .selectFrom("jobs")
       .selectAll()
-      .where("state", "!=", "done")
+      .where("kind", "not in", ["intent", "observe"])
+      .where((eb) =>
+        eb.or([eb("state", "!=", "done"), eb("kind", "=", "summarize")]),
+      )
       .where((eb) =>
         eb(
           eb.fn<string>("json_extract", ["payload", eb.val("$.groupId")]),
@@ -335,15 +339,10 @@ export class JobQueue {
     return result.numUpdatedRows === 1n;
   }
 
-  public async wait(
-    groupId: string,
-    id: number,
-    timeoutMs: number,
-    signal?: AbortSignal,
-  ) {
-    const deadline = Date.now() + timeoutMs;
+  public async wait(groupId: string, id: number, signal?: AbortSignal) {
+    // 先订阅再读取，避免任务恰好在读取期间完成而漏掉通知。
+    const changes = on(this.#changes, String(id), { signal });
 
-    this.#waiting.add(id);
     try {
       while (true) {
         signal?.throwIfAborted();
@@ -356,16 +355,15 @@ export class JobQueue {
         if (
           job.state === "done" ||
           job.state === "failed" ||
-          Date.now() >= deadline ||
-          (job.state === "pending" && job.runAfter > deadline)
+          (job.state === "pending" && job.lastError !== null)
         ) {
           return job;
         }
 
-        await delay(200, undefined, { signal });
+        await changes.next();
       }
     } finally {
-      this.#waiting.delete(id);
+      await changes.return!();
     }
   }
 
@@ -375,6 +373,60 @@ export class JobQueue {
       .set({ state: "done", lastError: null })
       .where("id", "=", id)
       .execute();
+    this.#changes.emit(String(id));
+  }
+
+  public async cancel(groupId: string, id: number) {
+    const result = await this.#db.transaction().execute(async (db) => {
+      const row = await db
+        .selectFrom("jobs")
+        .selectAll()
+        .where("id", "=", id)
+        .where((eb) =>
+          eb(
+            eb.fn<string>("json_extract", ["payload", eb.val("$.groupId")]),
+            "=",
+            groupId,
+          ),
+        )
+        .executeTakeFirst();
+
+      if (!row) {
+        return "missing" as const;
+      }
+
+      if (row.state === "running") {
+        return "running" as const;
+      }
+
+      const job = decodeJob(row);
+
+      if (job.kind === "detect" && "messageIds" in job.payload) {
+        const through = Math.max(0, ...job.payload.messageIds);
+
+        await db
+          .updateTable("groups")
+          .set((eb) => ({
+            cursor: eb.fn<number>("max", ["cursor", eb.val(through)]),
+          }))
+          .where("id", "=", groupId)
+          .execute();
+      }
+
+      await db
+        .updateTable("jobs")
+        .set({ state: "done", lastError: "管理员取消", progress: "已取消" })
+        .where("id", "=", id)
+        .execute();
+
+      return "cancelled" as const;
+    });
+
+    if (result === "cancelled") {
+      this.#changes.emit(String(id));
+    }
+
+    return result;
   }
 
   public async reportProgress(id: number, progress: string): Promise<void> {
@@ -399,6 +451,7 @@ export class JobQueue {
       })
       .where("id", "=", job.id)
       .execute();
+    this.#changes.emit(String(job.id));
   }
 
   public forTopic(topicId: string) {
@@ -443,6 +496,7 @@ export class JobQueue {
       })
       .where("id", "=", job.id)
       .execute();
+    this.#changes.emit(String(job.id));
 
     return { state, runAfter };
   }
@@ -450,7 +504,12 @@ export class JobQueue {
   public async retryFailed(groupId: string): Promise<number> {
     const result = await this.#db
       .updateTable("jobs")
-      .set({ state: "pending", attempts: 0, runAfter: Date.now() })
+      .set({
+        state: "pending",
+        attempts: 0,
+        runAfter: Date.now(),
+        lastError: null,
+      })
       .where("kind", "not in", ["intent", "observe"])
       .where("state", "=", "failed")
       .where((eb) =>

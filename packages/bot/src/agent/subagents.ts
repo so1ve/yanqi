@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { setTimeout as delay } from "node:timers/promises";
+import { addAbortListener } from "node:events";
 
 import type { Static } from "typebox";
 import { Type } from "typebox";
@@ -43,11 +43,7 @@ const parameters = Type.Union([
     task: taskDescription,
   }),
   object({
-    action: Type.Union([
-      Type.Literal("wait"),
-      Type.Literal("inspect"),
-      Type.Literal("cancel"),
-    ]),
+    action: Type.Union([Type.Literal("wait"), Type.Literal("cancel")]),
     id: Type.String(),
   }),
 ]);
@@ -81,7 +77,7 @@ export class Subagents {
     return tool(
       this.#context,
       "subagent",
-      "委派只读助手。start 必须选择 kind：history 查聊天、确定讨论范围或提取信息，可带 scope；notes 查已保存纪要、理解内容或比较版本，task 写明文档线索和版本。两类工具互不混用，不能修改数据、发言或再委派。任务同时涉及原文和纪要时分别委派并汇合简报。助手先查元数据，再用句柄读正文。最多同时运行两个。start 最多等 5 秒，wait 最多等 30 秒，有新元数据、简报或完成结果时立即返回，可继续 wait。metadata 表示资料规模和范围，不代表已读正文；等待超时不说明内容很多。inspect 立即查看；cancel 放弃任务。最终 reply 前须完成或取消查阅任务。",
+      "委派只读助手。start 必须选择 kind：history 查聊天、确定讨论范围或提取信息，可带 scope；notes 查已保存纪要、理解内容或比较版本，task 写明文档线索和版本。两类工具互不混用，不能修改数据、发言或再委派。任务同时涉及原文和纪要时分别委派并汇合简报。助手先查元数据，再用句柄读正文。最多同时运行两个。start 立即返回任务 ID；wait 等到新元数据、简报或完成结果才返回，不定时唤醒。metadata 表示资料规模和范围，不代表已读正文。cancel 放弃任务。最终 reply 前须完成或取消查阅任务。",
       parameters,
       async (args, signal) => {
         const id = args.action === "start" ? this.#start(args) : args.id;
@@ -94,24 +90,20 @@ export class Subagents {
         if (args.action === "cancel") {
           run.controller.abort();
           await run.finished;
-        } else if (
-          (args.action === "start" || args.action === "wait") &&
-          run.work.state === "running"
-        ) {
-          const timer = new AbortController();
+        } else if (args.action === "wait" && run.work.state === "running") {
+          const aborted = Promise.withResolvers<never>();
+          const listener = signal
+            ? addAbortListener(signal, () => aborted.reject(signal.reason))
+            : undefined;
 
           try {
             await Promise.race([
               run.finished,
               run.work.updated.promise,
-              delay(args.action === "start" ? 5000 : 30_000, undefined, {
-                signal: signal
-                  ? AbortSignal.any([signal, timer.signal])
-                  : timer.signal,
-              }),
+              aborted.promise,
             ]);
           } finally {
-            timer.abort();
+            listener?.[Symbol.dispose]();
           }
         }
 
