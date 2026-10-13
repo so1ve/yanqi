@@ -2,7 +2,7 @@
 import type { TagProps } from "naive-ui";
 import { computed } from "vue";
 
-import { stateNames } from "~/utils/api";
+import { stateNames } from "~/utils/labels";
 
 const props = defineProps<{ state: string }>();
 const types: Record<string, TagProps["type"]> = {

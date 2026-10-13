@@ -6,7 +6,7 @@ import { computed, h, ref } from "vue";
 import { useApiData } from "~/composables/useApiData";
 import { useWorkspace } from "~/composables/useWorkspace";
 import type { Usage } from "~/types/api";
-import { formatNumber } from "~/utils/api";
+import { formatNumber } from "~/utils/format";
 
 const { groupId, group } = useWorkspace();
 const day = ref(

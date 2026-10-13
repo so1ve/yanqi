@@ -3,6 +3,8 @@ import { DeviceFloppy, ExternalLink } from "@vicons/tabler";
 import type { Config } from "@yanqi/bot";
 import { computed, ref, watch } from "vue";
 
+import ModelsForm from "~/components/settings/ModelsForm.vue";
+import PasswordForm from "~/components/settings/PasswordForm.vue";
 import { useAction } from "~/composables/useAction";
 import { useApiData } from "~/composables/useApiData";
 import { useWorkspace } from "~/composables/useWorkspace";
@@ -28,14 +30,6 @@ watch(data, (value) => {
 const safeNapcatUrl = computed(() =>
   /^https?:\/\//.test(napcatWebUrl.value) ? napcatWebUrl.value : "",
 );
-function enable(
-  kind: "AI_VISION_MODEL" | "AI_AUDIO_MODEL",
-  value: boolean,
-): void {
-  if (draft.value) {
-    draft.value[kind] = value ? { baseURL: "", apiKey: "", model: "" } : null;
-  }
-}
 async function save(): Promise<void> {
   if (!draft.value) {
     return;
@@ -52,23 +46,6 @@ async function save(): Promise<void> {
     });
     await workspace.refresh();
   }, "设置已保存并应用");
-}
-const currentPassword = ref("");
-const newPassword = ref("");
-async function password(): Promise<void> {
-  if (
-    await run(
-      () =>
-        api("password", {
-          method: "PUT",
-          body: { current: currentPassword.value, password: newPassword.value },
-        }),
-      "密码已修改，其他登录已失效",
-    )
-  ) {
-    currentPassword.value = "";
-    newPassword.value = "";
-  }
 }
 </script>
 
@@ -164,47 +141,7 @@ async function password(): Promise<void> {
           </NForm>
         </NTabPane>
         <NTabPane name="models" tab="模型服务">
-          <NForm>
-            <ModelEditor
-              v-model="draft.AI_MODEL"
-              description="理解请求、整理纪要和回复群消息。"
-              title="主模型"
-            />
-            <div class="model-card-head">
-              <div>
-                <h3>图片理解</h3>
-                <p class="form-help">
-                  识别图片中的文字、代码和画面。关闭后仍保存原图。
-                </p>
-              </div>
-              <NSwitch
-                :value="draft.AI_VISION_MODEL !== null"
-                @update:value="enable('AI_VISION_MODEL', $event)"
-              />
-            </div>
-            <ModelEditor
-              v-if="draft.AI_VISION_MODEL"
-              v-model="draft.AI_VISION_MODEL"
-              description="服务需要支持 OpenAI 兼容的图片输入。"
-              title="视觉模型"
-            />
-            <div class="model-card-head">
-              <div>
-                <h3>语音转写</h3>
-                <p class="form-help">把语音转成文字。关闭后仍保存原始音频。</p>
-              </div>
-              <NSwitch
-                :value="draft.AI_AUDIO_MODEL !== null"
-                @update:value="enable('AI_AUDIO_MODEL', $event)"
-              />
-            </div>
-            <ModelEditor
-              v-if="draft.AI_AUDIO_MODEL"
-              v-model="draft.AI_AUDIO_MODEL"
-              description="服务需要支持 /audio/transcriptions。"
-              title="语音模型"
-            />
-          </NForm>
+          <ModelsForm v-model="draft" />
         </NTabPane>
         <NTabPane name="decision" tab="请求识别">
           <NForm>
@@ -230,39 +167,7 @@ async function password(): Promise<void> {
           <NForm><RuntimeEditor v-model="draft" /></NForm>
         </NTabPane>
         <NTabPane name="security" tab="管理密码">
-          <NForm
-            class="settings-section password-form"
-            @submit.prevent="password"
-          >
-            <div class="section-title">
-              <h2>修改管理密码</h2>
-              <p>修改后，其他已登录的设备需要重新登录。</p>
-            </div>
-            <NFormItem label="当前密码">
-              <NInput
-                v-model:value="currentPassword"
-                autocomplete="current-password"
-                type="password"
-              />
-            </NFormItem>
-            <NFormItem label="新密码">
-              <NInput
-                v-model:value="newPassword"
-                autocomplete="new-password"
-                placeholder="至少 10 个字符"
-                show-password-on="click"
-                type="password"
-              />
-            </NFormItem>
-            <NButton
-              attr-type="submit"
-              :disabled="newPassword.length < 10 || !currentPassword"
-              :loading="busy"
-              type="primary"
-            >
-              修改密码
-            </NButton>
-          </NForm>
+          <PasswordForm />
         </NTabPane>
       </NTabs>
     </template>

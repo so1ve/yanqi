@@ -9,21 +9,29 @@ export default defineEventHandler(async (event) => {
 
   const input = await body(
     event,
-    Type.Object({
-      enabled: Type.Boolean(),
-      automatic: Type.Boolean(),
-      admins: Type.Array(Type.String({ pattern: "^\\d+$" }), {
-        maxItems: 1000,
+    Type.Partial(
+      Type.Object({
+        enabled: Type.Boolean(),
+        automatic: Type.Boolean(),
+        admins: Type.Array(Type.String({ pattern: "^\\d+$" }), {
+          maxItems: 1000,
+        }),
       }),
-    }),
+    ),
   );
   const saved = await settings.load();
   const { config } = saved;
 
-  config.GROUP_IDS = input.enabled
-    ? [...new Set([...config.GROUP_IDS, groupId])]
-    : config.GROUP_IDS.filter((id) => id !== groupId);
-  config.GROUP_ADMINS[groupId] = [...new Set(input.admins)];
+  if (input.enabled !== undefined) {
+    config.GROUP_IDS = input.enabled
+      ? [...new Set([...config.GROUP_IDS, groupId])]
+      : config.GROUP_IDS.filter((id) => id !== groupId);
+  }
+
+  if (input.admins !== undefined) {
+    config.GROUP_ADMINS[groupId] = [...new Set(input.admins)];
+  }
+
   if (config.GROUP_IDS.length === 0 && bot.running) {
     throw createError({
       statusCode: 409,
@@ -32,7 +40,10 @@ export default defineEventHandler(async (event) => {
   }
 
   await bot.database.upsert("groups", [
-    { id: groupId, aiEnabled: input.automatic },
+    {
+      id: groupId,
+      ...(input.automatic === undefined ? {} : { aiEnabled: input.automatic }),
+    },
   ]);
   await settings.save(saved);
   await bot.configure(config);

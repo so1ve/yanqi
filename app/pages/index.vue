@@ -6,7 +6,8 @@ import { useApiData } from "~/composables/useApiData";
 import { usePoll } from "~/composables/usePoll";
 import { useWorkspace } from "~/composables/useWorkspace";
 import type { Overview } from "~/types/api";
-import { formatNumber, formatTime, kindNames } from "~/utils/api";
+import { formatNumber, formatTime } from "~/utils/format";
+import { kindNames } from "~/utils/labels";
 
 const { data, loading, error, refresh } = useApiData<Overview>("overview");
 const { groupId, groups, status } = useWorkspace();

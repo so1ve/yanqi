@@ -8,15 +8,20 @@ import {
   Trash,
 } from "@vicons/tabler";
 import { useDialog } from "naive-ui";
-import { computed, ref, watch } from "vue";
+import { computed, ref } from "vue";
 
 import { navigateTo, useRoute } from "#imports";
+import NoteEditor from "~/components/records/NoteEditor.vue";
+import RegenerateDialog from "~/components/records/RegenerateDialog.vue";
+import TranscriptView from "~/components/records/TranscriptView.vue";
 import { useAction } from "~/composables/useAction";
 import { useApiData } from "~/composables/useApiData";
 import { usePoll } from "~/composables/usePoll";
 import { useWorkspace } from "~/composables/useWorkspace";
 import type { RecordDetail } from "~/types/api";
-import { api, formatTime } from "~/utils/api";
+import { api } from "~/utils/api";
+import { downloadText } from "~/utils/download";
+import { formatTime } from "~/utils/format";
 
 const route = useRoute();
 const { groupId, group, status } = useWorkspace();
@@ -35,27 +40,9 @@ const { data, loading, error, refresh } = useApiData<RecordDetail>(() =>
 );
 const tab = ref("note");
 const editing = ref(false);
-const markdown = ref("");
-const focus = ref("");
 const showRegenerate = ref(false);
-const {
-  data: original,
-  error: originalError,
-  loading: originalLoading,
-  refresh: refreshOriginal,
-} = useApiData<string>(() =>
-  tab.value === "original" && data.value?.note
-    ? `${base.value}/transcript?version=${data.value.note.id}`
-    : "",
-);
 const { busy, run } = useAction();
 const dialog = useDialog();
-watch(data, (value) => {
-  if (value && !editing.value) {
-    markdown.value = value.note?.markdown ?? "";
-    focus.value = value.topic.focus;
-  }
-});
 usePoll(async () => {
   if (
     !editing.value &&
@@ -73,58 +60,35 @@ const options = computed(
       value: item.id,
     })) ?? [],
 );
-async function save(): Promise<void> {
-  if (!data.value?.note) {
-    return;
-  }
-  if (
-    await run(
-      () =>
-        api(`${base.value}/content`, {
-          method: "PUT",
-          body: { noteId: data.value!.note!.id, markdown: markdown.value },
-        }),
-      "已保存为新版本",
-    )
-  ) {
-    editing.value = false;
-    version.value = null;
-    await refresh();
-  }
+async function saved(): Promise<void> {
+  editing.value = false;
+  version.value = null;
+  await refresh();
 }
+
 function send(): void {
+  const note = data.value!.note!;
+  const path = `groups/${note.groupId}/records/${note.topicId}/send`;
+
   dialog.info({
     title: "发送纪要到群",
-    content: `发送第 ${data.value!.note!.revision} 版到「${group.value?.name ?? groupId.value}」？`,
+    content: `发送第 ${note.revision} 版到「${group.value?.name ?? groupId.value}」？`,
     positiveText: "发送到群",
     negativeText: "取消",
     onPositiveClick: () =>
       run(
         () =>
-          api(`${base.value}/send`, {
+          api(path, {
             method: "POST",
-            body: { noteId: data.value!.note!.id },
+            body: { noteId: note.id },
           }),
         "已安排发送",
       ),
   });
 }
-async function regenerate(): Promise<void> {
-  if (
-    await run(
-      () =>
-        api(`${base.value}/summarize`, {
-          method: "POST",
-          body: { focus: focus.value },
-        }),
-      "已安排重新整理",
-    )
-  ) {
-    showRegenerate.value = false;
-    await refresh();
-  }
-}
 function remove(): void {
+  const path = base.value;
+
   dialog.warning({
     title: "删除这篇纪要？",
     content: "纪要的全部版本和本地导出文件都会删除，原始群消息会保留。",
@@ -132,7 +96,7 @@ function remove(): void {
     negativeText: "取消",
     onPositiveClick: async () => {
       const result = await run(
-        () => api(base.value, { method: "DELETE" }),
+        () => api(path, { method: "DELETE" }),
         "纪要已删除",
       );
       if (result) {
@@ -147,16 +111,11 @@ function download(): void {
   if (!data.value?.note) {
     return;
   }
-  const url = URL.createObjectURL(
-    new Blob([data.value.note.markdown], {
-      type: "text/markdown;charset=utf-8",
-    }),
+  downloadText(
+    `${data.value.topic.title.replace(/[\\/:*?"<>|]/g, "_")}.md`,
+    data.value.note.markdown,
+    "text/markdown",
   );
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `${data.value.topic.title.replace(/[\\/:*?"<>|]/g, "_")}.md`;
-  anchor.click();
-  URL.revokeObjectURL(url);
 }
 </script>
 
@@ -169,7 +128,12 @@ function download(): void {
     :description="group?.name ?? groupId"
     :title="data?.topic.title ?? '纪要'"
   >
-    <NButton aria-label="刷新纪要" :loading @click="refresh">
+    <NButton
+      aria-label="刷新纪要"
+      :disabled="editing"
+      :loading
+      @click="refresh"
+    >
       <template #icon><NIcon :component="Refresh" /></template>
     </NButton>
     <NButton v-if="data?.note" @click="download">
@@ -250,27 +214,12 @@ function download(): void {
       </NAlert>
       <NTabs v-model:value="tab" animated type="line">
         <NTabPane name="note" tab="纪要正文">
-          <div v-if="editing" class="panel panel-body">
-            <NInput
-              v-model:value="markdown"
-              :autosize="{ minRows: 20, maxRows: 45 }"
-              placeholder="Markdown 正文"
-              type="textarea"
-            />
-            <NSpace class="mt-18" justify="end">
-              <NButton
-                @click="
-                  editing = false;
-                  markdown = data.note?.markdown ?? '';
-                "
-              >
-                取消
-              </NButton>
-              <NButton :loading="busy" type="primary" @click="save">
-                保存为新版本
-              </NButton>
-            </NSpace>
-          </div>
+          <NoteEditor
+            v-if="editing && data.note"
+            :note="data.note"
+            @cancel="editing = false"
+            @saved="saved"
+          />
           <article v-else-if="data.note" class="reader">
             <MarkdownContent
               :content="data.note.markdown"
@@ -285,39 +234,18 @@ function download(): void {
           </div>
         </NTabPane>
         <NTabPane :disabled="!data.note" name="original" tab="完整原文">
-          <LoadState
-            :error="originalError"
-            :loading="originalLoading"
-            @retry="refreshOriginal"
-          >
-            <article class="reader">
-              <div class="transcript">{{ original }}</div>
-            </article>
-          </LoadState>
+          <TranscriptView
+            v-if="tab === 'original' && data.note"
+            :note="data.note"
+          />
         </NTabPane>
       </NTabs>
     </template>
   </LoadState>
-  <NModal
-    v-model:show="showRegenerate"
-    class="modal-medium"
-    preset="card"
-    title="重新整理这篇纪要"
-  >
-    <p class="muted mb-20">
-      按下方要求重新整理原文，保存为新版本。完成后不会自动发到群里。
-    </p>
-    <NInput
-      v-model:value="focus"
-      :autosize="{ minRows: 5, maxRows: 12 }"
-      placeholder="整理要求"
-      type="textarea"
-    />
-    <NSpace class="mt-24" justify="end">
-      <NButton @click="showRegenerate = false">取消</NButton>
-      <NButton :loading="busy" type="primary" @click="regenerate">
-        开始整理
-      </NButton>
-    </NSpace>
-  </NModal>
+  <RegenerateDialog
+    v-if="showRegenerate && data"
+    :topic="data.topic"
+    @close="showRegenerate = false"
+    @saved="refresh"
+  />
 </template>

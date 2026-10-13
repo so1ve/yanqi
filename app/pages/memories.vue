@@ -4,11 +4,13 @@ import type { DataTableColumns } from "naive-ui";
 import { NButton, useDialog } from "naive-ui";
 import { h, ref, watch } from "vue";
 
+import MemoryDialog from "~/components/memories/MemoryDialog.vue";
 import { useAction } from "~/composables/useAction";
 import { useApiData } from "~/composables/useApiData";
 import { useWorkspace } from "~/composables/useWorkspace";
 import type { Memory, Page } from "~/types/api";
-import { api, formatTime } from "~/utils/api";
+import { api } from "~/utils/api";
+import { formatTime } from "~/utils/format";
 
 const { groupId, group } = useWorkspace();
 const page = ref(1);
@@ -22,31 +24,14 @@ const { data, loading, error, refresh } = useApiData<Page<Memory>>(() =>
     ? `groups/${groupId.value}/memories?page=${page.value}&q=${encodeURIComponent(searchQuery.value)}`
     : "",
 );
-const show = ref(false);
-const existing = ref(false);
-const form = ref({ userId: "", key: "", content: "" });
-const { busy, run } = useAction();
+const editor = ref<{ groupId: string; memory?: Memory } | null>(null);
+const { run } = useAction();
 const dialog = useDialog();
-function edit(row?: Memory): void {
-  existing.value = Boolean(row);
-  form.value = row
-    ? { userId: row.userId, key: row.key, content: row.content }
-    : { userId: "", key: "", content: "" };
-  show.value = true;
+
+function edit(memory?: Memory): void {
+  editor.value = { groupId: memory?.groupId ?? groupId.value, memory };
 }
-async function save(): Promise<void> {
-  if (
-    await run(async () => {
-      await api(`groups/${groupId.value}/memories`, {
-        method: "PUT",
-        body: form.value,
-      });
-      await refresh();
-    }, "记忆已保存")
-  ) {
-    show.value = false;
-  }
-}
+
 function remove(row: Memory): void {
   dialog.warning({
     title: "删除这条记忆？",
@@ -55,7 +40,7 @@ function remove(row: Memory): void {
     negativeText: "取消",
     onPositiveClick: () =>
       run(async () => {
-        await api(`groups/${groupId.value}/memories`, {
+        await api(`groups/${row.groupId}/memories`, {
           method: "DELETE",
           body: { userId: row.userId, key: row.key },
         });
@@ -176,45 +161,11 @@ const columns: DataTableColumns<Memory> = [
       />
     </div>
   </LoadState>
-  <NModal
-    v-model:show="show"
-    class="modal-medium"
-    preset="card"
-    :title="existing ? '编辑记忆' : '添加记忆'"
-  >
-    <NForm @submit.prevent="save">
-      <NFormItem label="成员 QQ 号">
-        <NInput
-          v-model:value="form.userId"
-          :disabled="existing"
-          placeholder="填写成员的 QQ 号"
-        />
-      </NFormItem>
-      <NFormItem label="名称">
-        <NInput
-          v-model:value="form.key"
-          :disabled="existing"
-          placeholder="例如：纪要偏好"
-        />
-      </NFormItem>
-      <NFormItem label="内容">
-        <NInput
-          v-model:value="form.content"
-          :autosize="{ minRows: 4, maxRows: 12 }"
-          type="textarea"
-        />
-      </NFormItem>
-      <NSpace justify="end">
-        <NButton @click="show = false">取消</NButton>
-        <NButton
-          attr-type="submit"
-          :disabled="!/^\d+$/.test(form.userId) || !form.key || !form.content"
-          :loading="busy"
-          type="primary"
-        >
-          保存
-        </NButton>
-      </NSpace>
-    </NForm>
-  </NModal>
+  <MemoryDialog
+    v-if="editor"
+    :group-id="editor.groupId"
+    :memory="editor.memory"
+    @close="editor = null"
+    @saved="refresh"
+  />
 </template>

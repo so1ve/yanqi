@@ -5,7 +5,8 @@ import { computed, ref } from "vue";
 import { useApiData } from "~/composables/useApiData";
 import { usePoll } from "~/composables/usePoll";
 import type { LogEntry } from "~/types/api";
-import { formatTime } from "~/utils/api";
+import { downloadText } from "~/utils/download";
+import { formatTime } from "~/utils/format";
 
 const { data, loading, error, refresh } = useApiData<LogEntry[]>("logs");
 const query = ref("");
@@ -33,14 +34,7 @@ function download(): void {
         `${new Date(entry.time).toISOString()} [${entry.level}] ${entry.name} ${entry.text}`,
     )
     .join("\n");
-  const url = URL.createObjectURL(
-    new Blob([text], { type: "text/plain;charset=utf-8" }),
-  );
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `yanqi-${new Date().toISOString().slice(0, 10)}.log`;
-  anchor.click();
-  URL.revokeObjectURL(url);
+  downloadText(`yanqi-${new Date().toISOString().slice(0, 10)}.log`, text);
 }
 </script>
 

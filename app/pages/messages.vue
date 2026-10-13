@@ -6,7 +6,8 @@ import { useAction } from "~/composables/useAction";
 import { useApiData } from "~/composables/useApiData";
 import { useWorkspace } from "~/composables/useWorkspace";
 import type { Message, Page } from "~/types/api";
-import { api, formatTime } from "~/utils/api";
+import { api } from "~/utils/api";
+import { formatTime } from "~/utils/format";
 
 const { groupId, group } = useWorkspace();
 const page = ref(1);

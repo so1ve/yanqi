@@ -2,15 +2,15 @@
 import { Plus, Refresh, Search } from "@vicons/tabler";
 import type { Topic } from "@yanqi/bot";
 import type { DataTableColumns } from "naive-ui";
-import { computed, h, ref, watch } from "vue";
+import { h, ref, watch } from "vue";
 
-import { navigateTo } from "#imports";
+import { NuxtLink } from "#components";
 import StateTag from "~/components/StateTag.vue";
-import { useAction } from "~/composables/useAction";
+import CreateDialog from "~/components/records/CreateDialog.vue";
 import { useApiData } from "~/composables/useApiData";
 import { useWorkspace } from "~/composables/useWorkspace";
 import type { Page } from "~/types/api";
-import { api, formatTime } from "~/utils/api";
+import { formatTime } from "~/utils/format";
 
 const { groupId, group } = useWorkspace();
 const query = ref("");
@@ -24,7 +24,7 @@ const { data, error, loading, refresh } = useApiData<Page<Topic>>(() =>
 watch([groupId, searchQuery], () => {
   page.value = 1;
 });
-const columns = computed<DataTableColumns<Topic>>(() => [
+const columns: DataTableColumns<Topic> = [
   {
     title: "纪要",
     key: "title",
@@ -32,15 +32,9 @@ const columns = computed<DataTableColumns<Topic>>(() => [
     render: (row) =>
       h("div", [
         h(
-          "a",
-          {
-            href: `/records/${row.id}?group=${row.groupId}`,
-            onClick: (event: MouseEvent) => {
-              event.preventDefault();
-              void navigateTo(`/records/${row.id}?group=${row.groupId}`);
-            },
-          },
-          row.title,
+          NuxtLink,
+          { to: `/records/${row.id}?group=${row.groupId}` },
+          { default: () => row.title },
         ),
         h(
           "div",
@@ -67,32 +61,8 @@ const columns = computed<DataTableColumns<Topic>>(() => [
     width: 160,
     render: (row) => formatTime(row.lastActiveAt),
   },
-]);
-const showCreate = ref(false);
-const title = ref("");
-const focus = ref("");
-const scope = ref<"all" | "range">("all");
-const range = ref<[number, number] | null>(null);
-const { busy, run } = useAction();
-async function create(): Promise<void> {
-  await run(async () => {
-    const result = await api<{ topic: Topic }>(
-      `groups/${groupId.value}/records`,
-      {
-        method: "POST",
-        body: {
-          title: title.value,
-          focus: focus.value,
-          ...(scope.value === "range" && range.value
-            ? { from: range.value[0], to: range.value[1] }
-            : {}),
-        },
-      },
-    );
-    showCreate.value = false;
-    await navigateTo(`/records/${result.topic.id}?group=${groupId.value}`);
-  }, "已安排整理");
-}
+];
+const createGroupId = ref("");
 </script>
 
 <template>
@@ -108,7 +78,11 @@ async function create(): Promise<void> {
       <template #icon><NIcon :component="Refresh" /></template>
       刷新
     </NButton>
-    <NButton :disabled="!groupId" type="primary" @click="showCreate = true">
+    <NButton
+      :disabled="!groupId"
+      type="primary"
+      @click="createGroupId = groupId"
+    >
       <template #icon><NIcon :component="Plus" /></template>
       新建纪要
     </NButton>
@@ -157,54 +131,9 @@ async function create(): Promise<void> {
       />
     </div>
   </LoadState>
-  <NModal
-    v-model:show="showCreate"
-    class="modal-record"
-    preset="card"
-    title="从原始消息创建纪要"
-  >
-    <NForm @submit.prevent="create">
-      <NFormItem label="标题">
-        <NInput v-model:value="title" placeholder="例如：部署方案讨论" />
-      </NFormItem>
-      <NFormItem label="整理要求">
-        <NInput
-          v-model:value="focus"
-          :autosize="{ minRows: 3, maxRows: 8 }"
-          placeholder="例如：整理所有部署建议及其理由。留空则整理范围内的全部内容。"
-          type="textarea"
-        />
-      </NFormItem>
-      <NFormItem label="原文范围">
-        <NRadioGroup v-model:value="scope">
-          <NSpace>
-            <NRadio value="all">全部已保存消息</NRadio>
-            <NRadio value="range">指定时间</NRadio>
-          </NSpace>
-        </NRadioGroup>
-      </NFormItem>
-      <NFormItem v-if="scope === 'range'" label="开始与结束时间">
-        <NDatePicker
-          v-model:value="range"
-          class="w-full"
-          type="datetimerange"
-        />
-      </NFormItem>
-      <p class="form-help">
-        纪要只保存到本地。需要发到群里时，请在完成后点击“发送到群”。AI
-        暂停时，任务会等待恢复。
-      </p>
-      <NSpace class="mt-24" justify="end">
-        <NButton @click="showCreate = false">取消</NButton>
-        <NButton
-          attr-type="submit"
-          :disabled="!title.trim() || (scope === 'range' && !range)"
-          :loading="busy"
-          type="primary"
-        >
-          开始整理
-        </NButton>
-      </NSpace>
-    </NForm>
-  </NModal>
+  <CreateDialog
+    v-if="createGroupId"
+    :group-id="createGroupId"
+    @close="createGroupId = ''"
+  />
 </template>
