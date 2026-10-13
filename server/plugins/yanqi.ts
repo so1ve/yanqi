@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { Yanqi } from "@yanqi/bot";
 
 import { Auth } from "../auth";
+import { AvatarCache } from "../avatars";
 import { openDatabase } from "../database";
 import { LogBuffer } from "../logs";
 import { Settings } from "../settings";
@@ -16,12 +17,13 @@ let bot: Yanqi;
 
 const logs = new LogBuffer(() => bot?.config ?? saved.config);
 const auth = await Auth.open(db);
+const avatars = new AvatarCache(db);
 
 bot = await Yanqi.open(saved.config, directory, saved.autostart);
 
 export default defineNitroPlugin((nitro) => {
   nitro.hooks.hook("request", (event) => {
-    Object.assign(event.context, { bot, settings, auth, logs });
+    Object.assign(event.context, { bot, settings, auth, logs, avatars });
   });
 
   nitro.hooks.hook("close", async () => {

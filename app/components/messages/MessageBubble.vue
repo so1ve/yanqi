@@ -1,14 +1,14 @@
 <script setup lang="ts">
-import { CornerUpLeft, Robot } from "@vicons/tabler";
+import { CornerUpLeft } from "@vicons/tabler";
 import { computed } from "vue";
 
+import UserAvatar from "~/components/UserAvatar.vue";
 import MessageAttachment from "~/components/messages/MessageAttachment.vue";
 import type { Message } from "~/types/api";
 import { formatMessageTime, formatTime } from "~/utils/format";
 
 const emit = defineEmits<{ updated: [] }>();
 const props = defineProps<{ message: Message; continued: boolean }>();
-const hue = computed(() => Number(props.message.userId) % 360);
 const parts = computed(() =>
   props.message.content
     .filter((segment) => segment.type !== "reply")
@@ -37,10 +37,12 @@ const parts = computed(() =>
     class="message"
     :class="{ 'from-bot': message.isBot, continued }"
   >
-    <div aria-hidden="true" class="avatar" :style="{ '--avatar-hue': hue }">
-      <NIcon v-if="message.isBot" :component="Robot" :size="21" />
-      <span v-else>{{ Array.from(message.displayName)[0] }}</span>
-    </div>
+    <UserAvatar
+      class="avatar"
+      :is-bot="message.isBot"
+      :name="message.displayName"
+      :user-id="message.userId"
+    />
     <div class="message-main">
       <header v-if="!continued" class="sender">
         <strong>{{ message.displayName }}</strong>
@@ -138,14 +140,6 @@ const parts = computed(() =>
 
 .avatar {
   flex: 0 0 38px;
-  height: 38px;
-  display: grid;
-  place-items: center;
-  border-radius: 12px;
-  background: hsl(var(--avatar-hue) 35% 89%);
-  color: hsl(var(--avatar-hue) 30% 33%);
-  font-size: 16px;
-  font-weight: 600;
 }
 
 .continued .avatar {
@@ -284,11 +278,6 @@ const parts = computed(() =>
   flex-direction: row-reverse;
 }
 
-.from-bot .avatar {
-  color: #fff;
-  background: #277f80;
-}
-
 .from-bot .message-main {
   align-items: flex-end;
 }
@@ -314,8 +303,8 @@ const parts = computed(() =>
   }
 
   .avatar {
+    --n-avatar-size-override: 30px;
     flex-basis: 30px;
-    height: 30px;
     border-radius: 9px;
     font-size: 14px;
   }

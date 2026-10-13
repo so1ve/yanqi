@@ -13,6 +13,7 @@ interface Tables {
   };
   accounts: { id: number; password: string };
   sessions: { id: string; expiresAt: number };
+  avatars: { userId: string; contentType: string; data: Uint8Array };
 }
 
 export type ManagementDatabase = Kysely<Tables>;
@@ -47,6 +48,14 @@ export async function openDatabase(
     .ifNotExists()
     .addColumn("id", "text", (column) => column.primaryKey())
     .addColumn("expiresAt", "integer", (column) => column.notNull())
+    .execute();
+
+  await db.schema
+    .createTable("avatars")
+    .ifNotExists()
+    .addColumn("userId", "text", (column) => column.primaryKey())
+    .addColumn("contentType", "text", (column) => column.notNull())
+    .addColumn("data", "blob", (column) => column.notNull())
     .execute();
 
   return db;

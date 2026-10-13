@@ -4,6 +4,7 @@ import type { DataTableColumns, DataTableRowKey } from "naive-ui";
 import { NTag } from "naive-ui";
 import { computed, h, ref } from "vue";
 
+import UserAvatar from "~/components/UserAvatar.vue";
 import { useAction } from "~/composables/useAction";
 import { useApiData } from "~/composables/useApiData";
 import { useWorkspace } from "~/composables/useWorkspace";
@@ -53,7 +54,10 @@ const memberColumns: DataTableColumns<Member> = [
     title: "成员",
     key: "name",
     render: (row) =>
-      h("div", [row.name, h("div", { class: "cell-sub mono" }, row.id)]),
+      h("div", { class: "member-cell" }, [
+        h(UserAvatar, { userId: row.id, name: row.name, size: 32 }),
+        h("div", [row.name, h("div", { class: "cell-sub mono" }, row.id)]),
+      ]),
   },
   {
     title: "群内身份",
@@ -148,6 +152,12 @@ async function save(): Promise<void> {
 <style scoped>
 .muted {
   color: #798899;
+}
+
+:deep(.member-cell) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 :deep(.mono) {

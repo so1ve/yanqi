@@ -12,6 +12,14 @@ const draft = defineModel<Config>({ required: true });
 const result = ref<PurgeResult | null>(null);
 const dialog = useDialog();
 const { busy, run } = useAction();
+const { busy: refreshingAvatars, run: runAvatarRefresh } = useAction();
+
+async function refreshAvatars(): Promise<void> {
+  await runAvatarRefresh(
+    () => api("avatars/refresh", { method: "POST" }),
+    "头像缓存已刷新，下次显示时获取最新头像",
+  );
+}
 
 function purge(): void {
   dialog.warning({
@@ -68,6 +76,16 @@ function purge(): void {
       消息内容无损压缩保存，相同附件共用文件。SQLite
       会复用删除后空出的页面，数据库文件不一定立即缩小。
     </p>
+    <section class="avatar-cache">
+      <h2>头像缓存</h2>
+      <p>
+        头像首次显示时下载到本地，同一个 QQ
+        号共用一份缓存。刷新后，下次显示时重新获取。
+      </p>
+      <NButton :loading="refreshingAvatars" @click="refreshAvatars">
+        刷新头像缓存
+      </NButton>
+    </section>
   </NForm>
 </template>
 
@@ -88,5 +106,15 @@ p {
 .detail {
   font-size: 12px;
   margin-top: 20px;
+}
+
+.avatar-cache {
+  border-top: 1px solid #e8edf2;
+  margin-top: 28px;
+  padding-top: 24px;
+}
+
+.avatar-cache h2 {
+  margin-bottom: 10px;
 }
 </style>
