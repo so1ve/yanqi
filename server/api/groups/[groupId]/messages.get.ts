@@ -31,7 +31,7 @@ export default defineEventHandler(async (event) => {
   ]);
 
   return {
-    items: await messageDetails(bot.database, groupId, items),
+    items: await messageDetails(bot, groupId, items),
     total: total.count,
     page,
     limit,

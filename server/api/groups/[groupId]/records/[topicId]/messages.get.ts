@@ -12,7 +12,8 @@ import {
 } from "~~/server/utils/http";
 
 export default defineEventHandler(async (event) => {
-  const db = event.context.bot.database;
+  const { bot } = event.context;
+  const db = bot.database;
   const groupId = groupParam(event);
   const topicId = getRouterParam(event, "topicId")!;
   const version = queryParam(event, "version");
@@ -70,7 +71,7 @@ export default defineEventHandler(async (event) => {
   ]);
 
   return {
-    items: await messageDetails(db, groupId, messages),
+    items: await messageDetails(bot, groupId, messages),
     total: total.count,
     page,
     limit,

@@ -79,8 +79,14 @@ const parts = computed(() =>
           <span v-if="segment.type === 'text'" class="message-text">
             {{ segment.data.text }}
           </span>
-          <span v-else-if="segment.type === 'at'" class="marker">
-            @{{ segment.data.qq === "all" ? "全体成员" : segment.data.qq }}
+          <span
+            v-else-if="segment.type === 'at'"
+            class="marker"
+            :title="
+              segment.data.qq === 'all' ? undefined : String(segment.data.qq)
+            "
+          >
+            @{{ segment.data.name }}
           </span>
           <span v-else-if="segment.type === 'face'" class="marker">
             [表情 {{ segment.data.id }}]
