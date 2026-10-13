@@ -28,8 +28,7 @@ function incomingMessage(session: Session): IncomingMessage {
       .elements!.filter((element) => element.type === "text")
       .map((element) => element.attrs.content)
       .join(""),
-    segments: raw.message,
-    raw: session.event._data,
+    content: raw.message,
     replyTo:
       raw.message.find((segment) => segment.type === "reply")?.data.id ?? null,
     isBot: session.userId === session.selfId,

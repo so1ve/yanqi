@@ -17,6 +17,7 @@ export type Message =
 export type Memory =
   InternalApi["/api/groups/:groupId/memories"]["get"]["items"][number];
 export type Usage = InternalApi["/api/groups/:groupId/usage"]["get"];
+export type PurgeResult = InternalApi["/api/storage/purge"]["post"];
 
 export interface Page<T> {
   items: T[];

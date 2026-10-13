@@ -19,7 +19,7 @@ async function messageText(store: Store, message: Message): Promise<string> {
       }),
     )
   ).join("\n");
-  const segments = message.segments.filter(
+  const segments = message.content.filter(
     (segment) =>
       ![
         "at",
@@ -64,7 +64,7 @@ export async function messageChunks(
         userId: message.userId,
         isBot: message.isBot,
         command: message.command,
-        mentions: message.segments
+        mentions: message.content
           .filter((segment) => segment.type === "at")
           .map((segment) => String(segment.data.qq)),
         time: beijingTime(message.sentAt),

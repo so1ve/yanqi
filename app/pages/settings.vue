@@ -5,6 +5,7 @@ import { computed, ref, watch } from "vue";
 
 import ModelsForm from "~/components/settings/ModelsForm.vue";
 import PasswordForm from "~/components/settings/PasswordForm.vue";
+import StorageForm from "~/components/settings/StorageForm.vue";
 import { useAction } from "~/composables/useAction";
 import { useApiData } from "~/composables/useApiData";
 import { useWorkspace } from "~/composables/useWorkspace";
@@ -165,6 +166,12 @@ async function save(): Promise<void> {
         </NTabPane>
         <NTabPane name="runtime" tab="运行参数">
           <NForm><RuntimeEditor v-model="draft" /></NForm>
+        </NTabPane>
+        <NTabPane name="storage" tab="存储与清理">
+          <StorageForm
+            v-model="draft"
+            :saved-days="data!.config.HISTORY_RETENTION_DAYS"
+          />
         </NTabPane>
         <NTabPane name="security" tab="管理密码">
           <PasswordForm />

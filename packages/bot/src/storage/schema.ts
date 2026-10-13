@@ -7,8 +7,10 @@ import type {
   JobPayloads,
   Message,
   Note,
+  Segment,
   Topic,
 } from "../types.ts";
+import { decodeContent, encodeContent } from "./message-content.ts";
 
 interface GroupRow {
   id: string;
@@ -40,7 +42,8 @@ interface MemoryRow {
 declare module "@koishijs/core" {
   interface Tables {
     groups: GroupRow;
-    messages: Message;
+    // 旧字段只供 Minato 首次转换已有数据库，转换后由驱动移除。
+    messages: Message & { segments?: Segment[]; rawJson?: string };
     topics: Topic;
     topic_messages: { topicId: string; messageId: number; generation: number };
     assets: Asset;
@@ -74,6 +77,15 @@ declare module "@koishijs/core" {
 export type Database = Context["model"];
 
 export function defineModels(model: Database): void {
+  const messageContent = model.define<Segment[]>({
+    type: "binary",
+    dump: (value: Segment[] | null) =>
+      value === null ? null : encodeContent(value),
+    load: (value: ArrayBuffer | null) =>
+      value === null ? null : decodeContent(value),
+    initial: [],
+  });
+
   model.extend(
     "groups",
     {
@@ -95,8 +107,7 @@ export function defineModels(model: Database): void {
       sentAt: { type: "integer" },
       receivedAt: { type: "integer" },
       text: "text",
-      segments: "json",
-      rawJson: { type: "text" },
+      content: messageContent,
       replyTo: { type: "string", nullable: true },
       isBot: { type: "boolean", initial: false },
       addressed: { type: "boolean", initial: false },
@@ -114,6 +125,39 @@ export function defineModels(model: Database): void {
         ["groupId", "sentAt"],
       ],
       foreign: { groupId: ["groups", "id"] },
+    },
+  );
+
+  model.migrate(
+    "messages",
+    { segments: "json", rawJson: "text" },
+    async (db) => {
+      let after = 0;
+
+      while (true) {
+        const messages = await db.get(
+          "messages",
+          { id: { $gt: after } },
+          {
+            fields: ["id", "segments"],
+            sort: { id: "asc" },
+            limit: 500,
+          },
+        );
+
+        if (messages.length === 0) {
+          break;
+        }
+
+        await db.upsert(
+          "messages",
+          messages.map(({ id, segments }) => ({
+            id,
+            content: segments!,
+          })),
+        );
+        after = messages.at(-1)!.id;
+      }
     },
   );
 
@@ -178,6 +222,7 @@ export function defineModels(model: Database): void {
     {
       autoInc: true,
       unique: [["messageId", "kind", "reference"]],
+      indexes: ["path"],
       foreign: { messageId: ["messages", "id"] },
     },
   );

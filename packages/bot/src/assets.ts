@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createWriteStream } from "node:fs";
 import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -21,7 +21,7 @@ export async function collectAsset(
 ): Promise<void> {
   const asset = await store.assets.get(id);
   const message = await store.messages.get(asset.messageId);
-  const directory = join(store.directory, "groups", message.groupId, "assets");
+  const directory = join(store.directory, "assets");
 
   await mkdir(directory, { recursive: true });
   let path = asset.path;
@@ -31,21 +31,22 @@ export async function collectAsset(
     if (asset.kind === "forward") {
       await reportProgress(`正在读取合并转发，附件 #${id}`);
       const forwarded = await messenger.getForward(asset.reference);
-      const target = join(directory, `${id}.json`);
+      const content = JSON.stringify(forwarded);
+      const hash = createHash("sha256").update(content).digest("hex");
+      const target = join(directory, `${hash}.json`);
       const temporary = `${target}.${randomUUID()}.part`;
 
-      await writeFile(temporary, JSON.stringify(forwarded, null, 2), {
-        mode: 0o600,
-      });
-      await rename(temporary, target);
+      try {
+        await writeFile(temporary, content, { mode: 0o600 });
+        await rename(temporary, target);
+      } catch (error) {
+        await rm(temporary, { force: true });
+
+        throw error;
+      }
+
       path = target;
-      await store.assets.save(
-        id,
-        "saved",
-        path,
-        JSON.stringify(forwarded),
-        null,
-      );
+      await store.assets.save(id, "saved", path, content, null);
       await reportProgress("合并转发内容已保存");
 
       return;
@@ -95,8 +96,8 @@ export async function collectAsset(
             "application/pdf": ".pdf",
           } as Record<string, string>
         )[mime] ?? ".bin";
-      const target = join(directory, `${id}${suffix}`);
-      const temporary = `${target}.${randomUUID()}.part`;
+      const hash = createHash("sha256");
+      const temporary = join(directory, `${randomUUID()}.part`);
 
       try {
         await pipeline(
@@ -110,12 +111,15 @@ export async function collectAsset(
                 throw new Error("附件超过配置的大小限制，下载已停止");
               }
 
+              hash.update(chunk);
               yield chunk;
             }
           },
           createWriteStream(temporary, { flags: "wx", mode: 0o600 }),
           { signal },
         );
+        const target = join(directory, `${hash.digest("hex")}${suffix}`);
+
         await rename(temporary, target);
         path = target;
       } catch (error) {

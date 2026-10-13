@@ -47,13 +47,13 @@ export class Messages {
 
         if (
           input.isBot &&
-          JSON.parse(existing.rawJson).source === "yanqi-send" &&
-          (input.raw as { source?: string }).source !== "yanqi-send"
+          existing.content.length === 0 &&
+          input.content.length > 0
         ) {
           await db.set(
             "messages",
             { id: existing.id },
-            { rawJson: JSON.stringify(input.raw), segments: input.segments },
+            { content: input.content },
           );
         }
 
@@ -89,15 +89,13 @@ export class Messages {
         );
       }
 
-      const { raw, ...fields } = input;
       const message = await db.create("messages", {
-        ...fields,
-        rawJson: JSON.stringify(raw),
+        ...input,
         command,
       });
 
       if (!input.isBot) {
-        for (const segment of input.segments) {
+        for (const segment of input.content) {
           const kind = segment.type === "record" ? "audio" : segment.type;
 
           if (

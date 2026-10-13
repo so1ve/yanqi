@@ -103,7 +103,7 @@ const columns: DataTableColumns<Group> = [
 
 <template>
   <PageHeading
-    description="选择要记录的群，以及可以向小栖发出请求的成员。"
+    description="保存已启用群的全部消息；交互权限只决定谁可以向小栖发出请求。"
     title="群与成员"
   >
     <NButton :loading="busy" @click="run(workspace.refresh)">

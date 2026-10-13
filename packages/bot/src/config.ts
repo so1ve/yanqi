@@ -60,6 +60,11 @@ export const configSchema = Type.Object(
     TOPIC_REOPEN_MS: positive(86_400_000),
     WORK_INTERVAL_MS: positive(1000),
     MAX_ATTACHMENT_BYTES: positive(52_428_800),
+    HISTORY_RETENTION_DAYS: Type.Integer({
+      minimum: 0,
+      maximum: 36_500,
+      default: 30,
+    }),
     AI_VISION_MODEL: optionalModel,
     AI_AUDIO_MODEL: optionalModel,
   },

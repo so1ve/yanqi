@@ -10,6 +10,7 @@ import type { Config } from "./config.ts";
 import { configurationError } from "./config.ts";
 import { recallMessage, saveMessage } from "./onebot/message.ts";
 import { Secretary } from "./secretary.ts";
+import { purgeHistory } from "./storage/purge.ts";
 import { defineModels } from "./storage/schema.ts";
 import { SQLite } from "./storage/sqlite.ts";
 import { Store } from "./storage/store.ts";
@@ -62,6 +63,11 @@ export class Yanqi {
       groups.on("message-deleted", (session: Session) =>
         this.#track(() => recallMessage(session, this.store)),
       ),
+      app.setInterval(() => {
+        void this.purge().catch((error) =>
+          this.#logger.warn("清理历史失败：%s", String(error)),
+        );
+      }, 3_600_000),
     ];
   }
 
@@ -88,6 +94,9 @@ export class Yanqi {
 
     await bot.store.jobs.recover();
     await bot.configure(config);
+    void bot
+      .purge()
+      .catch((error) => bot.#logger.warn("清理历史失败：%s", String(error)));
 
     return bot;
   }
@@ -192,6 +201,27 @@ export class Yanqi {
     this.#secretary?.processPending();
   }
 
+  public purge() {
+    return this.#change(async () => {
+      const result = await purgeHistory(
+        this.database,
+        this.store.directory,
+        this.#config.HISTORY_RETENTION_DAYS,
+      );
+
+      this.#logger.info(
+        "历史清理：消息=%s 附件=%s 文件=%s 释放文件字节=%s 忙碌群=%s",
+        result.messages,
+        result.assets,
+        result.files,
+        result.bytes,
+        result.skippedGroups,
+      );
+
+      return result;
+    });
+  }
+
   public close(): Promise<void> {
     return this.#change(async () => {
       for (const dispose of this.#listeners) {
@@ -209,10 +239,13 @@ export class Yanqi {
     });
   }
 
-  #change(action: () => void | Promise<void>): Promise<void> {
+  #change<T>(action: () => T | Promise<T>): Promise<T> {
     const operation = this.#operation.then(action);
 
-    this.#operation = operation.catch(() => {});
+    this.#operation = operation.then(
+      () => {},
+      () => {},
+    );
 
     return operation;
   }

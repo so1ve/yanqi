@@ -31,7 +31,8 @@ export default defineNuxtConfig({
       ),
     },
     externals: {
-      inline: ["@yanqi/bot"],
+      // Core 与 SQLite 都使用 ESM，避免加载两份 Minato 导致数据转换互相等待。
+      inline: ["@yanqi/bot", "@koishijs/core"],
       traceInclude: [
         fileURLToPath(
           import.meta.resolve("@minatojs/sql.js/dist/sql-wasm.wasm"),

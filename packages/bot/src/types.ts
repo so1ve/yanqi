@@ -11,8 +11,7 @@ export interface IncomingMessage {
   sentAt: number;
   receivedAt: number;
   text: string;
-  segments: Segment[];
-  raw: unknown;
+  content: Segment[];
   replyTo: string | null;
   isBot: boolean;
   addressed: boolean;
@@ -20,9 +19,8 @@ export interface IncomingMessage {
   noteId?: number;
 }
 
-export interface Message extends Omit<IncomingMessage, "raw" | "noteId"> {
+export interface Message extends Omit<IncomingMessage, "noteId"> {
   id: number;
-  rawJson: string;
   command: boolean;
   awaitingReply: boolean;
   recalledAt: number | null;

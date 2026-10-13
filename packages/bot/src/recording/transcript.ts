@@ -65,7 +65,7 @@ export async function transcript(
       details.push(`${link}（${state}）`);
     }
 
-    for (const segment of message.segments) {
+    for (const segment of message.content) {
       if (segment.type === "text" || segment.type === "reply") {
         continue;
       }
