@@ -22,14 +22,20 @@ const props = defineProps<{ messages: Message[]; loading: boolean }>();
 const virtualList =
   useTemplateRef<InstanceType<typeof NVirtualList>>("virtualList");
 const interacted = ref(false);
-let restoring = false;
+let anchor: ReadingPosition | undefined;
+let contentObserver: ResizeObserver | undefined;
 let scrollFrame = 0;
+let anchorFrame = 0;
 
 function position(): ReadingPosition | undefined {
   const container = virtualList.value?.getScrollContainer();
 
   if (!container?.clientHeight) {
     return;
+  }
+
+  if (anchor) {
+    return anchor;
   }
 
   const viewport = container.getBoundingClientRect();
@@ -45,25 +51,41 @@ function position(): ReadingPosition | undefined {
   }
 }
 
-async function restore(target: ReadingPosition): Promise<void> {
-  restoring = true;
-  await nextTick();
-  virtualList.value?.scrollTo({ key: target.messageId });
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-  const container = virtualList.value?.getScrollContainer();
-  const entry = container?.querySelector<HTMLElement>(
-    `[data-message-id="${target.messageId}"]`,
-  );
-
-  if (container && entry) {
-    container.scrollTop +=
-      entry.getBoundingClientRect().top -
-      container.getBoundingClientRect().top +
-      Math.min(target.offset, entry.getBoundingClientRect().height - 1);
+function alignAnchor(): void {
+  if (!anchor) {
+    return;
   }
 
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-  restoring = false;
+  const container = virtualList.value?.getScrollContainer();
+  const entry = container?.querySelector<HTMLElement>(
+    `[data-message-id="${anchor.messageId}"]`,
+  );
+
+  if (container?.clientHeight && entry) {
+    const bounds = entry.getBoundingClientRect();
+    const delta =
+      bounds.top -
+      container.getBoundingClientRect().top +
+      Math.min(anchor.offset, bounds.height - 1);
+
+    if (Math.abs(delta) > 0.5) {
+      container.scrollTop += delta;
+    }
+  }
+}
+
+async function restore(target: ReadingPosition): Promise<void> {
+  anchor = target;
+  await nextTick();
+  virtualList.value?.scrollTo({ key: target.messageId });
+  cancelAnimationFrame(anchorFrame);
+  anchorFrame = requestAnimationFrame(alignAnchor);
+}
+
+function interact(): void {
+  interacted.value = true;
+  anchor = undefined;
+  cancelAnimationFrame(anchorFrame);
 }
 
 function loadMore(): void {
@@ -83,7 +105,7 @@ function onScroll(): void {
 
   cancelAnimationFrame(scrollFrame);
   scrollFrame = requestAnimationFrame(() => {
-    if (interacted.value && !restoring) {
+    if (interacted.value && !anchor) {
       const current = position();
 
       if (current) {
@@ -103,10 +125,27 @@ watch(
   },
   { flush: "post" },
 );
-onScopeDispose(() => cancelAnimationFrame(scrollFrame));
-onMounted(() =>
-  virtualList.value?.getScrollContainer()?.setAttribute("tabindex", "0"),
-);
+onMounted(() => {
+  virtualList.value?.getScrollContainer()?.setAttribute("tabindex", "0");
+  const content = virtualList.value?.getScrollContent();
+
+  // 未测量的气泡和图片会改变列表高度，用户继续操作前保持阅读位置。
+  contentObserver = new ResizeObserver(() => {
+    if (anchor) {
+      cancelAnimationFrame(anchorFrame);
+      anchorFrame = requestAnimationFrame(alignAnchor);
+    }
+  });
+
+  if (content) {
+    contentObserver.observe(content);
+  }
+});
+onScopeDispose(() => {
+  cancelAnimationFrame(scrollFrame);
+  cancelAnimationFrame(anchorFrame);
+  contentObserver?.disconnect();
+});
 defineExpose({ position, restore });
 </script>
 
@@ -114,10 +153,10 @@ defineExpose({ position, restore });
   <section
     aria-label="聊天记录"
     class="conversation"
-    @keydown="interacted = true"
-    @pointerdown="interacted = true"
-    @touchstart.passive="interacted = true"
-    @wheel.passive="interacted = true"
+    @keydown="interact"
+    @pointerdown="interact"
+    @touchstart.passive="interact"
+    @wheel.passive="interact"
   >
     <NImageGroup>
       <NVirtualList
