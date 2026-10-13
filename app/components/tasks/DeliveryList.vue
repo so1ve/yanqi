@@ -92,12 +92,12 @@ const columns: DataTableColumns<Delivery> = [
 </script>
 
 <template>
-  <div class="toolbar">
+  <ListToolbar>
     <span class="muted">每 5 秒刷新</span>
     <NButton class="right" :loading="deliveriesLoading" @click="refresh">
       刷新
     </NButton>
-  </div>
+  </ListToolbar>
   <LoadState
     :empty="!deliveries?.items.length"
     :error="deliveriesError"
@@ -105,24 +105,31 @@ const columns: DataTableColumns<Delivery> = [
     :title="!groupId ? '请先选择一个群' : '还没有发送记录'"
     @retry="refresh"
   >
-    <div class="panel">
+    <AppPanel>
       <NDataTable
         :bordered="false"
         :columns
         :data="deliveries?.items ?? []"
         :scroll-x="700"
       />
-    </div>
-    <div class="pagination">
-      <span>共 {{ deliveries?.total }} 条</span>
-      <NPagination
-        v-model:page="page"
-        :item-count="deliveries?.total ?? 0"
-        :page-size="30"
-      />
-    </div>
+    </AppPanel>
+    <ListPagination v-model:page="page" :total="deliveries?.total ?? 0">
+      共 {{ deliveries?.total }} 条
+    </ListPagination>
   </LoadState>
   <p class="form-help">
     暂停 AI 后，可以取消尚未发送的消息。已经发出的消息不能在这里撤回。
   </p>
 </template>
+
+<style scoped>
+.muted {
+  color: #798899;
+}
+
+.form-help {
+  font-size: 12px;
+  color: #8a97a7;
+  margin-top: 7px;
+}
+</style>

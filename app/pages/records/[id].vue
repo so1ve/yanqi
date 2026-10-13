@@ -12,6 +12,7 @@ import { computed, ref } from "vue";
 
 import { navigateTo, useRoute } from "#imports";
 import NoteEditor from "~/components/records/NoteEditor.vue";
+import RecordReader from "~/components/records/RecordReader.vue";
 import RegenerateDialog from "~/components/records/RegenerateDialog.vue";
 import TranscriptView from "~/components/records/TranscriptView.vue";
 import { useAction } from "~/composables/useAction";
@@ -220,18 +221,21 @@ function download(): void {
             @cancel="editing = false"
             @saved="saved"
           />
-          <article v-else-if="data.note" class="reader">
+          <RecordReader v-else-if="data.note">
             <MarkdownContent
               :content="data.note.markdown"
               :group-id
               @transcript="tab = 'original'"
             />
-          </article>
-          <div v-else class="panel empty-state">
-            <h3>尚未生成第一版纪要</h3>
-            <p>完成后会自动显示，进度和错误可在“后台任务”中查看。</p>
-            <NuxtLink to="/tasks"><NButton>查看任务</NButton></NuxtLink>
-          </div>
+          </RecordReader>
+          <AppPanel v-else>
+            <EmptyState
+              description="完成后会自动显示，进度和错误可在“后台任务”中查看。"
+              title="尚未生成第一版纪要"
+            >
+              <NuxtLink to="/tasks"><NButton>查看任务</NButton></NuxtLink>
+            </EmptyState>
+          </AppPanel>
         </NTabPane>
         <NTabPane :disabled="!data.note" name="original" tab="完整原文">
           <TranscriptView
@@ -249,3 +253,38 @@ function download(): void {
     @saved="refresh"
   />
 </template>
+
+<style scoped>
+.muted {
+  color: #798899;
+}
+
+.mb-15 {
+  margin-bottom: 15px;
+}
+
+.reader-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 18px;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 760px) {
+  .reader-toolbar {
+    flex-wrap: wrap;
+  }
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 18px;
+}
+
+.version-select {
+  width: 230px;
+}
+</style>

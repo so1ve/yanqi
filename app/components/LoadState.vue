@@ -20,10 +20,22 @@ defineProps<{
     <NSpin size="small" />
     <span>加载中…</span>
   </div>
-  <div v-else-if="empty" class="empty-state">
-    <h3>{{ title || "还没有内容" }}</h3>
-    <p>{{ description }}</p>
+  <EmptyState v-else-if="empty" :description :title="title || '还没有内容'">
     <slot name="action" />
-  </div>
+  </EmptyState>
   <slot v-else />
 </template>
+
+<style scoped>
+.loading-state {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  padding: 70px 20px;
+  color: #8592a2;
+}
+
+.load-error {
+  margin-bottom: 20px;
+}
+</style>

@@ -109,34 +109,30 @@ const columns: DataTableColumns<Usage["models"][number]> = [
   </PageHeading>
   <LoadState :error :loading="loading && !data" @retry="refresh">
     <template v-if="data">
-      <div class="stat-grid">
-        <div class="stat">
-          <div class="stat-label">模型调用</div>
-          <div class="stat-value">{{ formatNumber(data.calls) }}</div>
-          <div class="stat-note">{{ day }} · 北京时间</div>
-        </div>
-        <div class="stat">
-          <div class="stat-label">输入 token</div>
-          <div class="stat-value">
-            {{ totals?.measured ? formatNumber(totals.input) : "—" }}
-          </div>
-          <div class="stat-note">缓存读取另列</div>
-        </div>
-        <div class="stat">
-          <div class="stat-label">输出 token</div>
-          <div class="stat-value">
-            {{ totals?.measured ? formatNumber(totals.output) : "—" }}
-          </div>
-          <div class="stat-note">包含服务商上报的思考用量</div>
-        </div>
-        <div class="stat">
-          <div class="stat-label">缓存读取</div>
-          <div class="stat-value">
-            {{ totals?.measured ? formatNumber(totals.cache) : "—" }}
-          </div>
-          <div class="stat-note">命中缓存的输入 token</div>
-        </div>
-      </div>
+      <StatsGrid
+        :items="[
+          {
+            label: '模型调用',
+            value: formatNumber(data.calls),
+            note: `${day} · 北京时间`,
+          },
+          {
+            label: '输入 token',
+            value: totals?.measured ? formatNumber(totals.input) : '—',
+            note: '缓存读取另列',
+          },
+          {
+            label: '输出 token',
+            value: totals?.measured ? formatNumber(totals.output) : '—',
+            note: '包含服务商上报的思考用量',
+          },
+          {
+            label: '缓存读取',
+            value: totals?.measured ? formatNumber(totals.cache) : '—',
+            note: '命中缓存的输入 token',
+          },
+        ]"
+      />
       <NAlert
         v-if="data.calls > (totals?.measured ?? 0)"
         :bordered="false"
@@ -146,17 +142,31 @@ const columns: DataTableColumns<Usage["models"][number]> = [
         有 {{ data.calls - (totals?.measured ?? 0) }} 次调用没有返回 token
         用量，合计不含这些调用。费用请查看服务商账单。
       </NAlert>
-      <div v-if="data.models.length > 0" class="panel">
+      <AppPanel v-if="data.models.length > 0">
         <NDataTable
           :bordered="false"
           :columns
           :data="data.models"
           :scroll-x="800"
         />
-      </div>
-      <div v-else class="panel empty-state">
-        <h3>这一天还没有模型调用</h3>
-      </div>
+      </AppPanel>
+      <AppPanel v-else><EmptyState title="这一天还没有模型调用" /></AppPanel>
     </template>
   </LoadState>
 </template>
+
+<style scoped>
+:deep(.cell-sub) {
+  color: #8a97a7;
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.mb-22 {
+  margin-bottom: 22px;
+}
+
+.filter-date {
+  width: 160px;
+}
+</style>

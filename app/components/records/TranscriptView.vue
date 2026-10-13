@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Note } from "@yanqi/bot";
 
+import RecordReader from "~/components/records/RecordReader.vue";
 import { useApiData } from "~/composables/useApiData";
 
 const props = defineProps<{ note: Note }>();
@@ -12,8 +13,17 @@ const { data, error, loading, refresh } = useApiData<string>(
 
 <template>
   <LoadState :error :loading @retry="refresh">
-    <article class="reader">
+    <RecordReader>
       <div class="transcript">{{ data }}</div>
-    </article>
+    </RecordReader>
   </LoadState>
 </template>
+
+<style scoped>
+.transcript {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 2;
+  font-size: 13px;
+}
+</style>

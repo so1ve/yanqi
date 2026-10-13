@@ -65,7 +65,7 @@ async function save(): Promise<void> {
               <h2>NapCat 连接</h2>
               <p>先在 NapCat 管理页登录 QQ，再填写下方连接信息。</p>
             </div>
-            <div class="form-grid">
+            <FormGrid>
               <NFormItem label="机器人 QQ 号">
                 <NInput
                   v-model:value="draft.BOT_QQ"
@@ -109,7 +109,7 @@ async function save(): Promise<void> {
                   </a>
                 </div>
               </NFormItem>
-            </div>
+            </FormGrid>
             <div class="section-title mt-16"><h2>启动与交互权限</h2></div>
             <NFormItem label="服务启动时自动运行机器人">
               <div>
@@ -173,3 +173,46 @@ async function save(): Promise<void> {
     </template>
   </LoadState>
 </template>
+
+<style scoped>
+.form-help {
+  font-size: 12px;
+  color: #8a97a7;
+  margin-top: 7px;
+}
+
+.external-link {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.mt-16 {
+  margin-top: 16px;
+}
+
+.w-full {
+  width: 100%;
+}
+
+.section-title {
+  margin-bottom: 18px;
+}
+
+.section-title p {
+  color: #8592a2;
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+.settings-section {
+  max-width: 1050px;
+  margin-bottom: 28px;
+}
+
+.settings-section + .settings-section {
+  border-top: 1px solid #e8edf2;
+  padding-top: 28px;
+}
+</style>

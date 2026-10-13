@@ -26,13 +26,7 @@ async function add(): Promise<void> {
 </script>
 
 <template>
-  <NModal
-    class="modal-narrow"
-    preset="card"
-    show
-    title="添加记录群"
-    @update:show="emit('close')"
-  >
+  <AppDialog title="添加记录群" :width="450" @close="emit('close')">
     <NForm @submit.prevent="add">
       <NFormItem label="群号">
         <NInput v-model:value="newId" placeholder="机器人已加入的 QQ 群" />
@@ -50,5 +44,17 @@ async function add(): Promise<void> {
         </NButton>
       </NSpace>
     </NForm>
-  </NModal>
+  </AppDialog>
 </template>
+
+<style scoped>
+.form-help {
+  font-size: 12px;
+  color: #8a97a7;
+  margin-top: 7px;
+}
+
+.mt-20 {
+  margin-top: 20px;
+}
+</style>

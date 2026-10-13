@@ -41,7 +41,7 @@ function choose(provider: Config["DECISION_PROVIDER"]): void {
       </button>
     </div>
     <div v-if="model.DECISION_PROVIDER !== 'llm'" class="model-card">
-      <div class="form-grid">
+      <FormGrid>
         <NFormItem
           class="full-width"
           :label="
@@ -67,7 +67,7 @@ function choose(provider: Config["DECISION_PROVIDER"]): void {
             placeholder="API Key / Workers AI Token"
           />
         </NFormItem>
-      </div>
+      </FormGrid>
       <p v-if="model.DECISION_PROVIDER === 'clef'" class="form-help">
         地址：
         <code>
@@ -88,3 +88,87 @@ function choose(provider: Config["DECISION_PROVIDER"]): void {
     </NSpace>
   </section>
 </template>
+
+<style scoped>
+.form-help {
+  font-size: 12px;
+  color: #8a97a7;
+  margin-top: 7px;
+}
+
+.section-title {
+  margin-bottom: 18px;
+}
+
+.section-title p {
+  color: #8592a2;
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+.settings-section {
+  max-width: 1050px;
+  margin-bottom: 28px;
+}
+
+.settings-section + .settings-section {
+  border-top: 1px solid #e8edf2;
+  padding-top: 28px;
+}
+
+.model-card {
+  border: 1px solid #e2e8ef;
+  background: #fff;
+  border-radius: 8px;
+  padding: 22px;
+  margin-bottom: 16px;
+}
+
+.provider-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.provider-choice {
+  display: block;
+  border: 1px solid #dfe6ed;
+  background: #fff;
+  border-radius: 7px;
+  color: #526376;
+  padding: 18px 14px;
+  text-align: left;
+}
+
+.provider-choice.selected {
+  border-color: #277f80;
+  box-shadow: 0 0 0 1px #277f80;
+  background: #f3f9f9;
+}
+
+.provider-choice strong {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 7px;
+  color: #243348;
+}
+
+.provider-choice span {
+  font-size: 11px;
+  line-height: 1.6;
+  display: block;
+}
+
+@media (max-width: 1100px) {
+  .provider-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .provider-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+</style>

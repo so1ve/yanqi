@@ -104,12 +104,10 @@ async function save(): Promise<void> {
 </script>
 
 <template>
-  <NModal
-    class="modal-wide"
-    preset="card"
-    show
+  <AppDialog
     :title="`${props.group.name} · 交互权限`"
-    @update:show="emit('close')"
+    :width="760"
+    @close="emit('close')"
   >
     <p class="muted mb-18">
       群主、群管理员和全局管理员已有交互权限。勾选可授权其他成员。
@@ -144,5 +142,35 @@ async function save(): Promise<void> {
         保存名单
       </NButton>
     </NSpace>
-  </NModal>
+  </AppDialog>
 </template>
+
+<style scoped>
+.muted {
+  color: #798899;
+}
+
+:deep(.mono) {
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+:deep(.cell-sub) {
+  color: #8a97a7;
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.mb-16 {
+  margin-bottom: 16px;
+}
+
+.mb-18 {
+  margin-bottom: 18px;
+}
+
+.mt-20 {
+  margin-top: 20px;
+}
+</style>

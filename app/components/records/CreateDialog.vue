@@ -35,13 +35,7 @@ async function create(): Promise<void> {
 </script>
 
 <template>
-  <NModal
-    class="modal-record"
-    preset="card"
-    show
-    title="从原始消息创建纪要"
-    @update:show="emit('close')"
-  >
+  <AppDialog title="从原始消息创建纪要" :width="580" @close="emit('close')">
     <NForm @submit.prevent="create">
       <NFormItem label="标题">
         <NInput v-model:value="title" placeholder="例如：部署方案讨论" />
@@ -85,5 +79,21 @@ async function create(): Promise<void> {
         </NButton>
       </NSpace>
     </NForm>
-  </NModal>
+  </AppDialog>
 </template>
+
+<style scoped>
+.form-help {
+  font-size: 12px;
+  color: #8a97a7;
+  margin-top: 7px;
+}
+
+.mt-24 {
+  margin-top: 24px;
+}
+
+.w-full {
+  width: 100%;
+}
+</style>

@@ -32,12 +32,9 @@ async function save(): Promise<void> {
 </script>
 
 <template>
-  <NModal
-    class="modal-medium"
-    preset="card"
-    show
+  <AppDialog
     :title="props.memory ? '编辑记忆' : '添加记忆'"
-    @update:show="emit('close')"
+    @close="emit('close')"
   >
     <NForm @submit.prevent="save">
       <NFormItem label="成员 QQ 号">
@@ -73,5 +70,5 @@ async function save(): Promise<void> {
         </NButton>
       </NSpace>
     </NForm>
-  </NModal>
+  </AppDialog>
 </template>

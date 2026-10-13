@@ -29,13 +29,7 @@ async function regenerate(): Promise<void> {
 </script>
 
 <template>
-  <NModal
-    class="modal-medium"
-    preset="card"
-    show
-    title="重新整理这篇纪要"
-    @update:show="emit('close')"
-  >
+  <AppDialog title="重新整理这篇纪要" @close="emit('close')">
     <p class="muted mb-20">
       按下方要求重新整理原文，保存为新版本。完成后不会自动发到群里。
     </p>
@@ -51,5 +45,19 @@ async function regenerate(): Promise<void> {
         开始整理
       </NButton>
     </NSpace>
-  </NModal>
+  </AppDialog>
 </template>
+
+<style scoped>
+.muted {
+  color: #798899;
+}
+
+.mb-20 {
+  margin-bottom: 20px;
+}
+
+.mt-24 {
+  margin-top: 24px;
+}
+</style>

@@ -87,7 +87,7 @@ const createGroupId = ref("");
       新建纪要
     </NButton>
   </PageHeading>
-  <form class="toolbar" @submit.prevent="searchQuery = query">
+  <ListToolbar as="form" @submit.prevent="searchQuery = query">
     <NInput
       v-model:value="query"
       class="search"
@@ -98,7 +98,7 @@ const createGroupId = ref("");
     </NInput>
     <NButton attr-type="submit">搜索</NButton>
     <span class="right muted">{{ data?.total ?? 0 }} 篇</span>
-  </form>
+  </ListToolbar>
   <LoadState
     description="可以在群里让小栖整理讨论，也可以点击“新建纪要”选择已保存的消息。"
     :empty="!groupId || !data?.items.length"
@@ -113,7 +113,7 @@ const createGroupId = ref("");
     "
     @retry="refresh"
   >
-    <div class="panel">
+    <AppPanel>
       <NDataTable
         :bordered="false"
         :columns
@@ -121,15 +121,10 @@ const createGroupId = ref("");
         :row-key="(row: Topic) => row.id"
         :scroll-x="700"
       />
-    </div>
-    <div class="pagination">
-      <span>共 {{ data?.total }} 篇 · 每页 30 篇</span>
-      <NPagination
-        v-model:page="page"
-        :item-count="data?.total ?? 0"
-        :page-size="30"
-      />
-    </div>
+    </AppPanel>
+    <ListPagination v-model:page="page" :total="data?.total ?? 0">
+      共 {{ data?.total }} 篇 · 每页 30 篇
+    </ListPagination>
   </LoadState>
   <CreateDialog
     v-if="createGroupId"
@@ -137,3 +132,15 @@ const createGroupId = ref("");
     @close="createGroupId = ''"
   />
 </template>
+
+<style scoped>
+.muted {
+  color: #798899;
+}
+
+:deep(.cell-sub) {
+  color: #8a97a7;
+  font-size: 11px;
+  margin-top: 4px;
+}
+</style>

@@ -47,7 +47,7 @@ const kinds: Record<string, string> = {
       刷新
     </NButton>
   </PageHeading>
-  <form class="toolbar" @submit.prevent="searchQuery = query">
+  <ListToolbar as="form" @submit.prevent="searchQuery = query">
     <NInput
       v-model:value="query"
       class="search"
@@ -58,7 +58,7 @@ const kinds: Record<string, string> = {
     </NInput>
     <NButton attr-type="submit">搜索</NButton>
     <span class="right muted">{{ data?.total ?? 0 }} 条消息</span>
-  </form>
+  </ListToolbar>
   <LoadState
     description="搜索范围限于已保存的消息。小栖启动后才会接收已启用群的新消息。"
     :empty="!data?.items.length"
@@ -137,13 +137,106 @@ const kinds: Record<string, string> = {
         </section>
       </article>
     </div>
-    <div class="pagination">
-      <span>时间均为北京时间 · 共 {{ data?.total }} 条</span>
-      <NPagination
-        v-model:page="page"
-        :item-count="data?.total ?? 0"
-        :page-size="30"
-      />
-    </div>
+    <ListPagination v-model:page="page" :total="data?.total ?? 0">
+      时间均为北京时间 · 共 {{ data?.total }} 条
+    </ListPagination>
   </LoadState>
 </template>
+
+<style scoped>
+.muted {
+  color: #798899;
+}
+
+.mono {
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cell-sub {
+  color: #8a97a7;
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.error-text {
+  color: #bf655d;
+}
+
+.mb-9 {
+  margin-bottom: 9px;
+}
+
+.message-list {
+  background: #fff;
+  border: 1px solid #e2e8ef;
+  border-radius: 8px;
+}
+
+.message-row {
+  padding: 20px 24px;
+  border-bottom: 1px solid #edf0f4;
+}
+
+.message-row:last-child {
+  border: 0;
+}
+
+.message-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 9px;
+  font-size: 12px;
+}
+
+.message-meta time {
+  margin-left: auto;
+  color: #96a1af;
+  font-size: 11px;
+}
+
+.message-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.85;
+  font-size: 13px;
+}
+
+.attachment {
+  margin-top: 12px;
+  padding: 12px 16px;
+  border: 1px solid #e4eaf0;
+  border-left: 3px solid #b4cccc;
+  border-radius: 5px;
+  background: #f8fafb;
+}
+
+.attachment-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 7px;
+}
+
+.attachment p {
+  font-size: 12px;
+  color: #748496;
+  white-space: pre-wrap;
+}
+
+@media (max-width: 760px) {
+  .message-row {
+    padding: 18px;
+  }
+
+  .message-meta {
+    flex-wrap: wrap;
+  }
+
+  .message-meta time {
+    margin-left: 0;
+  }
+}
+</style>

@@ -93,13 +93,7 @@ function changeGroup(id: string): void {
       @click="open = false"
     />
     <aside class="sidebar" :class="{ 'is-open': open }">
-      <NuxtLink class="brand" to="/">
-        <span class="brand-mark">栖</span>
-        <span>
-          <strong>言栖</strong>
-          <small>管理台</small>
-        </span>
-      </NuxtLink>
+      <NuxtLink to="/"><AppBrand caption="管理台" /></NuxtLink>
       <NButton
         aria-label="关闭导航"
         class="nav-close"
@@ -196,3 +190,248 @@ function changeGroup(id: string): void {
     </div>
   </div>
 </template>
+
+<style scoped>
+.load-error {
+  margin-bottom: 20px;
+}
+
+.workspace {
+  min-height: 100vh;
+}
+
+.sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  width: 222px;
+  border-right: 1px solid #e2e8ef;
+  background: #fbfcfd;
+  padding: 30px 16px 20px;
+  display: flex;
+  flex-direction: column;
+  z-index: 30;
+}
+
+.group-selector {
+  margin: 38px 6px 25px;
+}
+
+.group-selector label {
+  display: block;
+  color: #8a97a7;
+  font-size: 11px;
+  margin: 0 0 9px 2px;
+  letter-spacing: 1px;
+}
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 42px;
+  padding: 0 12px;
+  border-radius: 6px;
+  color: #68788b;
+  margin-bottom: 5px;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.nav-link .n-icon {
+  font-size: 18px;
+}
+
+.nav-link:hover {
+  background: #f0f4f7;
+  color: #243348;
+}
+
+.nav-link.active {
+  background: #e9f2f2;
+  color: #246d70;
+  font-weight: 600;
+}
+
+.nav-arrow {
+  margin-left: auto;
+}
+
+.sidebar-bottom {
+  margin-top: auto;
+  padding-top: 30px;
+}
+
+.sidebar-bottom p {
+  border-top: 1px solid #e7ecf1;
+  margin: 18px 8px 0;
+  padding-top: 17px;
+  color: #929dac;
+  font-size: 11px;
+}
+
+.logout {
+  border: 0;
+  width: 100%;
+  background: transparent;
+}
+
+.main-shell {
+  margin-left: 222px;
+}
+
+.topbar {
+  height: 70px;
+  border-bottom: 1px solid #e2e8ef;
+  background: #fcfdff;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 38px;
+  gap: 18px;
+}
+
+.breadcrumb,
+.topbar-status {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  white-space: nowrap;
+}
+
+.breadcrumb {
+  color: #8c99a9;
+  font-size: 12px;
+}
+
+.breadcrumb strong {
+  color: #526376;
+  font-weight: 500;
+}
+
+.separator {
+  color: #c2cbd5;
+}
+
+.connection {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #68788b;
+  font-size: 12px;
+}
+
+.connection i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #aab5c2;
+}
+
+.connection i.online {
+  background: #468c76;
+  box-shadow: 0 0 0 3px #e5f0ea;
+}
+
+.runtime-label {
+  color: #8c99a9;
+  font-size: 12px;
+  border-left: 1px solid #e2e8ef;
+  padding-left: 18px;
+}
+
+.page-content {
+  max-width: 1540px;
+  padding: 36px 38px 60px;
+  margin: 0 auto;
+}
+
+.mobile-menu,
+.nav-close,
+.nav-backdrop {
+  display: none;
+}
+
+@media (min-width: 1600px) {
+  .page-content {
+    padding-top: 45px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .sidebar {
+    width: 200px;
+  }
+
+  .main-shell {
+    margin-left: 200px;
+  }
+
+  .page-content {
+    padding: 28px 24px 45px;
+  }
+
+  .topbar {
+    padding: 0 24px;
+  }
+
+  .runtime-label {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .sidebar {
+    transform: translateX(-100%);
+    width: 235px;
+    transition: transform 0.2s;
+  }
+
+  .sidebar.is-open {
+    transform: translateX(0);
+  }
+
+  .main-shell {
+    margin: 0;
+  }
+
+  .nav-close {
+    display: inline-flex;
+    position: absolute;
+    right: 17px;
+    top: 20px;
+  }
+
+  .nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: #24334850;
+    z-index: 25;
+    border: 0;
+  }
+
+  .mobile-menu {
+    display: inline-flex;
+  }
+
+  .topbar {
+    padding: 0 18px;
+    height: 62px;
+  }
+
+  .breadcrumb,
+  .topbar-status {
+    gap: 10px;
+  }
+
+  .breadcrumb > span,
+  .connection {
+    display: none;
+  }
+
+  .page-content {
+    padding: 25px 18px 40px;
+  }
+}
+</style>

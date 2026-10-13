@@ -119,7 +119,7 @@ const columns: DataTableColumns<Group> = [
     NapCat 未连接。连接后可同步群名称和成员。
     <NuxtLink to="/settings">连接设置</NuxtLink>
   </NAlert>
-  <div class="toolbar">
+  <ListToolbar>
     <NInput
       v-model:value="query"
       class="search"
@@ -129,7 +129,7 @@ const columns: DataTableColumns<Group> = [
     <span class="right muted">
       {{ groups.filter((group) => group.enabled).length }} 个群已启用
     </span>
-  </div>
+  </ListToolbar>
   <LoadState
     :description="
       groups.length > 0
@@ -139,7 +139,7 @@ const columns: DataTableColumns<Group> = [
     :empty="filtered.length === 0"
     :title="groups.length > 0 ? '没有找到匹配的群' : '还没有添加群'"
   >
-    <div class="panel">
+    <AppPanel>
       <NDataTable
         :bordered="false"
         :columns
@@ -147,7 +147,7 @@ const columns: DataTableColumns<Group> = [
         :row-key="(row: Group) => row.id"
         :scroll-x="785"
       />
-    </div>
+    </AppPanel>
     <p class="form-help">
       关闭“保存消息”后，小栖不再处理该群的新消息。只关闭“自动整理”时，仍会保存消息并处理有权限成员的请求。
     </p>
@@ -155,3 +155,31 @@ const columns: DataTableColumns<Group> = [
   <GroupMembersDialog v-if="active" :group="active" @close="active = null" />
   <AddGroupDialog v-if="showAdd" @close="showAdd = false" />
 </template>
+
+<style scoped>
+.muted {
+  color: #798899;
+}
+
+:deep(.mono) {
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+:deep(.cell-sub) {
+  color: #8a97a7;
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.form-help {
+  font-size: 12px;
+  color: #8a97a7;
+  margin-top: 7px;
+}
+
+.mb-22 {
+  margin-bottom: 22px;
+}
+</style>

@@ -158,13 +158,13 @@ const states = [
 </script>
 
 <template>
-  <div class="toolbar">
+  <ListToolbar>
     <NSelect v-model:value="state" class="filter-state" :options="states" />
     <span class="muted">每 5 秒刷新</span>
     <NButton class="right" :loading="tasksLoading" @click="refresh">
       刷新
     </NButton>
-  </div>
+  </ListToolbar>
   <LoadState
     description="记录请求、附件解析和纪要整理会显示在这里。"
     :empty="!tasks?.items.length"
@@ -173,22 +173,17 @@ const states = [
     :title="!groupId ? '请先选择一个群' : '没有符合条件的任务'"
     @retry="refresh"
   >
-    <div class="panel">
+    <AppPanel>
       <NDataTable
         :bordered="false"
         :columns
         :data="tasks?.items ?? []"
         :scroll-x="750"
       />
-    </div>
-    <div class="pagination">
-      <span>共 {{ tasks?.total }} 项</span>
-      <NPagination
-        v-model:page="page"
-        :item-count="tasks?.total ?? 0"
-        :page-size="30"
-      />
-    </div>
+    </AppPanel>
+    <ListPagination v-model:page="page" :total="tasks?.total ?? 0">
+      共 {{ tasks?.total }} 项
+    </ListPagination>
   </LoadState>
   <p class="form-help">
     对话请求不能重试，请在群里重新提出。要中断正在执行的任务，请暂停 AI。
@@ -223,3 +218,35 @@ const states = [
     </NDrawerContent>
   </NDrawer>
 </template>
+
+<style scoped>
+.muted {
+  color: #798899;
+}
+
+:deep(.cell-sub) {
+  color: #8a97a7;
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+:deep(.row-actions) {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.form-help {
+  font-size: 12px;
+  color: #8a97a7;
+  margin-top: 7px;
+}
+
+.pre-wrap {
+  white-space: pre-wrap;
+}
+
+.filter-state {
+  width: 165px;
+}
+</style>

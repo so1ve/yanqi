@@ -28,7 +28,7 @@ async function save(): Promise<void> {
 </script>
 
 <template>
-  <div class="panel panel-body">
+  <AppPanel padded>
     <NInput
       v-model:value="markdown"
       :autosize="{ minRows: 20, maxRows: 45 }"
@@ -46,5 +46,11 @@ async function save(): Promise<void> {
         保存为新版本
       </NButton>
     </NSpace>
-  </div>
+  </AppPanel>
 </template>
+
+<style scoped>
+.mt-18 {
+  margin-top: 18px;
+}
+</style>

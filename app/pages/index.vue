@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ArrowRight, Refresh } from "@vicons/tabler";
 
-import { navigateTo } from "#imports";
 import { useApiData } from "~/composables/useApiData";
 import { usePoll } from "~/composables/usePoll";
 import { useWorkspace } from "~/composables/useWorkspace";
@@ -10,12 +9,8 @@ import { formatNumber, formatTime } from "~/utils/format";
 import { kindNames } from "~/utils/labels";
 
 const { data, loading, error, refresh } = useApiData<Overview>("overview");
-const { groupId, groups, status } = useWorkspace();
+const { groups, status } = useWorkspace();
 usePoll(refresh, 10_000);
-async function openRecord(group: string, id: string): Promise<void> {
-  groupId.value = group;
-  await navigateTo(`/records/${id}?group=${group}`);
-}
 </script>
 
 <template>
@@ -27,54 +22,47 @@ async function openRecord(group: string, id: string): Promise<void> {
   </PageHeading>
   <LoadState :error :loading="loading && !data" @retry="refresh">
     <template v-if="data">
-      <div class="stat-grid">
-        <div class="stat">
-          <div class="stat-label">已保存消息</div>
-          <div class="stat-value">{{ formatNumber(data.messages) }}</div>
-          <div class="stat-note">所有群的成员消息总数</div>
-        </div>
-        <div class="stat">
-          <div class="stat-label">纪要</div>
-          <div class="stat-value">{{ formatNumber(data.records) }}</div>
-          <div class="stat-note">同一篇的多个版本计为一篇</div>
-        </div>
-        <div class="stat">
-          <div class="stat-label">排队 / 处理中</div>
-          <div class="stat-value">{{ formatNumber(data.pending) }}</div>
-          <div class="stat-note">
-            {{ data.failed ? `${data.failed} 个任务失败` : "没有失败任务" }}
-          </div>
-        </div>
-        <div class="stat">
-          <div class="stat-label">已启用的群</div>
-          <div class="stat-value">
-            {{ formatNumber(status?.groups.length) }}
-          </div>
-          <div class="stat-note">
-            {{
-              status?.running
-                ? "机器人已启动"
-                : "AI 已暂停，NapCat 在线时仍保存群消息"
-            }}
-          </div>
-        </div>
-      </div>
+      <StatsGrid
+        :items="[
+          {
+            label: '已保存消息',
+            value: formatNumber(data.messages),
+            note: '所有群的成员消息总数',
+          },
+          {
+            label: '纪要',
+            value: formatNumber(data.records),
+            note: '同一篇的多个版本计为一篇',
+          },
+          {
+            label: '排队 / 处理中',
+            value: formatNumber(data.pending),
+            note: data.failed ? `${data.failed} 个任务失败` : '没有失败任务',
+          },
+          {
+            label: '已启用的群',
+            value: formatNumber(status?.groups.length),
+            note: status?.running
+              ? '机器人已启动'
+              : 'AI 已暂停，NapCat 在线时仍保存群消息',
+          },
+        ]"
+      />
       <div class="overview-columns">
-        <section class="panel">
-          <div class="panel-header">
+        <AppPanel>
+          <template #header>
             <h2>最近的记录</h2>
             <NuxtLink to="/records">
               查看纪要
               <NIcon :component="ArrowRight" />
             </NuxtLink>
-          </div>
+          </template>
           <div v-if="data.recent.length > 0">
-            <a
+            <NuxtLink
               v-for="record in data.recent"
               :key="record.id"
               class="record-link"
-              href="#"
-              @click.prevent="openRecord(record.groupId, record.id)"
+              :to="`/records/${record.id}?group=${record.groupId}`"
             >
               <span class="cell-sub">
                 {{
@@ -94,23 +82,22 @@ async function openRecord(group: string, id: string): Promise<void> {
                 </span>
                 <time>{{ formatTime(record.lastActiveAt) }}</time>
               </p>
-            </a>
+            </NuxtLink>
           </div>
-          <div v-else class="empty-state">
-            <h3>还没有纪要</h3>
-            <p>
-              连接 NapCat
-              并启用群记录后，可以在群里让小栖整理讨论，也可以在“纪要”页新建。
-            </p>
+          <EmptyState
+            v-else
+            description="连接 NapCat 并启用群记录后，可以在群里让小栖整理讨论，也可以在“纪要”页新建。"
+            title="还没有纪要"
+          >
             <NuxtLink to="/settings"><NButton>连接 NapCat</NButton></NuxtLink>
-          </div>
-        </section>
+          </EmptyState>
+        </AppPanel>
         <div>
-          <section class="panel">
-            <div class="panel-header">
+          <AppPanel>
+            <template #header>
               <h2>排队和处理中的任务</h2>
               <NuxtLink to="/tasks">全部</NuxtLink>
-            </div>
+            </template>
             <div v-for="task in data.tasks" :key="task.id" class="task-brief">
               <span class="task-number">#{{ task.id }}</span>
               <div>
@@ -121,35 +108,121 @@ async function openRecord(group: string, id: string): Promise<void> {
                 <StateTag :state="task.state" />
               </div>
             </div>
-            <div v-if="data.tasks.length === 0" class="empty-state">
-              <h3>没有待处理任务</h3>
-            </div>
-          </section>
-          <section class="panel daily-usage">
-            <div class="panel-body">
-              <h3>今日模型调用 / 上限</h3>
-              <p>
-                <span>{{ data.day }} · 北京时间</span>
-                <span>
-                  {{ formatNumber(data.calls) }} /
-                  {{ formatNumber(data.dailyLimit) }}
-                </span>
-              </p>
-              <NProgress
-                :height="5"
-                :percentage="
-                  Math.min(100, (data.calls / data.dailyLimit) * 100)
-                "
-                :show-indicator="false"
-                type="line"
-              />
-              <NuxtLink class="cell-sub usage-link" to="/usage">
-                按模型查看 token 用量 →
-              </NuxtLink>
-            </div>
-          </section>
+            <EmptyState v-if="data.tasks.length === 0" title="没有待处理任务" />
+          </AppPanel>
+          <AppPanel class="daily-usage" padded>
+            <h3>今日模型调用 / 上限</h3>
+            <p>
+              <span>{{ data.day }} · 北京时间</span>
+              <span>
+                {{ formatNumber(data.calls) }} /
+                {{ formatNumber(data.dailyLimit) }}
+              </span>
+            </p>
+            <NProgress
+              :height="5"
+              :percentage="Math.min(100, (data.calls / data.dailyLimit) * 100)"
+              :show-indicator="false"
+              type="line"
+            />
+            <NuxtLink class="cell-sub usage-link" to="/usage">
+              按模型查看 token 用量 →
+            </NuxtLink>
+          </AppPanel>
         </div>
       </div>
     </template>
   </LoadState>
 </template>
+
+<style scoped>
+.cell-sub {
+  color: #8a97a7;
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.overview-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(280px, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.record-link {
+  display: block;
+  padding: 20px 24px;
+  border-bottom: 1px solid #edf0f4;
+  color: #243348;
+}
+
+.record-link:last-child {
+  border: 0;
+}
+
+.record-link:hover {
+  background: #f9fbfc;
+}
+
+.record-link h3 {
+  font-size: 14px;
+  margin: 3px 0 8px;
+}
+
+.record-link p {
+  color: #8592a2;
+  font-size: 12px;
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+
+.task-brief {
+  display: flex;
+  gap: 12px;
+  padding: 18px 22px;
+  border-bottom: 1px solid #edf0f4;
+  align-items: flex-start;
+}
+
+.task-brief:last-child {
+  border: 0;
+}
+
+.task-brief p {
+  font-size: 12px;
+  color: #8a97a7;
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+}
+
+.task-number {
+  color: #a3afbd;
+  font-size: 11px;
+  margin-top: 3px;
+}
+
+.daily-usage {
+  margin-top: 24px;
+}
+
+.daily-usage p {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+  font-size: 12px;
+  color: #798899;
+  margin: 8px 0 16px;
+}
+
+@media (max-width: 1100px) {
+  .overview-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+.usage-link {
+  display: block;
+  margin-top: 15px;
+}
+</style>

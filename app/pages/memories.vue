@@ -119,7 +119,7 @@ const columns: DataTableColumns<Memory> = [
       添加记忆
     </NButton>
   </PageHeading>
-  <form class="toolbar" @submit.prevent="searchQuery = query">
+  <ListToolbar as="form" @submit.prevent="searchQuery = query">
     <NInput
       v-model:value="query"
       class="search"
@@ -129,7 +129,7 @@ const columns: DataTableColumns<Memory> = [
       <template #prefix><NIcon :component="Search" /></template>
     </NInput>
     <NButton attr-type="submit">搜索</NButton>
-  </form>
+  </ListToolbar>
   <LoadState
     description="可以让小栖记住你的偏好，也可以在这里添加。"
     :empty="!data?.items.length"
@@ -144,22 +144,17 @@ const columns: DataTableColumns<Memory> = [
     "
     @retry="refresh"
   >
-    <div class="panel">
+    <AppPanel>
       <NDataTable
         :bordered="false"
         :columns
         :data="data?.items ?? []"
         :scroll-x="700"
       />
-    </div>
-    <div class="pagination">
-      <span>共 {{ data?.total }} 条</span>
-      <NPagination
-        v-model:page="page"
-        :item-count="data?.total ?? 0"
-        :page-size="30"
-      />
-    </div>
+    </AppPanel>
+    <ListPagination v-model:page="page" :total="data?.total ?? 0">
+      共 {{ data?.total }} 条
+    </ListPagination>
   </LoadState>
   <MemoryDialog
     v-if="editor"
@@ -169,3 +164,17 @@ const columns: DataTableColumns<Memory> = [
     @saved="refresh"
   />
 </template>
+
+<style scoped>
+:deep(.cell-sub) {
+  color: #8a97a7;
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+:deep(.row-actions) {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+</style>

@@ -36,7 +36,7 @@ function update(key: NumericKey, value: number | null): void {
         官方服务时，整理和合并纪要会启用思考。输出上限包含思考内容、正文和工具参数。
       </p>
     </div>
-    <div class="form-grid">
+    <FormGrid>
       <NFormItem v-for="field in fields" :key="field.key" :label="field.label">
         <NInputNumber
           class="w-full"
@@ -73,6 +73,32 @@ function update(key: NumericKey, value: number | null): void {
           placeholder="128051 为鲸鱼，留空关闭"
         />
       </NFormItem>
-    </div>
+    </FormGrid>
   </section>
 </template>
+
+<style scoped>
+.w-full {
+  width: 100%;
+}
+
+.section-title {
+  margin-bottom: 18px;
+}
+
+.section-title p {
+  color: #8592a2;
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+.settings-section {
+  max-width: 1050px;
+  margin-bottom: 28px;
+}
+
+.settings-section + .settings-section {
+  border-top: 1px solid #e8edf2;
+  padding-top: 28px;
+}
+</style>

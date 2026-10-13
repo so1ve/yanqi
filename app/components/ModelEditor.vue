@@ -14,7 +14,7 @@ const model = defineModel<ModelConfig>({ required: true });
       </div>
       <NTag :bordered="false" size="small">OpenAI 兼容接口</NTag>
     </div>
-    <div class="form-grid">
+    <FormGrid>
       <NFormItem label="服务地址">
         <NInput
           v-model:value="model.baseURL"
@@ -34,6 +34,33 @@ const model = defineModel<ModelConfig>({ required: true });
           <p class="form-help">每个模型都可以使用不同的服务和密钥。</p>
         </div>
       </NFormItem>
-    </div>
+    </FormGrid>
   </section>
 </template>
+
+<style scoped>
+.form-help {
+  font-size: 12px;
+  color: #8a97a7;
+  margin-top: 7px;
+}
+
+.w-full {
+  width: 100%;
+}
+
+.model-card {
+  border: 1px solid #e2e8ef;
+  background: #fff;
+  border-radius: 8px;
+  padding: 22px;
+  margin-bottom: 16px;
+}
+
+.model-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+</style>
