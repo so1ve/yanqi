@@ -7,7 +7,7 @@ services:
       NAPCAT_UID: 1000
       NAPCAT_GID: 1000
     ports:
-      - "6099:6099"
+      - "127.0.0.1:6099:6099"
     volumes:
       - ./data/napcat/config:/app/napcat/config
       - ./data/napcat/qq:/app/.config/QQ
@@ -18,6 +18,6 @@ services:
     depends_on:
       - napcat
     ports:
-      - "3210:3000"
+      - "127.0.0.1:3210:3000"
     volumes:
       - ./data:/app/data
