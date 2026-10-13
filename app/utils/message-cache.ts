@@ -28,12 +28,19 @@ let database: Promise<IDBPDatabase<MessageCache>> | undefined;
 
 const openCache = () =>
   (database ??= new Promise<IDBPDatabase<MessageCache>>((resolve, reject) => {
-    let blocked = false;
+    let unavailable = false;
+    // 排在其他标签页后面的升级请求可能收不到 blocked 事件。
+    const timeout = setTimeout(() => fail(new Error("打开消息缓存超时")), 2000);
+
+    function fail(error: unknown): void {
+      unavailable = true;
+      clearTimeout(timeout);
+      reject(error);
+    }
 
     void openDB<MessageCache>("yanqi-messages", 2, {
       blocked() {
-        blocked = true;
-        reject(new Error("旧页面正在占用消息缓存"));
+        fail(new Error("旧页面正在占用消息缓存"));
       },
       blocking(_currentVersion, _blockedVersion, event) {
         (event.target as IDBDatabase).close();
@@ -67,13 +74,14 @@ const openCache = () =>
         }
       },
     }).then((db) => {
-      if (blocked) {
+      clearTimeout(timeout);
+      if (unavailable) {
         db.close();
         database = undefined;
       } else {
         resolve(db);
       }
-    }, reject);
+    }, fail);
   }));
 
 export async function readHistory(key: string) {
