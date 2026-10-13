@@ -40,7 +40,7 @@ export default defineEventHandler(async (event) => {
     : requireItem((await bot.store.notes.latest(topic.id)) ?? undefined);
   const path = resolve(dirname(note.path), "transcript.md");
 
-  if (!path.startsWith(`${resolve(bot.config.DATA_DIR)}${sep}`)) {
+  if (!path.startsWith(`${resolve(bot.store.directory)}${sep}`)) {
     throw createError({ statusCode: 400, message: "原文不在当前数据目录中" });
   }
 

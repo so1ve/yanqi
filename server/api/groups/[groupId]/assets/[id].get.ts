@@ -31,7 +31,7 @@ export default defineEventHandler(async (event) => {
 
   const path = resolve(asset.path);
 
-  if (!path.startsWith(`${resolve(bot.config.DATA_DIR)}${sep}`)) {
+  if (!path.startsWith(`${resolve(bot.store.directory)}${sep}`)) {
     throw createError({ statusCode: 400, message: "附件不在当前数据目录中" });
   }
 

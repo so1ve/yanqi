@@ -8,7 +8,7 @@
 
 话题简介、完整纪要和原文保存在本地 SQLite。更新纪要时复用已整理的段落，新增原文只生成新增部分；撤回或附件识别结果变化时，更新受影响的段落。查询时 AI 使用简介，发送全文时直接从数据库读取。
 
-每版纪要也会导出到 `DATA_DIR/groups/<群号>/topics/<话题 ID>/v<版本号>/`。开始整理时先写出 `transcript.md`，随后逐批更新 `note.md`；尚未完成时文件顶部标为草稿，完成后去掉标记并将整版纪要保存到数据库。整理中断时，已写出的草稿仍可查看。原始讨论按北京时间排列，使用“昵称（QQ 号）：内容”的格式，保留多行正文、代码和附件链接。
+每版纪要也会导出到 `data/groups/<群号>/topics/<话题 ID>/v<版本号>/`。开始整理时先写出 `transcript.md`，随后逐批更新 `note.md`；尚未完成时文件顶部标为草稿，完成后去掉标记并将整版纪要保存到数据库。整理中断时，已写出的草稿仍可查看。原始讨论按北京时间排列，使用“昵称（QQ 号）：内容”的格式，保留多行正文、代码和附件链接。
 
 在群里 @ 小栖说“找一下之前讨论数据库的记录”，可以查找已有纪要；说“把这份纪要发出来”，会从数据库读取全文发送。连续记录从开始请求之后算起，到结束请求之前为止，不受 AI 处理耗时影响。开始或结束时也可以要求把更早的内容并入同一份记录，例如“把刚才的部署讨论也包含进去，继续记录”。
 
@@ -101,19 +101,15 @@ AI 只有调用 `reply` 才能向群里说话；会话中的普通文本和分�
 
 管理台发起的整理默认只保存，点击“发送到群”才会发送。群聊内发起的记录仍遵循原有发布决定。
 
-配置与登录信息保存在 `DATA_DIR/management.sqlite`；群记录仍使用 `DATA_DIR/yanqi.sqlite`。首次启动导入已有 `.env`，之后由管理台保存的配置生效。修改模型或群权限不再需要改 `.env`。API 不返回已保存的密钥，输入框留空保留原值；更换模型服务地址时需要填写对应密钥。
+WebUI 使用 Kysely 和 Node 内置的 `node:sqlite`，配置、管理账号与登录会话保存在 `data/management.sqlite`。机器人自己的 `data/yanqi.sqlite` 继续由 Koishi / Minato 管理；群记录、消息和任务接口仍调用机器人的数据访问 API。
 
-以下参数仍由部署环境管理：`DATA_DIR`、`NITRO_HOST`、`NITRO_PORT`、`WEB_ORIGIN`、Compose 端口、时区、日志颜色，以及 NapCat 容器的 QQ 登录参数。管理台的 OneBot Token 用于连接已有 NapCat，不会替你修改 NapCat 服务端的 Token。
+首次启动创建默认配置，登录后进入设置页，填写连接和模型即可。已有数据库中的配置和登录信息继续保留。机器人参数只从数据库读取，不再导入或覆盖 `.env` 中的值。API 不返回已保存的密钥，输入框留空保留原值；更换服务地址时需要填写对应密钥。保存设置会先写入数据库，再应用到机器人。
+
+项目统一通过 Docker 运行。端口、挂载目录、时区和日志颜色固定在 `compose.yaml` 与 `Dockerfile` 中。管理台的 OneBot Token 用于连接已有 NapCat，不会替你修改 NapCat 服务端的 Token。
 
 ## 用 Docker 启动
 
-安装 Docker 和 Docker Compose。已有 `.env` 可直接使用；没有时复制示例：
-
-```sh
-cp .env.example .env
-```
-
-填写 `BOT_QQ` 和较长的随机 `ONEBOT_TOKEN`。这两个参数也用于配置 NapCat。模型和记录群可以稍后在页面填写。然后启动言栖和 NapCat 两个服务：
+安装 Docker 和 Docker Compose 后，直接启动言栖和 NapCat 两个服务，无需先创建 `.env`：
 
 ```sh
 docker compose up -d --build
@@ -122,26 +118,19 @@ docker compose logs yanqi
 
 打开 [言栖管理台](http://127.0.0.1:3210)。首次登录填写后端日志中的安装码，并设置管理密码。然后：
 
-1. 在 [NapCat 管理页](http://127.0.0.1:6099/webui) 完成 QQ 登录；登录 Token 从 `docker compose logs napcat` 获取。
-2. 在言栖“设置”中检查连接，填写主模型；视觉、语音可分别使用其他提供商。
-3. 在“群与成员”同步群列表，启用需要记录的群，选择可交互的成员。
-4. 点击“启动机器人”。需要重启服务后自动运行时，在设置中打开自动启动。
+1. 在 [NapCat 管理页](http://127.0.0.1:6099/webui) 扫码或输入 QQ 密码登录；管理页的登录 Token 从 `docker compose logs napcat` 获取。
+2. 在 NapCat 的网络配置中启用正向 WebSocket 服务端，监听 `0.0.0.0:3001`，设置 Token，消息格式选 `array`，打开“上报自身消息”。
+3. 在言栖“设置”中填写 QQ 号和相同的 Token，连接地址默认是 `ws://napcat:3001`，再填写主模型的地址、密钥和名称。视觉、语音和决策服务可分别配置。
+4. 保存后，在“群与成员”同步群列表，启用需要记录的群，选择可交互的成员。
+5. 点击“启动机器人”。需要重启服务后自动运行时，在设置中打开自动启动。
 
-页面与 `/api` 共用管理台端口，NapCat WebSocket 只在容器网络内使用。默认只向本机开放管理台 `3210` 和 NapCat `6099`。需要更改管理台端口时设置 `WEB_PORT`；部署到反向代理后时，填写 `WEB_ORIGIN=https://你的域名`，用于来源校验及 HTTPS 会话 Cookie。
+页面与 `/api` 共用管理台端口，NapCat WebSocket 只在容器网络内使用。只向本机开放管理台 `3210` 和 NapCat `6099`，容器的 `/app/data` 挂载到仓库的 `data/`。反向代理需保留浏览器访问的 `Host`，并正确设置 `X-Forwarded-Proto`，用于同源校验及 HTTPS 会话 Cookie。
 
-Compose 将言栖的初始 OneBot 地址设为 `ws://napcat:3001`。两边初始共用 `ONEBOT_TOKEN`，NapCat 消息格式设为 `array`。管理台保存的连接设置会在后续启动时继续使用。切换 QQ 账号时，需要同时在 NapCat 登录该账号，并更新言栖中的 QQ 号。
+Compose 通过 NapCat 的 `MODE=ws` 初始化缺失的网络配置，不再在每次启动时重写账号配置。后续在两个管理页面修改各自的设置。切换 QQ 账号时，在 NapCat 登录该账号，并更新言栖中的 QQ 号。
 
-可在 `.env` 中填写 `NAPCAT_QUICK_PASSWORD_MD5`，使用 QQ 密码的 32 位 MD5 尝试自动登录。NapCat 优先使用保存的登录状态；需要验证码或新设备验证时仍在 NapCat 页面完成。WebUI 登录 Token 与 OneBot Token 是两种凭据。参见 [NapCat 登录说明](https://github.com/NapNeko/NapCat-Docker#登录)。
+QQ 登录和验证都在 NapCat 页面完成，登录状态保存在挂载目录中。NapCat WebUI 登录 Token 与 OneBot Token 是两种凭据。参见 [NapCat 配置说明](https://github.com/NapNeko/NapCat-Docker#配置与更新)。
 
-如果希望从 `.env` 导入模型，每项使用 `BASE_URL,API_KEY,MODEL`，逗号之间不加空格：
-
-```dotenv
-AI_MODEL=https://text.example/v1,text-api-key,text-model
-AI_VISION_MODEL=https://vision.example/v1,vision-api-key,vision-model
-AI_AUDIO_MODEL=https://audio.example/v1,audio-api-key,audio-model
-```
-
-视觉服务需要支持图片输入，语音服务需要支持 OpenAI 兼容的 `/audio/transcriptions`。留空时仍保存附件原件。
+模型服务全部在言栖“设置”中填写。视觉服务需要支持图片输入，语音服务需要支持 OpenAI 兼容的 `/audio/transcriptions`；未启用时仍保存附件原件。
 
 ## 决策提供商
 
@@ -159,25 +148,19 @@ AI_AUDIO_MODEL=https://audio.example/v1,audio-api-key,audio-model
 
 OpenAI 与 Vercel 填 SDK Base URL、密钥和模型；JEV 填完整 POST 地址。各协议实现位于 `packages/bot/src/agent/decisions/`。
 
-## 本地开发
+## 开发
 
 使用根目录 `packageManager` 指定的 pnpm 和支持的 Node.js 版本：
 
 ```sh
 npx get-pnpm
 pnpm install
-pnpm dev
-```
-
-打开 `http://127.0.0.1:3000`。页面和接口随 Nuxt 一起启动，读取根目录 `.env`；相对 `DATA_DIR` 也按仓库根目录解析。
-
-```sh
 pnpm lint:fix
 pnpm check
 pnpm build
 ```
 
-`pnpm build` 生成完整的 Nuxt 服务，`pnpm start` 读取根目录 `.env` 并启动 `.output/server/index.mjs`，同时提供页面和接口。`NITRO_HOST` 和 `NITRO_PORT` 控制生产服务的监听地址。
+`pnpm build` 生成完整的 Nuxt 服务。实际运行使用 `docker compose up -d --build`，同时提供页面和接口。
 
 机器人统一由 WebUI 启停，也可在设置中开启服务启动后自动运行。
 
@@ -189,6 +172,6 @@ pnpm build
 docker compose --ansi always logs -f --no-log-prefix yanqi
 ```
 
-沿用 Koishi logger，按毫秒时间、模块名和等级排列。Compose 通过 `FORCE_COLOR=2` 打开彩色日志，默认 `TZ=Asia/Shanghai`；设 `FORCE_COLOR=0` 可关闭颜色。
+沿用 Koishi logger，按毫秒时间、模块名和等级排列。镜像固定使用彩色日志和 `Asia/Shanghai` 时区。
 
 `info` 记录任务、模型请求、工具调用和发送结果。`debug` 增加参数、结果片段和异常堆栈，可能包含聊天正文；`LOG_DETAIL_CHARS` 控制每段长度。AI 密钥、决策密钥和 OneBot Token 会隐藏，不记录完整请求头或图片 base64。

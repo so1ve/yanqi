@@ -22,7 +22,7 @@ export default defineEventHandler(async (event) => {
   if (!["GET", "HEAD"].includes(event.method)) {
     const origin = getRequestHeader(event, "origin");
 
-    if (origin && origin !== (process.env.WEB_ORIGIN ?? url.origin)) {
+    if (origin && origin !== url.origin) {
       throw createError({ statusCode: 403, message: "请求来源不受信任" });
     }
   }

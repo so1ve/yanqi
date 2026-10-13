@@ -16,6 +16,7 @@ import { Store } from "./storage/store.ts";
 export class Yanqi {
   #app: App;
   #config: Config;
+  #directory: string;
   #secretary: Secretary | null = null;
   #connection: ForkScope | null = null;
   #listeners: (() => void)[] = [];
@@ -24,25 +25,26 @@ export class Yanqi {
   #store: Store;
   #logger = new Logger("yanqi");
 
-  private constructor(app: App, config: Config) {
+  private constructor(app: App, config: Config, directory: string) {
     this.#app = app;
     this.#config = config;
+    this.#directory = directory;
     this.#store = this.#createStore();
   }
 
-  public static async open(config: Config): Promise<Yanqi> {
-    await mkdir(config.DATA_DIR, { recursive: true });
+  public static async open(config: Config, directory: string): Promise<Yanqi> {
+    await mkdir(directory, { recursive: true });
     const app = new App({
       nickname: ["言栖", "小栖"],
       autoAssign: false,
       autoAuthorize: 0,
     });
 
-    app.plugin(SQLite, { path: join(config.DATA_DIR, "yanqi.sqlite") });
+    app.plugin(SQLite, { path: join(directory, "yanqi.sqlite") });
     defineModels(app.model);
     app.plugin(HTTP, {});
     await app.start();
-    const bot = new Yanqi(app, config);
+    const bot = new Yanqi(app, config, directory);
 
     await bot.configure(config);
 
@@ -89,10 +91,6 @@ export class Yanqi {
 
       if (running) {
         assertConfigured(config);
-      }
-
-      if (config.DATA_DIR !== this.#config.DATA_DIR) {
-        throw new Error("数据目录需要在后端环境变量中修改并重启服务");
       }
 
       await this.#stop();
@@ -166,7 +164,7 @@ export class Yanqi {
   #createStore(): Store {
     return new Store(
       this.#app.database,
-      this.#config.DATA_DIR,
+      this.#directory,
       this.#config.ADMIN_IDS,
       this.#config.GROUP_ADMINS,
     );

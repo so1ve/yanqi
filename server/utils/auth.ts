@@ -50,27 +50,33 @@ export class Auth {
   public static async open(store: ControlStore): Promise<Auth> {
     const auth = new Auth(store);
 
-    if ((await store.db.get("accounts", 1)).length === 0) {
+    if (!(await auth.#account())) {
       process.stdout.write(`首次设置管理密码，安装码：${auth.#setupCode}\n`);
     }
 
     return auth;
   }
 
+  #account() {
+    return this.#store.db
+      .selectFrom("accounts")
+      .selectAll()
+      .where("id", "=", 1)
+      .executeTakeFirst();
+  }
+
   async #session(event: H3Event): Promise<void> {
     const token = randomBytes(32).toString("base64url");
     const maxAge = 7 * 86_400;
 
-    await this.#store.db.create("sessions", {
-      id: digest(token),
-      expiresAt: Date.now() + maxAge * 1000,
-    });
+    await this.#store.db
+      .insertInto("sessions")
+      .values({ id: digest(token), expiresAt: Date.now() + maxAge * 1000 })
+      .execute();
     setCookie(event, cookieName, token, {
       httpOnly: true,
       sameSite: "strict",
-      secure: (
-        process.env.WEB_ORIGIN ?? getRequestURL(event).origin
-      ).startsWith("https:"),
+      secure: getRequestURL(event).protocol === "https:",
       path: "/api",
       maxAge,
     });
@@ -81,19 +87,19 @@ export class Auth {
 
     return Boolean(
       token &&
-      (
-        await this.#store.db.get("sessions", {
-          id: digest(token),
-          expiresAt: { $gt: Date.now() },
-        })
-      ).length > 0,
+      (await this.#store.db
+        .selectFrom("sessions")
+        .select("id")
+        .where("id", "=", digest(token))
+        .where("expiresAt", ">", Date.now())
+        .executeTakeFirst()),
     );
   }
 
   public async state(event: H3Event) {
     return {
       authenticated: await this.loggedIn(event),
-      setupRequired: (await this.#store.db.get("accounts", 1)).length === 0,
+      setupRequired: !(await this.#account()),
     };
   }
 
@@ -121,7 +127,7 @@ export class Auth {
         setupCode: Type.Optional(Type.String()),
       }),
     );
-    const [account] = await this.#store.db.get("accounts", 1);
+    const account = await this.#account();
 
     this.#failures.push(now);
     if (!account) {
@@ -134,7 +140,10 @@ export class Auth {
 
       const password = await hashPassword(input.password);
 
-      await this.#store.db.create("accounts", { id: 1, password });
+      await this.#store.db
+        .insertInto("accounts")
+        .values({ id: 1, password })
+        .execute();
     } else if (!(await verifyPassword(input.password, account.password))) {
       throw createError({ statusCode: 401, message: "密码不正确" });
     }
@@ -149,7 +158,10 @@ export class Auth {
     const token = getCookie(event, cookieName);
 
     if (token) {
-      await this.#store.db.remove("sessions", { id: digest(token) });
+      await this.#store.db
+        .deleteFrom("sessions")
+        .where("id", "=", digest(token))
+        .execute();
     }
 
     deleteCookie(event, cookieName, { path: "/api" });
@@ -162,7 +174,7 @@ export class Auth {
       event,
       Type.Object({ current: Type.String(), password: passwordSchema }),
     );
-    const [account] = await this.#store.db.get("accounts", 1);
+    const account = await this.#account();
 
     if (!account || !(await verifyPassword(input.current, account.password))) {
       throw createError({ statusCode: 401, message: "当前密码不正确" });
@@ -170,9 +182,13 @@ export class Auth {
 
     const password = await hashPassword(input.password);
 
-    await this.#store.db.transact(async (db) => {
-      await db.set("accounts", 1, { password });
-      await db.remove("sessions", {});
+    await this.#store.db.transaction().execute(async (db) => {
+      await db
+        .updateTable("accounts")
+        .set({ password })
+        .where("id", "=", 1)
+        .execute();
+      await db.deleteFrom("sessions").execute();
     });
     await this.#session(event);
 

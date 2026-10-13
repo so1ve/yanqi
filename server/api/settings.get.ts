@@ -8,8 +8,9 @@ export default defineEventHandler(async (event) => {
   const settings = await control.settings();
 
   return {
-    ...maskedConfig(bot.config),
+    ...maskedConfig(settings.config),
     autostart: settings.autostart,
     napcatWebUrl: settings.napcatWebUrl,
+    dataDirectory: bot.store.directory,
   };
 });

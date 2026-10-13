@@ -28,15 +28,17 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: (error as Error).message });
   }
 
-  const current = bot.config;
+  const { config: current } = await control.settings();
 
-  config.DATA_DIR = current.DATA_DIR;
+  config.GROUP_IDS = current.GROUP_IDS;
+  config.GROUP_ADMINS = current.GROUP_ADMINS;
   for (const key of secretKeys) {
     if (
       !config[key] &&
       !input.clearSecrets.includes(key) &&
-      (key !== "DECISION_API_KEY" ||
-        config.DECISION_URL === current.DECISION_URL)
+      (key === "ONEBOT_TOKEN"
+        ? config.ONEBOT_URL === current.ONEBOT_URL
+        : config.DECISION_URL === current.DECISION_URL)
     ) {
       config[key] = current[key];
     }
@@ -76,12 +78,20 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  await bot.configure(config);
   await control.save(config, input.autostart, input.napcatWebUrl);
+  try {
+    await bot.configure(config);
+  } catch (error) {
+    throw createError({
+      statusCode: 500,
+      message: `设置已保存，但应用失败：${(error as Error).message}`,
+    });
+  }
 
   return {
     ...maskedConfig(config),
     autostart: input.autostart,
     napcatWebUrl: input.napcatWebUrl,
+    dataDirectory: bot.store.directory,
   };
 });

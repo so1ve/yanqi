@@ -17,7 +17,8 @@ export default defineEventHandler(async (event) => {
       }),
     }),
   );
-  const config = bot.config;
+  const settings = await control.settings();
+  const { config } = settings;
 
   config.GROUP_IDS = input.enabled
     ? [...new Set([...config.GROUP_IDS, groupId])]
@@ -33,10 +34,8 @@ export default defineEventHandler(async (event) => {
   await bot.database.upsert("groups", [
     { id: groupId, aiEnabled: input.automatic },
   ]);
-  await bot.configure(config);
-  const settings = await control.settings();
-
   await control.save(config, settings.autostart, settings.napcatWebUrl);
+  await bot.configure(config);
 
   return { ok: true };
 });

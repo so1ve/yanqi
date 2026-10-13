@@ -51,7 +51,7 @@ export default defineEventHandler(async (event) => {
     const revision = topic.revision + 1;
     const generation = topic.generation + 1;
     const directory = join(
-      bot.config.DATA_DIR,
+      bot.store.directory,
       "groups",
       topic.groupId,
       "topics",
@@ -68,7 +68,7 @@ export default defineEventHandler(async (event) => {
     const temporary = `${path}.${randomUUID()}.part`;
     const source = resolve(dirname(current.path), "transcript.md");
 
-    if (!source.startsWith(`${resolve(bot.config.DATA_DIR)}${sep}`)) {
+    if (!source.startsWith(`${resolve(bot.store.directory)}${sep}`)) {
       throw createError({ statusCode: 400, message: "原文不在当前数据目录中" });
     }
 

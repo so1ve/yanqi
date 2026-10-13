@@ -1,72 +1,96 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
-import { App } from "@koishijs/core";
-import type { Config, Database } from "@yanqi/bot";
-import { SQLite, parseConfig } from "@yanqi/bot";
+import type { Config } from "@yanqi/bot";
+import { parseConfig } from "@yanqi/bot";
+import { Kysely } from "kysely";
+import { NodeNativeSqliteDialect } from "kysely-node-native-sqlite";
 
-declare module "@koishijs/core" {
-  interface Tables {
-    settings: {
-      id: number;
-      config: Config;
-      autostart: boolean;
-      napcatWebUrl: string;
-    };
-    accounts: { id: number; password: string };
-    sessions: { id: string; expiresAt: number };
-  }
+interface ManagementDatabase {
+  settings: {
+    id: number;
+    config: string;
+    autostart: number;
+    napcatWebUrl: string;
+  };
+  accounts: { id: number; password: string };
+  sessions: { id: string; expiresAt: number };
 }
 
 export class ControlStore {
-  #app: App;
-  public readonly db: Database;
+  public readonly db: Kysely<ManagementDatabase>;
 
-  private constructor(app: App) {
-    this.#app = app;
-    this.db = app.database;
+  private constructor(directory: string) {
+    this.db = new Kysely<ManagementDatabase>({
+      dialect: new NodeNativeSqliteDialect(
+        join(directory, "management.sqlite"),
+      ),
+    });
   }
 
-  public static async open(
-    directory: string,
-    initial: Config,
-  ): Promise<ControlStore> {
+  public static async open(directory: string): Promise<ControlStore> {
     await mkdir(directory, { recursive: true });
-    const app = new App();
+    const store = new ControlStore(directory);
+    const { db } = store;
 
-    app.plugin(SQLite, { path: join(directory, "management.sqlite") });
-    app.model.extend("settings", {
-      id: "integer",
-      config: "json",
-      autostart: { type: "boolean", initial: false },
-      napcatWebUrl: { type: "text", initial: "http://localhost:6099" },
-    });
-    app.model.extend("accounts", { id: "integer", password: "text" });
-    app.model.extend("sessions", { id: "string", expiresAt: "integer" });
-    await app.start();
-    const store = new ControlStore(app);
-
-    if ((await store.db.get("settings", 1)).length === 0) {
-      await store.db.create("settings", {
+    await db.schema
+      .createTable("settings")
+      .ifNotExists()
+      .addColumn("id", "integer", (column) => column.primaryKey())
+      .addColumn("config", "text", (column) => column.notNull())
+      .addColumn("autostart", "integer", (column) =>
+        column.notNull().defaultTo(0),
+      )
+      .addColumn("napcatWebUrl", "text", (column) =>
+        column.notNull().defaultTo("http://localhost:6099/webui"),
+      )
+      .execute();
+    await db.schema
+      .createTable("accounts")
+      .ifNotExists()
+      .addColumn("id", "integer", (column) => column.primaryKey())
+      .addColumn("password", "text", (column) => column.notNull())
+      .execute();
+    await db.schema
+      .createTable("sessions")
+      .ifNotExists()
+      .addColumn("id", "text", (column) => column.primaryKey())
+      .addColumn("expiresAt", "integer", (column) => column.notNull())
+      .execute();
+    await db
+      .insertInto("settings")
+      .values({
         id: 1,
-        config: initial,
-        autostart: false,
-      });
-    }
-
-    await store.db.remove("sessions", { expiresAt: { $lt: Date.now() } });
+        config: JSON.stringify(parseConfig({})),
+        autostart: 0,
+        napcatWebUrl: "http://localhost:6099/webui",
+      })
+      .onConflict((conflict) => conflict.column("id").doNothing())
+      .execute();
+    await db
+      .deleteFrom("sessions")
+      .where("expiresAt", "<", Date.now())
+      .execute();
 
     return store;
   }
 
   public async settings() {
-    const [row] = await this.db.get("settings", 1);
+    const row = await this.db
+      .selectFrom("settings")
+      .selectAll()
+      .where("id", "=", 1)
+      .executeTakeFirstOrThrow();
+    const config = JSON.parse(row.config);
 
-    if (!row) {
-      throw new Error("管理配置不存在");
-    }
+    // 旧数据库仍可能保存数据目录，现在统一使用 Docker 挂载目录。
+    delete config.DATA_DIR;
 
-    return { ...row, config: parseConfig(row.config) };
+    return {
+      config: parseConfig(config),
+      autostart: Boolean(row.autostart),
+      napcatWebUrl: row.napcatWebUrl,
+    };
   }
 
   public async save(
@@ -74,10 +98,18 @@ export class ControlStore {
     autostart: boolean,
     napcatWebUrl: string,
   ): Promise<void> {
-    await this.db.set("settings", 1, { config, autostart, napcatWebUrl });
+    await this.db
+      .updateTable("settings")
+      .set({
+        config: JSON.stringify(config),
+        autostart: Number(autostart),
+        napcatWebUrl,
+      })
+      .where("id", "=", 1)
+      .execute();
   }
 
   public close(): Promise<void> {
-    return this.#app.stop();
+    return this.db.destroy();
   }
 }

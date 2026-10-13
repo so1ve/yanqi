@@ -27,10 +27,9 @@ export const configSchema = Type.Object(
     GROUP_IDS: Type.Array(qq, { default: [] }),
     ADMIN_IDS: Type.Array(qq, { default: [] }),
     GROUP_ADMINS: Type.Record(qq, Type.Array(qq), { default: {} }),
-    ONEBOT_URL: Type.String({ default: "ws://127.0.0.1:3001" }),
+    ONEBOT_URL: Type.String({ default: "ws://napcat:3001" }),
     ONEBOT_TOKEN: Type.String({ default: "" }),
     ACK_EMOJI_ID: Type.String({ pattern: "^\\d*$", default: "128051" }),
-    DATA_DIR: Type.String({ minLength: 1, default: "./data" }),
     LOG_LEVEL: Type.Enum(["info", "debug"], { default: "info" }),
     LOG_DETAIL_CHARS: positive(4000),
     BOT_PERSONA: Type.String({ default: defaultPersona }),
@@ -67,12 +66,6 @@ export const configSchema = Type.Object(
   { additionalProperties: false },
 );
 
-const modelParameters = Type.Tuple([
-  Type.String(),
-  Type.String({ minLength: 1 }),
-  Type.String({ minLength: 1 }),
-]);
-
 function readURL(value: string, protocols: string[], field: string): string {
   if (!URL.canParse(value) || !protocols.includes(new URL(value).protocol)) {
     throw new Error(
@@ -82,27 +75,6 @@ function readURL(value: string, protocols: string[], field: string): string {
 
   return value;
 }
-
-function readModel(value: string, field: string) {
-  const parts = value.split(",");
-
-  parts[2] = parts[2]?.trim() ?? "";
-
-  if (!Value.Check(modelParameters, parts)) {
-    throw new Error(`配置错误：${field} 需要填写 BASE_URL,API_KEY,MODEL`);
-  }
-
-  const [baseURL, apiKey, model] = parts;
-
-  return {
-    baseURL: readURL(baseURL, ["http:", "https:"], field),
-    apiKey,
-    model,
-  };
-}
-
-const readOptionalModel = (value: string | undefined, field: string) =>
-  value ? readModel(value, field) : null;
 
 export type ModelConfig = Static<typeof modelSchema>;
 export type Config = Static<typeof configSchema>;
@@ -167,49 +139,4 @@ export function assertConfigured(config: Config): void {
   ) {
     throw new Error("请完整填写决策提供商的地址、密钥和模型名称");
   }
-}
-
-export function readConfig(env: NodeJS.ProcessEnv = process.env) {
-  const input: Record<string, unknown> = {};
-
-  for (const [key, field] of Object.entries(configSchema.properties)) {
-    if (
-      [
-        "AI_AUDIO_MODEL",
-        "AI_MODEL",
-        "AI_VISION_MODEL",
-        "GROUP_ADMINS",
-      ].includes(key)
-    ) {
-      continue;
-    }
-
-    const value = env[key];
-
-    input[key] =
-      value !== undefined && (Type.IsNumber(field) || Type.IsInteger(field))
-        ? Number(value)
-        : value !== undefined && Type.IsBoolean(field)
-          ? value === "true"
-          : value;
-  }
-
-  for (const key of ["GROUP_IDS", "ADMIN_IDS"]) {
-    input[key] = env[key]
-      ?.split(",")
-      .map((id) => id.trim())
-      .filter(Boolean);
-  }
-
-  input.AI_MODEL = env.AI_MODEL ? readModel(env.AI_MODEL, "AI_MODEL") : {};
-  input.AI_VISION_MODEL = readOptionalModel(
-    env.AI_VISION_MODEL,
-    "AI_VISION_MODEL",
-  );
-  input.AI_AUDIO_MODEL = readOptionalModel(
-    env.AI_AUDIO_MODEL,
-    "AI_AUDIO_MODEL",
-  );
-
-  return parseConfig(input);
 }

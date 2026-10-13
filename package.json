@@ -12,17 +12,16 @@
     "dev": "nuxt dev --host 127.0.0.1",
     "lint": "eslint . && prettier --check . '!data/**'",
     "lint:fix": "eslint --fix . && prettier --write . '!data/**'",
-    "postinstall": "nuxt prepare",
-    "start": "node --env-file-if-exists=.env .output/server/index.mjs"
+    "postinstall": "nuxt prepare"
   },
   "dependencies": {
     "@koishijs/core": "catalog:",
-    "@koishijs/plugin-database-sqlite": "catalog:",
     "@vicons/tabler": "catalog:",
     "@yanqi/bot": "workspace:*",
     "dompurify": "catalog:",
     "h3": "catalog:",
-    "koishi": "catalog:",
+    "kysely": "catalog:",
+    "kysely-node-native-sqlite": "catalog:",
     "marked": "catalog:",
     "naive-ui": "catalog:",
     "nuxt": "catalog:",
@@ -32,6 +31,7 @@
     "vue-router": "catalog:"
   },
   "devDependencies": {
+    "@koishijs/plugin-database-sqlite": "catalog:",
     "@minatojs/sql.js": "catalog:",
     "@so1ve/eslint-config": "catalog:",
     "@so1ve/prettier-config": "catalog:",

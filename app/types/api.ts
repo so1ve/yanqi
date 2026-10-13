@@ -41,6 +41,7 @@ export interface Settings {
   secrets: Record<string, boolean>;
   autostart: boolean;
   napcatWebUrl: string;
+  dataDirectory: string;
 }
 export interface Task {
   id: number;

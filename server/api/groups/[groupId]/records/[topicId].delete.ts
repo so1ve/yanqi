@@ -32,7 +32,7 @@ export default defineEventHandler(async (event) => {
     }
 
     await rm(
-      join(bot.config.DATA_DIR, "groups", topic.groupId, "topics", topic.id),
+      join(bot.store.directory, "groups", topic.groupId, "topics", topic.id),
       { recursive: true, force: true },
     );
     await tx.remove("deliveries", { topicId: topic.id });

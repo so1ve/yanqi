@@ -84,7 +84,7 @@ async function password(): Promise<void> {
 
 <template>
   <PageHeading
-    description="模型、连接和人设直接保存在管理数据库中。"
+    description="配置保存在数据库中，保存后生效，重启后继续使用。"
     title="设置"
   >
     <NButton :disabled="!draft" :loading="busy" type="primary" @click="save">
@@ -99,10 +99,7 @@ async function password(): Promise<void> {
           <NForm class="settings-section">
             <div class="section-title">
               <h2>NapCat 连接</h2>
-              <p>
-                使用正向 WebSocket 连接 QQ 账号。账号登录与验证码在 NapCat
-                管理页完成。
-              </p>
+              <p>先在 NapCat 管理页扫码或输入 QQ 密码登录，再填写连接信息。</p>
             </div>
             <div class="form-grid">
               <NFormItem label="机器人 QQ 号">
@@ -123,7 +120,8 @@ async function password(): Promise<void> {
                     v-model:value="draft.ONEBOT_TOKEN"
                     autocomplete="new-password"
                     :placeholder="
-                      data?.secrets.ONEBOT_TOKEN
+                      data?.secrets.ONEBOT_TOKEN &&
+                      data.config.ONEBOT_URL === draft.ONEBOT_URL
                         ? '已保存；留空保留原值'
                         : '与 NapCat WebSocket 服务端一致'
                     "
@@ -135,6 +133,10 @@ async function password(): Promise<void> {
                       清除已保存的 Token
                     </NCheckbox>
                   </NCheckboxGroup>
+                  <p class="form-help">
+                    在 NapCat 的网络配置中启用 WebSocket 服务端，消息格式选
+                    array，打开“上报自身消息”，将同一个 Token 填在这里。
+                  </p>
                 </div>
               </NFormItem>
               <NFormItem class="full-width" label="NapCat 管理页地址">
@@ -174,11 +176,11 @@ async function password(): Promise<void> {
               </div>
             </NFormItem>
             <NFormItem label="数据目录">
-              <NInput readonly :value="draft.DATA_DIR" />
+              <NInput readonly :value="data?.dataDirectory" />
             </NFormItem>
             <p class="form-help">
-              数据目录由后端 DATA_DIR
-              环境变量指定。应用设置时会取消进行中的对话，后台整理会在新配置下继续。
+              数据保存在 Docker 挂载的 data/
+              目录。应用设置时会取消进行中的对话，后台整理会在新配置下继续。
             </p>
           </NForm>
         </NTabPane>

@@ -27,6 +27,8 @@ COPY --from=build /app/.output ./
 ENV NODE_ENV=production
 ENV NITRO_HOST=0.0.0.0
 ENV NITRO_PORT=3000
+ENV FORCE_COLOR=2
+ENV TZ=Asia/Shanghai
 EXPOSE 3000
 
 CMD ["node", "server/index.mjs"]

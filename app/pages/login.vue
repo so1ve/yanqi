@@ -23,7 +23,7 @@ async function login(): Promise<void> {
       }),
     )
   ) {
-    await navigateTo("/");
+    await navigateTo(data.value?.setupRequired ? "/settings" : "/");
   }
 }
 </script>
