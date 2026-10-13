@@ -17,17 +17,19 @@ export default defineEventHandler(async (event) => {
 
   const members = await bot.napcat.getGroupMemberList(groupId, true);
 
-  return members.map((member) => ({
-    id: String(member.user_id),
-    name: member.card || member.nickname,
-    nickname: member.nickname,
-    role: member.role,
-    administrator:
-      config.ADMIN_IDS.includes(String(member.user_id)) ||
-      (config.GROUP_ADMINS[groupId] ?? []).includes(String(member.user_id)),
-    inherited:
-      member.role === "owner" ||
-      member.role === "admin" ||
-      config.ADMIN_IDS.includes(String(member.user_id)),
-  }));
+  return members
+    .filter((member) => String(member.user_id) !== config.BOT_QQ)
+    .map((member) => ({
+      id: String(member.user_id),
+      name: member.card || member.nickname,
+      nickname: member.nickname,
+      role: member.role,
+      administrator:
+        config.ADMIN_IDS.includes(String(member.user_id)) ||
+        (config.GROUP_ADMINS[groupId] ?? []).includes(String(member.user_id)),
+      inherited:
+        member.role === "owner" ||
+        member.role === "admin" ||
+        config.ADMIN_IDS.includes(String(member.user_id)),
+    }));
 });

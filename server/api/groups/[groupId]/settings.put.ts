@@ -29,7 +29,9 @@ export default defineEventHandler(async (event) => {
   }
 
   if (input.admins !== undefined) {
-    config.GROUP_ADMINS[groupId] = [...new Set(input.admins)];
+    config.GROUP_ADMINS[groupId] = [...new Set(input.admins)].filter(
+      (id) => id !== config.BOT_QQ,
+    );
   }
 
   if (config.GROUP_IDS.length === 0 && bot.running) {
