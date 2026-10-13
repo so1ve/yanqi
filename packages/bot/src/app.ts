@@ -34,6 +34,7 @@ export class Yanqi {
 
   public static async open(config: Config, directory: string): Promise<Yanqi> {
     await mkdir(directory, { recursive: true });
+
     const app = new App({
       nickname: ["言栖", "小栖"],
       autoAssign: false,
@@ -43,7 +44,9 @@ export class Yanqi {
     app.plugin(SQLite, { path: join(directory, "yanqi.sqlite") });
     defineModels(app.model);
     app.plugin(HTTP, {});
+
     await app.start();
+
     const bot = new Yanqi(app, config, directory);
 
     await bot.configure(config);

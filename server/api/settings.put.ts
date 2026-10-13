@@ -4,7 +4,6 @@ import { createError, defineEventHandler } from "h3";
 import { Type } from "typebox";
 
 import { body } from "~~/server/utils/http";
-import { maskedConfig, modelKeys, secretKeys } from "~~/server/utils/settings";
 
 export default defineEventHandler(async (event) => {
   const { bot, control } = event.context;
@@ -15,9 +14,6 @@ export default defineEventHandler(async (event) => {
       config: configSchema,
       autostart: Type.Boolean(),
       napcatWebUrl: Type.String(),
-      clearSecrets: Type.Array(Type.Enum([...modelKeys, ...secretKeys]), {
-        default: [],
-      }),
     }),
   );
   let config: Config;
@@ -32,32 +28,6 @@ export default defineEventHandler(async (event) => {
 
   config.GROUP_IDS = current.GROUP_IDS;
   config.GROUP_ADMINS = current.GROUP_ADMINS;
-  for (const key of secretKeys) {
-    if (
-      !config[key] &&
-      !input.clearSecrets.includes(key) &&
-      (key === "ONEBOT_TOKEN"
-        ? config.ONEBOT_URL === current.ONEBOT_URL
-        : config.DECISION_URL === current.DECISION_URL)
-    ) {
-      config[key] = current[key];
-    }
-  }
-
-  for (const key of modelKeys) {
-    const model = config[key];
-    const old = current[key];
-
-    if (
-      model &&
-      old &&
-      !model.apiKey &&
-      !input.clearSecrets.includes(key) &&
-      model.baseURL === old.baseURL
-    ) {
-      model.apiKey = old.apiKey;
-    }
-  }
 
   if (
     input.napcatWebUrl &&
@@ -89,7 +59,7 @@ export default defineEventHandler(async (event) => {
   }
 
   return {
-    ...maskedConfig(config),
+    config,
     autostart: input.autostart,
     napcatWebUrl: input.napcatWebUrl,
     dataDirectory: bot.store.directory,

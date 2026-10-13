@@ -14,7 +14,6 @@ const draft = ref<Config | null>(null);
 const autostart = ref(false);
 const napcatWebUrl = ref("");
 const admins = ref("");
-const clearSecrets = ref<string[]>([]);
 const { busy, run } = useAction();
 const workspace = useWorkspace();
 const tab = ref("connection");
@@ -24,19 +23,11 @@ watch(data, (value) => {
     autostart.value = value.autostart;
     napcatWebUrl.value = value.napcatWebUrl;
     admins.value = value.config.ADMIN_IDS.join(", ");
-    clearSecrets.value = [];
   }
 });
 const safeNapcatUrl = computed(() =>
   /^https?:\/\//.test(napcatWebUrl.value) ? napcatWebUrl.value : "",
 );
-const hasKey = (
-  key: "AI_MODEL" | "AI_VISION_MODEL" | "AI_AUDIO_MODEL",
-): boolean =>
-  Boolean(
-    data.value?.secrets[key] &&
-    data.value.config[key]?.baseURL === draft.value?.[key]?.baseURL,
-  );
 function enable(
   kind: "AI_VISION_MODEL" | "AI_AUDIO_MODEL",
   value: boolean,
@@ -57,7 +48,6 @@ async function save(): Promise<void> {
         config: draft.value,
         autostart: autostart.value,
         napcatWebUrl: napcatWebUrl.value,
-        clearSecrets: clearSecrets.value,
       },
     });
     await workspace.refresh();
@@ -118,21 +108,9 @@ async function password(): Promise<void> {
                 <div class="w-full">
                   <NInput
                     v-model:value="draft.ONEBOT_TOKEN"
-                    autocomplete="new-password"
-                    :placeholder="
-                      data?.secrets.ONEBOT_TOKEN &&
-                      data.config.ONEBOT_URL === draft.ONEBOT_URL
-                        ? '已保存；留空保留原值'
-                        : '与 NapCat WebSocket 服务端一致'
-                    "
-                    show-password-on="click"
-                    type="password"
+                    autocomplete="off"
+                    placeholder="与 NapCat WebSocket 服务端一致"
                   />
-                  <NCheckboxGroup v-model:value="clearSecrets">
-                    <NCheckbox class="mt-9" value="ONEBOT_TOKEN">
-                      清除已保存的 Token
-                    </NCheckbox>
-                  </NCheckboxGroup>
                   <p class="form-help">
                     在 NapCat 的网络配置中启用 WebSocket 服务端，消息格式选
                     array，打开“上报自身消息”，将同一个 Token 填在这里。
@@ -189,7 +167,6 @@ async function password(): Promise<void> {
             <ModelEditor
               v-model="draft.AI_MODEL"
               description="理解请求、调用工具、整理纪要与生成群回复。"
-              :stored-key="hasKey('AI_MODEL')"
               title="主模型"
             />
             <div class="model-card-head">
@@ -208,7 +185,6 @@ async function password(): Promise<void> {
               v-if="draft.AI_VISION_MODEL"
               v-model="draft.AI_VISION_MODEL"
               description="服务需要支持 OpenAI 兼容的图片输入。"
-              :stored-key="hasKey('AI_VISION_MODEL')"
               title="视觉模型"
             />
             <div class="model-card-head">
@@ -225,20 +201,13 @@ async function password(): Promise<void> {
               v-if="draft.AI_AUDIO_MODEL"
               v-model="draft.AI_AUDIO_MODEL"
               description="服务需要支持 /audio/transcriptions。"
-              :stored-key="hasKey('AI_AUDIO_MODEL')"
               title="语音模型"
             />
           </NForm>
         </NTabPane>
         <NTabPane name="decision" tab="入口决策">
           <NForm>
-            <DecisionEditor
-              v-model="draft"
-              :stored-key="
-                !!data?.secrets.DECISION_API_KEY &&
-                data?.config.DECISION_URL === draft.DECISION_URL
-              "
-            />
+            <DecisionEditor v-model="draft" />
           </NForm>
         </NTabPane>
         <NTabPane name="persona" tab="人设提示词">

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { ModelConfig } from "@yanqi/bot";
 
-defineProps<{ title: string; description: string; storedKey?: boolean }>();
+defineProps<{ title: string; description: string }>();
 const model = defineModel<ModelConfig>({ required: true });
 </script>
 
@@ -28,20 +28,10 @@ const model = defineModel<ModelConfig>({ required: true });
         <div class="w-full">
           <NInput
             v-model:value="model.apiKey"
-            autocomplete="new-password"
-            :placeholder="
-              storedKey ? '已保存密钥；留空保留原值' : '填入此服务的 API Key'
-            "
-            show-password-on="click"
-            type="password"
+            autocomplete="off"
+            placeholder="填入此服务的 API Key"
           />
-          <p class="form-help">
-            {{
-              storedKey
-                ? "已保存的密钥不会显示在浏览器中。更换服务地址时需要重新填写。"
-                : "每个模型都可以使用不同的服务和密钥。"
-            }}
-          </p>
+          <p class="form-help">每个模型都可以使用不同的服务和密钥。</p>
         </div>
       </NFormItem>
     </div>

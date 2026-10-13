@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import type { Config } from "@yanqi/bot";
 
-defineProps<{ storedKey?: boolean }>();
 const model = defineModel<Config>({ required: true });
 const providers: {
   id: Config["DECISION_PROVIDER"];
@@ -63,12 +62,8 @@ function choose(provider: Config["DECISION_PROVIDER"]): void {
         <NFormItem label="API Key">
           <NInput
             v-model:value="model.DECISION_API_KEY"
-            autocomplete="new-password"
-            :placeholder="
-              storedKey ? '已保存；留空保留' : 'API Key / Workers AI Token'
-            "
-            show-password-on="click"
-            type="password"
+            autocomplete="off"
+            placeholder="API Key / Workers AI Token"
           />
         </NFormItem>
       </div>

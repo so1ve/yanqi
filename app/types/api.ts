@@ -38,7 +38,6 @@ export interface Page<T> {
 }
 export interface Settings {
   config: Config;
-  secrets: Record<string, boolean>;
   autostart: boolean;
   napcatWebUrl: string;
   dataDirectory: string;
