@@ -1,4 +1,4 @@
-import type { DBSchema } from "idb";
+import type { DBSchema, IDBPDatabase } from "idb";
 import { openDB } from "idb";
 
 import type { Message } from "~/types/api";
@@ -24,35 +24,56 @@ interface MessageCache extends DBSchema {
   bookmarks: { key: string; value: ReadingBookmark };
 }
 
-let database: ReturnType<typeof openDB<MessageCache>> | undefined;
+let database: Promise<IDBPDatabase<MessageCache>> | undefined;
 
 const openCache = () =>
-  (database ??= openDB<MessageCache>("yanqi-messages", 2, {
-    upgrade(db, oldVersion, _newVersion, transaction) {
-      if (oldVersion === 0) {
-        db.createObjectStore("messages", { keyPath: ["groupId", "id"] });
-        db.createObjectStore("histories");
-        db.createObjectStore("bookmarks");
-      } else {
-        // 只重新读取附件消息；普通文本、阅读位置与已加载范围继续保留。
-        const request = transaction.objectStore("messages").openCursor();
+  (database ??= new Promise<IDBPDatabase<MessageCache>>((resolve, reject) => {
+    let blocked = false;
 
-        void (async () => {
-          let cursor = await request;
+    void openDB<MessageCache>("yanqi-messages", 2, {
+      blocked() {
+        blocked = true;
+        reject(new Error("旧页面正在占用消息缓存"));
+      },
+      blocking(_currentVersion, _blockedVersion, event) {
+        (event.target as IDBDatabase).close();
+        database = undefined;
+      },
+      upgrade(db, oldVersion, _newVersion, transaction) {
+        if (oldVersion === 0) {
+          db.createObjectStore("messages", { keyPath: ["groupId", "id"] });
+          db.createObjectStore("histories");
+          db.createObjectStore("bookmarks");
+        } else {
+          // 只重新读取附件消息；普通文本、阅读位置与已加载范围继续保留。
+          const request = transaction.objectStore("messages").openCursor();
 
-          while (cursor) {
-            if (
-              cursor.value.assets.length > 0 ||
-              cursor.value.content.some((segment) => segment.type === "forward")
-            ) {
-              await cursor.delete();
+          void (async () => {
+            let cursor = await request;
+
+            while (cursor) {
+              if (
+                cursor.value.assets.length > 0 ||
+                cursor.value.content.some(
+                  (segment) => segment.type === "forward",
+                )
+              ) {
+                await cursor.delete();
+              }
+
+              cursor = await cursor.continue();
             }
-
-            cursor = await cursor.continue();
-          }
-        })();
+          })();
+        }
+      },
+    }).then((db) => {
+      if (blocked) {
+        db.close();
+        database = undefined;
+      } else {
+        resolve(db);
       }
-    },
+    }, reject);
   }));
 
 export async function readHistory(key: string) {
