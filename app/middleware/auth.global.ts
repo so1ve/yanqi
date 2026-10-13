@@ -1,10 +1,10 @@
-import { defineNuxtRouteMiddleware, navigateTo } from "#imports";
+import { defineNuxtRouteMiddleware, navigateTo, useNuxtApp } from "#imports";
 import { api } from "~/utils/api";
 
 export default defineNuxtRouteMiddleware(async (to, from) => {
   if (
     to.path === "/login" ||
-    (to.path === from.path && from.matched.length > 0)
+    (!useNuxtApp().isHydrating && to.path === from.path)
   ) {
     return;
   }
@@ -17,7 +17,9 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
     if (session.authenticated) {
       return;
     }
-  } catch {}
+  } catch {
+    // 会话检查失败时，保留目标地址并回到登录页。
+  }
 
   return navigateTo(
     { path: "/login", query: { redirect: to.fullPath } },
