@@ -1,7 +1,19 @@
 import { readFile } from "node:fs/promises";
-import { resolve, sep } from "node:path";
+import { extname, resolve, sep } from "node:path";
 
 import { createError } from "h3";
+
+export function imageMimeType(path: string): string | undefined {
+  const types: Record<string, string> = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+  };
+
+  return types[extname(path).toLowerCase()];
+}
 
 export function readDataFile(directory: string, path: string): Promise<Buffer> {
   const target = resolve(path);

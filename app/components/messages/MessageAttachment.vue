@@ -1,0 +1,160 @@
+<script setup lang="ts">
+import { FileText, Messages, Microphone, Movie, Photo } from "@vicons/tabler";
+import { computed } from "vue";
+
+import { useAction } from "~/composables/useAction";
+import type { Message } from "~/types/api";
+import { api } from "~/utils/api";
+
+const emit = defineEmits<{ updated: [] }>();
+const props = defineProps<{
+  asset: Message["assets"][number];
+  groupId: string;
+}>();
+const { busy, run } = useAction();
+const path = computed(
+  () => `/api/groups/${props.groupId}/assets/${props.asset.id}`,
+);
+const kinds = {
+  image: { label: "图片", icon: Photo },
+  audio: { label: "语音", icon: Microphone },
+  video: { label: "视频", icon: Movie },
+  file: { label: "文件", icon: FileText },
+  forward: { label: "合并转发", icon: Messages },
+};
+const kind = computed(() => kinds[props.asset.kind]);
+
+async function retry(): Promise<void> {
+  if (
+    await run(
+      () =>
+        api(`groups/${props.groupId}/assets/${props.asset.id}/retry`, {
+          method: "POST",
+        }),
+      "已安排重新解析",
+    )
+  ) {
+    emit("updated");
+  }
+}
+</script>
+
+<template>
+  <section :aria-label="kind.label" class="attachment">
+    <NImage
+      v-if="asset.previewable"
+      :alt="kind.label"
+      class="image"
+      :img-props="{ loading: 'lazy' }"
+      object-fit="contain"
+      :src="`${path}?preview=1`"
+    />
+    <div class="attachment-bar">
+      <span class="attachment-kind">
+        <NIcon :component="kind.icon" :size="17" />
+        {{ kind.label }}
+      </span>
+      <a v-if="asset.downloadable" :href="path">下载原件</a>
+      <span v-else class="pending">
+        {{ asset.state === "pending" ? "等待保存" : "尚未保存" }}
+      </span>
+    </div>
+    <p v-if="asset.error" class="error-text">{{ asset.error }}</p>
+    <NButton
+      v-if="asset.error || asset.state === 'failed'"
+      class="retry"
+      :loading="busy"
+      size="small"
+      text
+      @click="retry"
+    >
+      重新解析
+    </NButton>
+    <details v-if="asset.interpretation" class="interpretation">
+      <summary>
+        {{ asset.kind === "forward" ? "查看转发内容" : "查看识别内容" }}
+      </summary>
+      <p>{{ asset.interpretation }}</p>
+    </details>
+  </section>
+</template>
+
+<style scoped>
+.attachment {
+  min-width: min(230px, 100%);
+  max-width: 100%;
+}
+
+.attachment + .attachment,
+.attachment:not(:first-child) {
+  margin-top: 12px;
+}
+
+.image {
+  max-width: 100%;
+  margin-bottom: 10px;
+}
+
+.image :deep(img) {
+  display: block;
+  max-width: min(340px, 100%);
+  max-height: 280px;
+  border-radius: 8px;
+}
+
+.attachment-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 24px;
+  font-size: 12px;
+}
+
+.attachment-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #516779;
+}
+
+.attachment-bar a {
+  margin-left: auto;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.pending {
+  color: #6a7c88;
+}
+
+.error-text {
+  color: #ab554d;
+  font-size: 12px;
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+
+.retry {
+  margin-top: 4px;
+}
+
+.interpretation {
+  border-top: 1px solid #dfe8e9;
+  margin-top: 10px;
+  padding-top: 9px;
+  color: #5f7380;
+  font-size: 12px;
+}
+
+.interpretation summary {
+  cursor: pointer;
+  width: fit-content;
+}
+
+.interpretation p {
+  margin-top: 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  line-height: 1.8;
+}
+</style>

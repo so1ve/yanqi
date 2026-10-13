@@ -7,8 +7,13 @@ import {
   setResponseHeader,
 } from "h3";
 
-import { readDataFile } from "~~/server/files";
-import { groupParam, integer, requireItem } from "~~/server/utils/http";
+import { imageMimeType, readDataFile } from "~~/server/files";
+import {
+  groupParam,
+  integer,
+  queryParam,
+  requireItem,
+} from "~~/server/utils/http";
 
 export default defineEventHandler(async (event) => {
   const { bot } = event.context;
@@ -30,12 +35,18 @@ export default defineEventHandler(async (event) => {
   }
 
   const bytes = await readDataFile(bot.store.directory, asset.path);
+  const preview =
+    queryParam(event, "preview") === "1" && imageMimeType(asset.path);
 
-  setResponseHeader(event, "Content-Type", "application/octet-stream");
+  setResponseHeader(
+    event,
+    "Content-Type",
+    preview || "application/octet-stream",
+  );
   setResponseHeader(
     event,
     "Content-Disposition",
-    `attachment; filename="asset-${id}${extname(asset.path)}"`,
+    `${preview ? "inline" : "attachment"}; filename="asset-${id}${extname(asset.path)}"`,
   );
 
   return bytes;

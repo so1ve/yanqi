@@ -1,6 +1,7 @@
 import { $ } from "@koishijs/core";
 import { defineEventHandler } from "h3";
 
+import { messageDetails } from "~~/server/messages";
 import { groupParam, pagination, search } from "~~/server/utils/http";
 
 export default defineEventHandler(async (event) => {
@@ -16,37 +17,12 @@ export default defineEventHandler(async (event) => {
       sort: { id: "desc" },
       limit,
       offset,
-      fields: [
-        "id",
-        "groupId",
-        "messageId",
-        "userId",
-        "displayName",
-        "sentAt",
-        "text",
-        "isBot",
-        "addressed",
-        "recalledAt",
-        "replyTo",
-      ],
     }),
     bot.database.eval("messages", (row) => $.count(row.id), query),
   ]);
-  const attachments = await bot.database.get("assets", {
-    messageId: items.map((item) => item.id),
-  });
 
   return {
-    items: items.map((item) => ({
-      ...item,
-      assets: attachments
-        .filter((asset) => asset.messageId === item.id)
-        .map(({ path, reference, ...asset }) => ({
-          ...asset,
-          downloadable: Boolean(path),
-          reference,
-        })),
-    })),
+    items: await messageDetails(bot.database, groupId, items),
     total,
     page,
     limit,
