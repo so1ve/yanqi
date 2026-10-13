@@ -1,3 +1,5 @@
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
+
 import type { Config, ModelConfig } from "../config.ts";
 import type { Store } from "../storage/store.ts";
 import { logContext } from "../utils/logging.ts";
@@ -52,4 +54,31 @@ export async function reserveCall(
   }
 
   return id;
+}
+
+export async function recordCalls(
+  store: Store,
+  ids: number[],
+  messages: AgentMessage[],
+): Promise<void> {
+  const responses = messages.filter((message) => message.role === "assistant");
+
+  await store.usage.record(
+    ids.map((id, index) => {
+      const message = responses[index];
+      const usage = message?.usage.totalTokens ? message.usage : null;
+
+      return {
+        id,
+        input: usage?.input ?? null,
+        output: usage?.output ?? null,
+        cacheRead: usage?.cacheRead ?? null,
+        cacheWrite: usage?.cacheWrite ?? null,
+        durationMs:
+          message?.durationMs === undefined
+            ? null
+            : Math.round(message.durationMs),
+      };
+    }),
+  );
 }

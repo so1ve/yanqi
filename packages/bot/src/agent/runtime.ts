@@ -4,11 +4,9 @@ import type {
   FinishTurn,
 } from "@earendil-works/pi-agent-core";
 import { Agent } from "@earendil-works/pi-agent-core";
-import type { ImageContent, Model, UserMessage } from "@earendil-works/pi-ai";
-import { streamSimple } from "@earendil-works/pi-ai/api/openai-completions";
+import type { ImageContent, UserMessage } from "@earendil-works/pi-ai";
 import { Logger } from "@koishijs/core";
 import { jsonrepair } from "jsonrepair";
-import type { ChatCompletionCreateParamsStreaming } from "openai/resources/chat/completions";
 import type { Static, TSchema } from "typebox";
 import * as Value from "typebox/value";
 
@@ -17,8 +15,9 @@ import type { Conversation } from "../storage/conversations.ts";
 import type { Store } from "../storage/store.ts";
 import { AiError } from "../utils/errors.ts";
 import { logContext, logDetail } from "../utils/logging.ts";
+import { createCompletion } from "./completions.ts";
 import { logAgentEvents } from "./logging.ts";
-import { AiSizeError, reserveCall } from "./usage.ts";
+import { AiSizeError, recordCalls, reserveCall } from "./usage.ts";
 
 interface RequestOptions {
   model?: ModelConfig;
@@ -161,18 +160,14 @@ export class AgentRuntime {
     const config = this.#config;
     const endpoint = options.model ?? config.AI_MODEL;
     const tools = options.tools ?? [];
-    const modelId = endpoint.model;
-    const isDeepSeek =
-      new URL(endpoint.baseURL).hostname === "api.deepseek.com";
-    const thinkingLevel = options.thinking && isDeepSeek ? "high" : "off";
-    const maxTokens =
-      thinkingLevel === "off"
-        ? config.AI_MAX_OUTPUT_TOKENS
-        : config.AI_THINKING_MAX_OUTPUT_TOKENS;
-    const timeoutMs =
-      thinkingLevel === "off"
-        ? config.AI_TIMEOUT_MS
-        : config.AI_THINKING_TIMEOUT_MS;
+    const completion = createCompletion(
+      config,
+      endpoint,
+      purpose,
+      options.thinking,
+      schema,
+    );
+    const { model, thinkingLevel, timeoutMs } = completion;
     const task = logContext.getStore();
     const label = [
       task?.task,
@@ -185,27 +180,6 @@ export class AgentRuntime {
       .filter(Boolean)
       .join(" ");
     const startedAt = performance.now();
-    const model: Model<"openai-completions"> = {
-      id: modelId,
-      name: modelId,
-      api: "openai-completions",
-      provider: "yanqi",
-      baseUrl: endpoint.baseURL,
-      input: ["text", "image"],
-      // reasoning 声明模型能力；thinkingLevel 控制是否启用思考。
-      reasoning: isDeepSeek,
-      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      // 输入字符预算不是模型上下文容量。0 让 SDK 保留配置的输出额度。
-      contextWindow: 0,
-      maxTokens,
-      compat: {
-        supportsStore: false,
-        supportsDeveloperRole: false,
-        supportsReasoningEffort: isDeepSeek,
-        supportsStrictMode: false,
-        maxTokensField: "max_tokens",
-      },
-    };
     let turns = 0;
     const calls: number[] = [];
     let failure: Error | undefined;
@@ -236,13 +210,11 @@ export class AgentRuntime {
           timeout = setTimeout(() => agent.abort(), timeoutMs);
           timeout.unref();
 
-          return streamSimple(model, context, {
-            ...streamOptions,
-            apiKey: endpoint.apiKey,
-            maxTokens,
-            maxRetries: 0,
-            timeoutMs,
-          });
+          return completion.stream(
+            context,
+            streamOptions,
+            `${label} 第 ${turns} 轮请求：usage=${calls.at(-1)}`,
+          );
         } catch (error) {
           if (error instanceof Error) {
             failure = error;
@@ -250,47 +222,6 @@ export class AgentRuntime {
 
           throw error;
         }
-      },
-      onPayload: (payload) => {
-        const params = payload as ChatCompletionCreateParamsStreaming;
-
-        // 主对话通过工具交付结果，包括明确决定不回复。
-        if (tools.length > 0) {
-          params.tool_choice = "required";
-        }
-
-        if (schema) {
-          params.response_format =
-            config.AI_RESPONSE_FORMAT === "json_schema"
-              ? {
-                  type: "json_schema",
-                  json_schema: {
-                    name: purpose,
-                    strict: true,
-                    schema: { ...schema },
-                  },
-                }
-              : { type: "json_object" };
-        }
-
-        // 在 SDK 完成参数转换后记录，确保日志与实际请求一致。
-        this.#logger.info(
-          "%s 第 %s 轮请求：usage=%s provider=%s model=%s thinking=%s messages=%s chars=%s tools=%s tool_choice=%s max_tokens=%s timeout=%s ms",
-          label,
-          turns,
-          calls.at(-1),
-          new URL(endpoint.baseURL).origin,
-          params.model,
-          isDeepSeek ? thinkingLevel : "provider-default",
-          params.messages.length,
-          JSON.stringify(params.messages).length,
-          params.tools?.length ?? 0,
-          params.tool_choice ?? "default",
-          params.max_tokens,
-          timeoutMs,
-        );
-
-        return params;
       },
     });
     const previousMessages = agent.state.messages.length;
@@ -325,36 +256,17 @@ export class AgentRuntime {
     } finally {
       signal.removeEventListener("abort", abort);
       clearTimeout(timeout);
-      const messages = agent.state.messages
-        .slice(previousMessages)
-        .filter((message) => message.role === "assistant");
-
-      await this.#store.usage
-        .record(
-          calls.map((id, index) => {
-            const message = messages[index];
-            const usage = message?.usage.totalTokens ? message.usage : null;
-
-            return {
-              id,
-              input: usage?.input ?? null,
-              output: usage?.output ?? null,
-              cacheRead: usage?.cacheRead ?? null,
-              cacheWrite: usage?.cacheWrite ?? null,
-              durationMs:
-                message?.durationMs === undefined
-                  ? null
-                  : Math.round(message.durationMs),
-            };
-          }),
-        )
-        .catch((error) =>
-          this.#logger.warn(
-            "%s 用量保存失败：%s",
-            label,
-            logDetail(error, config),
-          ),
-        );
+      await recordCalls(
+        this.#store,
+        calls,
+        agent.state.messages.slice(previousMessages),
+      ).catch((error) =>
+        this.#logger.warn(
+          "%s 用量保存失败：%s",
+          label,
+          logDetail(error, config),
+        ),
+      );
       this.#logger.info(
         "%s 会话结束：rounds=%s 耗时=%s ms",
         label,
@@ -373,7 +285,7 @@ export class AgentRuntime {
 
     if (result?.stopReason === "length") {
       throw new AiSizeError(
-        `${purpose} 输出达到长度限制（model=${modelId}，finishReason=${result.rawStopReason ?? result.stopReason}，outputTokens=${result.usage.output}，maxTokens=${maxTokens}，responseId=${result.responseId ?? "未提供"}）`,
+        `${purpose} 输出达到长度限制（model=${model.id}，finishReason=${result.rawStopReason ?? result.stopReason}，outputTokens=${result.usage.output}，maxTokens=${model.maxTokens}，responseId=${result.responseId ?? "未提供"}）`,
       );
     }
 
