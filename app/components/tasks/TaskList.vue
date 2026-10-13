@@ -14,7 +14,7 @@ import { kindNames } from "~/utils/labels";
 
 const props = defineProps<{ groupId: string }>();
 const page = ref(1);
-const state = ref("");
+const state = defineModel<string>("state", { required: true });
 const detailId = ref<number | null>(null);
 const {
   data: tasks,
@@ -37,6 +37,7 @@ watch([() => props.groupId, state], () => {
   detailId.value = null;
 });
 usePoll(refresh);
+defineExpose({ loading: tasksLoading, refresh });
 
 async function retry(task: Task): Promise<void> {
   await run(async () => {
@@ -147,24 +148,9 @@ const columns: DataTableColumns<Task> = [
       ]),
   },
 ];
-
-const states = [
-  { label: "全部状态", value: "" },
-  { label: "等待处理", value: "pending" },
-  { label: "正在处理", value: "running" },
-  { label: "失败", value: "failed" },
-  { label: "已完成", value: "done" },
-];
 </script>
 
 <template>
-  <ListToolbar>
-    <NSelect v-model:value="state" class="filter-state" :options="states" />
-    <span class="muted">每 5 秒刷新</span>
-    <NButton class="right" :loading="tasksLoading" @click="refresh">
-      刷新
-    </NButton>
-  </ListToolbar>
   <LoadState
     description="对话请求、附件解析和纪要整理会显示在这里。"
     :empty="!tasks?.items.length"
@@ -220,10 +206,6 @@ const states = [
 </template>
 
 <style scoped>
-.muted {
-  color: #798899;
-}
-
 :deep(.cell-sub) {
   color: #8a97a7;
   font-size: 11px;
@@ -244,9 +226,5 @@ const states = [
 
 .pre-wrap {
   white-space: pre-wrap;
-}
-
-.filter-state {
-  width: 165px;
 }
 </style>

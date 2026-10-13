@@ -118,18 +118,20 @@ const columns: DataTableColumns<Memory> = [
       <template #icon><NIcon :component="Plus" /></template>
       添加记忆
     </NButton>
+    <template #toolbar>
+      <ListToolbar as="form" @submit.prevent="searchQuery = query">
+        <NInput
+          v-model:value="query"
+          class="search"
+          clearable
+          placeholder="搜索内容、名称或 QQ 号"
+        >
+          <template #prefix><NIcon :component="Search" /></template>
+        </NInput>
+        <NButton attr-type="submit">搜索</NButton>
+      </ListToolbar>
+    </template>
   </PageHeading>
-  <ListToolbar as="form" @submit.prevent="searchQuery = query">
-    <NInput
-      v-model:value="query"
-      class="search"
-      clearable
-      placeholder="搜索内容、名称或 QQ 号"
-    >
-      <template #prefix><NIcon :component="Search" /></template>
-    </NInput>
-    <NButton attr-type="submit">搜索</NButton>
-  </ListToolbar>
   <LoadState
     description="可以让小栖记住你的偏好，也可以在这里添加。"
     :empty="!data?.items.length"

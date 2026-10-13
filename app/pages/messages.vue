@@ -24,19 +24,21 @@ const source = computed(
       <template #icon><NIcon :component="Refresh" /></template>
       刷新
     </NButton>
+    <template #toolbar>
+      <ListToolbar as="form" @submit.prevent="searchQuery = query.trim()">
+        <NInput
+          v-model:value="query"
+          class="search"
+          clearable
+          placeholder="搜索消息正文"
+        >
+          <template #prefix><NIcon :component="Search" /></template>
+        </NInput>
+        <NButton attr-type="submit">搜索</NButton>
+        <span class="right reading-order">按时间顺序排列 · 向下滚动加载</span>
+      </ListToolbar>
+    </template>
   </PageHeading>
-  <ListToolbar as="form" @submit.prevent="searchQuery = query.trim()">
-    <NInput
-      v-model:value="query"
-      class="search"
-      clearable
-      placeholder="搜索消息正文"
-    >
-      <template #prefix><NIcon :component="Search" /></template>
-    </NInput>
-    <NButton attr-type="submit">搜索</NButton>
-    <span class="right reading-order">按时间顺序排列 · 向下滚动加载</span>
-  </ListToolbar>
   <MessageHistory
     v-if="groupId"
     :key="source"

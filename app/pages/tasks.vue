@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref, useTemplateRef } from "vue";
 
 import DeliveryList from "~/components/tasks/DeliveryList.vue";
 import TaskList from "~/components/tasks/TaskList.vue";
@@ -7,19 +7,63 @@ import { useWorkspace } from "~/composables/useWorkspace";
 
 const { groupId, group } = useWorkspace();
 const tab = ref("tasks");
+const state = ref("");
+const tasks = useTemplateRef<InstanceType<typeof TaskList>>("tasks");
+const deliveries =
+  useTemplateRef<InstanceType<typeof DeliveryList>>("deliveries");
+const activeList = computed(() =>
+  tab.value === "tasks" ? tasks.value : deliveries.value,
+);
+const states = [
+  { label: "全部状态", value: "" },
+  { label: "等待处理", value: "pending" },
+  { label: "正在处理", value: "running" },
+  { label: "失败", value: "failed" },
+  { label: "已完成", value: "done" },
+];
 </script>
 
 <template>
   <PageHeading
     :description="`${group?.name ?? '请先选择一个群'} · 查看进度、错误和发送状态`"
     title="后台任务"
-  />
-  <NTabs v-model:value="tab" type="line">
+  >
+    <NButton :loading="activeList?.loading" @click="activeList?.refresh()">
+      刷新
+    </NButton>
+    <template #toolbar>
+      <ListToolbar>
+        <NSelect
+          v-if="tab === 'tasks'"
+          v-model:value="state"
+          class="filter-state"
+          :options="states"
+        />
+        <span class="muted">每 5 秒刷新</span>
+      </ListToolbar>
+    </template>
+  </PageHeading>
+  <PageTabs v-model:value="tab">
     <NTabPane name="tasks" tab="处理任务">
-      <TaskList v-if="tab === 'tasks'" :group-id />
+      <TaskList
+        v-if="tab === 'tasks'"
+        v-model:state="state"
+        ref="tasks"
+        :group-id
+      />
     </NTabPane>
     <NTabPane name="deliveries" tab="群消息发送">
-      <DeliveryList v-if="tab === 'deliveries'" :group-id />
+      <DeliveryList v-if="tab === 'deliveries'" ref="deliveries" :group-id />
     </NTabPane>
-  </NTabs>
+  </PageTabs>
 </template>
+
+<style scoped>
+.muted {
+  color: #798899;
+}
+
+.filter-state {
+  width: 165px;
+}
+</style>

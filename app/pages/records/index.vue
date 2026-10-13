@@ -86,19 +86,21 @@ const createGroupId = ref("");
       <template #icon><NIcon :component="Plus" /></template>
       新建纪要
     </NButton>
+    <template #toolbar>
+      <ListToolbar as="form" @submit.prevent="searchQuery = query">
+        <NInput
+          v-model:value="query"
+          class="search"
+          clearable
+          placeholder="搜索标题、简介或整理要求"
+        >
+          <template #prefix><NIcon :component="Search" /></template>
+        </NInput>
+        <NButton attr-type="submit">搜索</NButton>
+        <span class="right muted">{{ data?.total ?? 0 }} 篇</span>
+      </ListToolbar>
+    </template>
   </PageHeading>
-  <ListToolbar as="form" @submit.prevent="searchQuery = query">
-    <NInput
-      v-model:value="query"
-      class="search"
-      clearable
-      placeholder="搜索标题、简介或整理要求"
-    >
-      <template #prefix><NIcon :component="Search" /></template>
-    </NInput>
-    <NButton attr-type="submit">搜索</NButton>
-    <span class="right muted">{{ data?.total ?? 0 }} 篇</span>
-  </ListToolbar>
   <LoadState
     description="可以在群里让小栖整理讨论，也可以点击“新建纪要”选择已保存的消息。"
     :empty="!groupId || !data?.items.length"

@@ -59,7 +59,7 @@ async function save(): Promise<void> {
   </PageHeading>
   <LoadState :error :loading @retry="refresh">
     <template v-if="draft">
-      <NTabs v-model:value="tab" animated type="line">
+      <PageTabs v-model:value="tab" animated>
         <NTabPane name="connection" tab="连接与启动">
           <NForm class="settings-section">
             <div class="section-title">
@@ -176,7 +176,7 @@ async function save(): Promise<void> {
         <NTabPane name="security" tab="管理密码">
           <PasswordForm />
         </NTabPane>
-      </NTabs>
+      </PageTabs>
     </template>
   </LoadState>
 </template>

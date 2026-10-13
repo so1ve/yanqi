@@ -151,10 +151,8 @@ function download(): void {
       <template #icon><NIcon :component="Send" /></template>
       发送到群
     </NButton>
-  </PageHeading>
-  <LoadState :error :loading="loading && !data" @retry="refresh">
-    <template v-if="data">
-      <div class="reader-toolbar">
+    <template #toolbar>
+      <ListToolbar v-if="data" class="reader-toolbar">
         <NSpace align="center">
           <NSelect
             class="version-select"
@@ -196,7 +194,11 @@ function download(): void {
             暂停 AI 后可删除纪要
           </NTooltip>
         </NSpace>
-      </div>
+      </ListToolbar>
+    </template>
+  </PageHeading>
+  <LoadState :error :loading="loading && !data" @retry="refresh">
+    <template v-if="data">
       <NAlert
         v-for="task in data.tasks.filter(
           (item) =>
@@ -213,7 +215,7 @@ function download(): void {
         · {{ task.lastError || task.progress || "等待整理" }}
         <NuxtLink to="/tasks">查看任务</NuxtLink>
       </NAlert>
-      <NTabs v-model:value="tab" type="line">
+      <PageTabs v-model:value="tab">
         <NTabPane display-directive="show:lazy" name="note" tab="纪要正文">
           <NoteEditor
             v-if="editing && data.note"
@@ -249,7 +251,7 @@ function download(): void {
             :note="data.note"
           />
         </NTabPane>
-      </NTabs>
+      </PageTabs>
     </template>
   </LoadState>
   <RegenerateDialog
@@ -270,17 +272,8 @@ function download(): void {
 }
 
 .reader-toolbar {
-  display: flex;
   justify-content: space-between;
-  align-items: center;
   gap: 18px;
-  margin-bottom: 20px;
-}
-
-@media (max-width: 760px) {
-  .reader-toolbar {
-    flex-wrap: wrap;
-  }
 }
 
 .back-link {

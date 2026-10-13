@@ -114,22 +114,24 @@ const columns: DataTableColumns<Group> = [
       <template #icon><NIcon :component="Plus" /></template>
       添加群号
     </NButton>
+    <template #toolbar>
+      <ListToolbar>
+        <NInput
+          v-model:value="query"
+          class="search"
+          clearable
+          placeholder="搜索群名或群号"
+        />
+        <span class="right muted">
+          {{ groups.filter((group) => group.enabled).length }} 个群已启用
+        </span>
+      </ListToolbar>
+    </template>
   </PageHeading>
   <NAlert v-if="!status?.connected" :bordered="false" class="mb-22" type="info">
     NapCat 未连接。连接后可同步群名称和成员。
     <NuxtLink to="/settings">连接设置</NuxtLink>
   </NAlert>
-  <ListToolbar>
-    <NInput
-      v-model:value="query"
-      class="search"
-      clearable
-      placeholder="搜索群名或群号"
-    />
-    <span class="right muted">
-      {{ groups.filter((group) => group.enabled).length }} 个群已启用
-    </span>
-  </ListToolbar>
   <LoadState
     :description="
       groups.length > 0

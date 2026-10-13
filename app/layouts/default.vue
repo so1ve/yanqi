@@ -149,7 +149,7 @@ function changeGroup(id: string): void {
       </div>
     </aside>
     <div class="main-shell">
-      <div class="topbar">
+      <header class="topbar">
         <div class="breadcrumb">
           <NButton
             aria-label="打开导航"
@@ -180,7 +180,7 @@ function changeGroup(id: string): void {
             {{ status?.running ? "暂停 AI" : "启动 AI" }}
           </NButton>
         </div>
-      </div>
+      </header>
       <main class="page-content">
         <NAlert v-if="error" :bordered="false" class="load-error" type="error">
           {{ error }}
@@ -197,6 +197,9 @@ function changeGroup(id: string): void {
 }
 
 .workspace {
+  --topbar-height: 70px;
+  --page-gutter: 38px;
+  --page-heading-height: 0px;
   min-height: 100vh;
 }
 
@@ -281,13 +284,16 @@ function changeGroup(id: string): void {
 }
 
 .topbar {
-  height: 70px;
+  position: sticky;
+  top: 0;
+  z-index: 24;
+  height: var(--topbar-height);
   border-bottom: 1px solid #e2e8ef;
   background: #fcfdff;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0 38px;
+  padding: 0 var(--page-gutter);
   gap: 18px;
 }
 
@@ -342,7 +348,7 @@ function changeGroup(id: string): void {
 
 .page-content {
   max-width: 1540px;
-  padding: 36px 38px 60px;
+  padding: 36px var(--page-gutter) 60px;
   margin: 0 auto;
 }
 
@@ -359,6 +365,10 @@ function changeGroup(id: string): void {
 }
 
 @media (max-width: 1100px) {
+  .workspace {
+    --page-gutter: 24px;
+  }
+
   .sidebar {
     width: 200px;
   }
@@ -368,11 +378,7 @@ function changeGroup(id: string): void {
   }
 
   .page-content {
-    padding: 28px 24px 45px;
-  }
-
-  .topbar {
-    padding: 0 24px;
+    padding-block: 28px 45px;
   }
 
   .runtime-label {
@@ -381,6 +387,11 @@ function changeGroup(id: string): void {
 }
 
 @media (max-width: 760px) {
+  .workspace {
+    --topbar-height: 62px;
+    --page-gutter: 18px;
+  }
+
   .sidebar {
     transform: translateX(-100%);
     width: 235px;
@@ -415,11 +426,6 @@ function changeGroup(id: string): void {
     display: inline-flex;
   }
 
-  .topbar {
-    padding: 0 18px;
-    height: 62px;
-  }
-
   .breadcrumb,
   .topbar-status {
     gap: 10px;
@@ -431,7 +437,7 @@ function changeGroup(id: string): void {
   }
 
   .page-content {
-    padding: 25px 18px 40px;
+    padding-block: 25px 40px;
   }
 }
 </style>

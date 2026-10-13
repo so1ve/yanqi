@@ -33,6 +33,7 @@ watch(
   },
 );
 usePoll(refresh);
+defineExpose({ loading: deliveriesLoading, refresh });
 
 function cancel(id: number): void {
   const path = `groups/${props.groupId}/deliveries/${id}/cancel`;
@@ -92,12 +93,6 @@ const columns: DataTableColumns<Delivery> = [
 </script>
 
 <template>
-  <ListToolbar>
-    <span class="muted">每 5 秒刷新</span>
-    <NButton class="right" :loading="deliveriesLoading" @click="refresh">
-      刷新
-    </NButton>
-  </ListToolbar>
   <LoadState
     :empty="!deliveries?.items.length"
     :error="deliveriesError"
@@ -123,10 +118,6 @@ const columns: DataTableColumns<Delivery> = [
 </template>
 
 <style scoped>
-.muted {
-  color: #798899;
-}
-
 .form-help {
   font-size: 12px;
   color: #8a97a7;

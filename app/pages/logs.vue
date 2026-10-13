@@ -51,32 +51,34 @@ function download(): void {
       <template #icon><NIcon :component="Refresh" /></template>
       刷新
     </NButton>
+    <template #toolbar>
+      <ListToolbar>
+        <NInput
+          v-model:value="query"
+          class="search"
+          clearable
+          placeholder="按群号、任务编号或内容筛选"
+        />
+        <NSelect
+          v-model:value="level"
+          class="filter-level"
+          :options="[
+            { label: '全部级别', value: '' },
+            { label: '信息 · Info', value: 'info' },
+            { label: '警告 · Warn', value: 'warn' },
+            { label: '错误 · Error', value: 'error' },
+            { label: '调试 · Debug', value: 'debug' },
+          ]"
+        />
+        <NButton class="right" @click="paused = !paused">
+          <template #icon>
+            <NIcon :component="paused ? PlayerPlay : PlayerPause" />
+          </template>
+          {{ paused ? "恢复刷新" : "暂停刷新" }}
+        </NButton>
+      </ListToolbar>
+    </template>
   </PageHeading>
-  <ListToolbar>
-    <NInput
-      v-model:value="query"
-      class="search"
-      clearable
-      placeholder="按群号、任务编号或内容筛选"
-    />
-    <NSelect
-      v-model:value="level"
-      class="filter-level"
-      :options="[
-        { label: '全部级别', value: '' },
-        { label: '信息 · Info', value: 'info' },
-        { label: '警告 · Warn', value: 'warn' },
-        { label: '错误 · Error', value: 'error' },
-        { label: '调试 · Debug', value: 'debug' },
-      ]"
-    />
-    <NButton class="right" @click="paused = !paused">
-      <template #icon>
-        <NIcon :component="paused ? PlayerPlay : PlayerPause" />
-      </template>
-      {{ paused ? "恢复刷新" : "暂停刷新" }}
-    </NButton>
-  </ListToolbar>
   <LoadState :error :loading="loading && !data" @retry="refresh">
     <div aria-label="运行日志" class="log-window">
       <div
