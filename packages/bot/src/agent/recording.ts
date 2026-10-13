@@ -39,34 +39,24 @@ export class RecordingAI {
     context: ChatMessage[],
   ): Promise<string> {
     const { title, description, focus } = topic;
-    const input = {
-      topic: { title, description },
-      messages,
-      context,
-      memory: await this.#store.memories.context(topic.groupId, topic.ownerId),
-    };
-
-    if (focus) {
-      const result = await this.#runtime.json(
-        "summary",
-        Type.Object(
-          { markdown: Type.String() },
-          { additionalProperties: false },
-        ),
-        `${summaryPrompts.summarize}\n\n${summaryPrompts.focusedSummary}\n${summaryMemory}`,
-        { ...input, focus },
-        { thinking: true },
-      );
-
-      return result.markdown.trim();
-    }
-
-    return this.#runtime.text(
+    const result = await this.#runtime.json(
       "summary",
-      `${summaryPrompts.summarize}\n${summaryMemory}\n直接返回纪要正文，不返回 JSON。`,
-      input,
+      Type.Object({ markdown: Type.String() }, { additionalProperties: false }),
+      `${summaryPrompts.summarize}\n\n${summaryPrompts.focusedSummary}\n${summaryMemory}`,
+      {
+        topic: { title, description },
+        focus,
+        messages,
+        context,
+        memory: await this.#store.memories.context(
+          topic.groupId,
+          topic.ownerId,
+        ),
+      },
       { thinking: true },
     );
+
+    return result.markdown.trim();
   }
 
   public async merge(topic: Topic, sections: string[]): Promise<string> {
@@ -74,6 +64,8 @@ export class RecordingAI {
       "summary_merge",
       `${summaryPrompts.merge}\n${summaryMemory}`,
       {
+        topic: { title: topic.title, description: topic.description },
+        focus: topic.focus,
         sections,
         memory: await this.#store.memories.context(
           topic.groupId,

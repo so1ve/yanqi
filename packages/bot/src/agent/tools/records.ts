@@ -20,7 +20,7 @@ const createParameters = object({
     Type.String({
       minLength: 1,
       description:
-        "要从整个范围找出的内容，例如所有优化建议及其理由、约束和分歧；省略时整理全部内容。",
+        "用户的选材目的和详略要求，例如找出优化建议及关键理由。概括整个讨论时省略，默认提炼主要议题；不要把识图描述或查阅简报当成用户要求。",
     }),
   ),
   directive,

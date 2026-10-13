@@ -122,7 +122,7 @@ export class Notes {
       );
       const path = join(directory, "note.md");
       const scope = topic.focus
-        ? `检索范围共 ${sources.length} 条原始消息\n\n整理要求：${topic.focus}`
+        ? `检索范围共 ${sources.length} 条原始消息`
         : `${sources.length} 条原始消息`;
       const header = `# ${topic.title}\n\n第 ${revision} 版 · ${scope}`;
       const footer = "[查看完整原文](transcript.md)\n";
