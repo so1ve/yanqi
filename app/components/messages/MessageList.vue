@@ -1,48 +1,66 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { NVirtualList } from "naive-ui";
+import { computed, useTemplateRef, watch } from "vue";
 
-import MessageBubble from "~/components/messages/MessageBubble.vue";
+import MessageEntry from "~/components/messages/MessageEntry.vue";
 import type { Message } from "~/types/api";
-import { formatMessageDay } from "~/utils/format";
 
-const emit = defineEmits<{ updated: [] }>();
-const props = defineProps<{ messages: Message[] }>();
-const entries = computed(() => {
-  const messages = props.messages.toSorted(
-    (a, b) => a.sentAt - b.sentAt || a.id - b.id,
-  );
+const emit = defineEmits<{ updated: [messageId: number]; loadMore: [] }>();
+const props = defineProps<{ messages: Message[]; virtual?: boolean }>();
+const virtualList =
+  useTemplateRef<InstanceType<typeof NVirtualList>>("virtualList");
+const messages = computed(() =>
+  props.messages.toSorted((a, b) => a.sentAt - b.sentAt || a.id - b.id),
+);
 
-  return messages.map((message, index) => {
-    const previous = messages[index - 1];
-    const day = formatMessageDay(message.sentAt);
-    const newDay = !previous || day !== formatMessageDay(previous.sentAt);
+function loadMore(): void {
+  const container = virtualList.value?.getScrollContainer();
 
-    return {
-      message,
-      day: newDay ? day : null,
-      continued:
-        !newDay &&
-        previous?.userId === message.userId &&
-        message.sentAt - previous.sentAt < 120_000,
-    };
-  });
-});
+  if (
+    container &&
+    container.clientHeight > 0 &&
+    container.scrollHeight - container.scrollTop - container.clientHeight < 400
+  ) {
+    emit("loadMore");
+  }
+}
+
+watch(() => props.messages.length, loadMore, { flush: "post" });
 </script>
 
 <template>
   <section aria-label="聊天记录" class="conversation">
     <NImageGroup>
-      <ol class="messages">
-        <li v-for="entry in entries" :key="entry.message.id">
-          <div v-if="entry.day" class="day-divider">
-            <span>{{ entry.day }}</span>
-          </div>
-          <MessageBubble
-            :continued="entry.continued"
-            :message="entry.message"
-            @updated="emit('updated')"
+      <NVirtualList
+        v-if="virtual"
+        ref="virtualList"
+        class="virtual-messages"
+        item-resizable
+        :item-size="48"
+        :items="messages"
+        :items-style="{ maxWidth: '980px', margin: '0 auto' }"
+        key-field="id"
+        :padding-bottom="4"
+        visible-items-tag="ol"
+        @resize="loadMore"
+        @scroll="loadMore"
+      >
+        <template #default="{ item, index }">
+          <MessageEntry
+            :message="item"
+            :previous="messages[index - 1]"
+            @updated="emit('updated', item.id)"
           />
-        </li>
+        </template>
+      </NVirtualList>
+      <ol v-else class="messages">
+        <MessageEntry
+          v-for="(message, index) in messages"
+          :key="message.id"
+          :message
+          :previous="messages[index - 1]"
+          @updated="emit('updated', message.id)"
+        />
       </ol>
     </NImageGroup>
   </section>
@@ -63,32 +81,19 @@ const entries = computed(() => {
   list-style: none;
 }
 
-.day-divider {
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  margin: 22px 0 28px;
-  color: #687c85;
-  font-size: 12px;
-  text-align: center;
+.virtual-messages {
+  max-height: min(70dvh, 900px);
 }
 
-.day-divider::before,
-.day-divider::after {
-  content: "";
-  height: 1px;
-  background: #dce5e8;
-  flex: 1;
+.virtual-messages :deep(ol) {
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 @media (max-width: 760px) {
   .conversation {
     padding: 4px 12px 20px;
-  }
-
-  .day-divider {
-    gap: 10px;
-    font-size: 11px;
   }
 }
 </style>

@@ -243,7 +243,11 @@ function download(): void {
           name="original"
           tab="完整原文"
         >
-          <TranscriptView v-if="data.note" :note="data.note" />
+          <TranscriptView
+            v-if="data.note"
+            :key="data.note.id"
+            :note="data.note"
+          />
         </NTabPane>
       </NTabs>
     </template>
