@@ -4,12 +4,13 @@
 !pnpm-lock.yaml
 !pnpm-workspace.yaml
 !tsconfig.json
+!nuxt.config.ts
 !packages/
 !packages/**
-!apps/
-!apps/**
-!docker/
-!docker/**
+!app/
+!app/**
+!server/
+!server/**
 **/node_modules
 **/.nuxt
 **/.output

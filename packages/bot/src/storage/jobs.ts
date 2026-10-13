@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { setTimeout as delay } from "node:timers/promises";
 
-import { Logger } from "koishi";
+import { Logger } from "@koishijs/core";
 
 import type { Job, JobKind, JobPayloads, Topic } from "../types.ts";
 import type { Database } from "./schema.ts";

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { $ } from "koishi";
+import { $ } from "@koishijs/core";
 
 import type { Database } from "./schema.ts";
 

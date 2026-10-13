@@ -1,5 +1,5 @@
-import type { Bot, Context } from "koishi";
-import { Logger, h } from "koishi";
+import type { Bot, Context } from "@koishijs/core";
+import { Logger, h } from "@koishijs/core";
 import type { OneBot } from "koishi-plugin-adapter-onebot";
 
 import type { Config } from "../config.ts";

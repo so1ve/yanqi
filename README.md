@@ -66,7 +66,9 @@ AI 只有调用 `reply` 才能向群里说话；会话中的普通文本和分�
 
 ## 代码结构
 
-项目使用 pnpm workspace：`packages/bot` 是机器人库，`apps/api` 是独立管理后端，`apps/web` 是 Nuxt 和 Naive UI 前端。后端直接调用 `Yanqi.open()`、`start()`、`stop()` 和 `configure()`。停止处理时撤掉消息监听并取消 AI 请求，NapCat 连接和数据库继续可供管理台读取。下面的模块路径相对于 `packages/bot/src`。
+根目录是 Nuxt 和 Naive UI 管理台：`app/` 放页面，`server/` 放接口和服务初始化。`packages/bot` 是通过 pnpm workspace 引用的机器人库。Nitro 启动时创建一个 `Yanqi` 实例，WebUI 通过 `start()`、`stop()` 和 `configure()` 管理它。停止处理时撤掉消息监听并取消 AI 请求，NapCat 连接和数据库继续可供管理台读取。下面的模块路径相对于 `packages/bot/src`。
+
+外部依赖版本统一定义在根目录 `pnpm-workspace.yaml` 的 `catalog` 中，各包使用 `catalog:` 引用；本地机器人库使用 `workspace:*`。
 
 | 模块                                          | 职责                                                                                |
 | --------------------------------------------- | ----------------------------------------------------------------------------------- |
@@ -86,7 +88,7 @@ AI 只有调用 `reply` 才能向群里说话；会话中的普通文本和分�
 
 ## 管理台
 
-管理台采用 Nuxt + Naive UI，独立 API 使用 Hono。后端通过 `@yanqi/bot` 调用机器人，不启动子进程，也不解析终端输出。
+管理台采用 Nuxt + Naive UI，页面和管理接口由同一个 Nitro 服务提供。服务端通过 `@yanqi/bot` 直接调用机器人。
 
 - **启停**：顶部按钮控制消息处理与 AI 任务。停止后 NapCat 仍保持连接，可查群成员、查看和编辑记录。重新启动会继续未完成的后台任务，旧对话不会重放。
 - **群与成员**：从 NapCat 同步群列表和群成员，按群启用消息记录、自动归档，勾选额外授权成员。群主、QQ 群管理员和全局名单自动获准。
@@ -101,7 +103,7 @@ AI 只有调用 `reply` 才能向群里说话；会话中的普通文本和分�
 
 配置与登录信息保存在 `DATA_DIR/management.sqlite`；群记录仍使用 `DATA_DIR/yanqi.sqlite`。首次启动导入已有 `.env`，之后由管理台保存的配置生效。修改模型或群权限不再需要改 `.env`。API 不返回已保存的密钥，输入框留空保留原值；更换模型服务地址时需要填写对应密钥。
 
-以下参数仍由部署环境管理：`DATA_DIR`、`API_HOST`、`API_PORT`、`WEB_ORIGIN`、Compose 端口、时区、日志颜色，以及 NapCat 容器的 QQ 登录参数。管理台的 OneBot Token 用于连接已有 NapCat，不会替你修改 NapCat 服务端的 Token。
+以下参数仍由部署环境管理：`DATA_DIR`、`NITRO_HOST`、`NITRO_PORT`、`WEB_ORIGIN`、Compose 端口、时区、日志颜色，以及 NapCat 容器的 QQ 登录参数。管理台的 OneBot Token 用于连接已有 NapCat，不会替你修改 NapCat 服务端的 Token。
 
 ## 用 Docker 启动
 
@@ -111,7 +113,7 @@ AI 只有调用 `reply` 才能向群里说话；会话中的普通文本和分�
 cp .env.example .env
 ```
 
-填写 `BOT_QQ` 和较长的随机 `ONEBOT_TOKEN`。这两个参数也用于配置 NapCat。模型和记录群可以稍后在页面填写。然后启动三个服务：
+填写 `BOT_QQ` 和较长的随机 `ONEBOT_TOKEN`。这两个参数也用于配置 NapCat。模型和记录群可以稍后在页面填写。然后启动言栖和 NapCat 两个服务：
 
 ```sh
 docker compose up -d --build
@@ -125,7 +127,7 @@ docker compose logs yanqi
 3. 在“群与成员”同步群列表，启用需要记录的群，选择可交互的成员。
 4. 点击“启动机器人”。需要重启服务后自动运行时，在设置中打开自动启动。
 
-前端通过同源 `/api` 访问后端，API 和 NapCat WebSocket 只在容器网络内使用。默认只向本机开放管理台 `3210` 和 NapCat `6099`。需要更改管理台端口时设置 `WEB_PORT`；部署到反向代理后时，填写 `WEB_ORIGIN=https://你的域名`，用于来源校验及 HTTPS 会话 Cookie。
+页面与 `/api` 共用管理台端口，NapCat WebSocket 只在容器网络内使用。默认只向本机开放管理台 `3210` 和 NapCat `6099`。需要更改管理台端口时设置 `WEB_PORT`；部署到反向代理后时，填写 `WEB_ORIGIN=https://你的域名`，用于来源校验及 HTTPS 会话 Cookie。
 
 Compose 将言栖的初始 OneBot 地址设为 `ws://napcat:3001`。两边初始共用 `ONEBOT_TOKEN`，NapCat 消息格式设为 `array`。管理台保存的连接设置会在后续启动时继续使用。切换 QQ 账号时，需要同时在 NapCat 登录该账号，并更新言栖中的 QQ 号。
 
@@ -167,7 +169,7 @@ pnpm install
 pnpm dev
 ```
 
-Nuxt 位于 `http://127.0.0.1:3000`，API 默认位于 `http://127.0.0.1:3100`。前端开发代理默认指向 3100；改变 API 端口后，用 `API_PROXY=http://127.0.0.1:新端口/api pnpm dev` 同步代理。
+打开 `http://127.0.0.1:3000`。页面和接口随 Nuxt 一起启动，读取根目录 `.env`；相对 `DATA_DIR` 也按仓库根目录解析。
 
 ```sh
 pnpm lint:fix
@@ -175,9 +177,9 @@ pnpm check
 pnpm build
 ```
 
-`pnpm build` 生成 `apps/web/.output/public` 静态站点。生产前端需要将 `/api/` 代理到管理后端，并把页面路径回退到 `index.html`，仓库中提供了 Nginx 配置。
+`pnpm build` 生成完整的 Nuxt 服务，`pnpm start` 读取根目录 `.env` 并启动 `.output/server/index.mjs`，同时提供页面和接口。`NITRO_HOST` 和 `NITRO_PORT` 控制生产服务的监听地址。
 
-`pnpm start` 只启动管理 API。需要不带管理台的独立机器人时使用 `pnpm bot`；该入口直接读取 `.env`，不使用管理数据库中的配置。不要让这两个入口同时操作同一个数据目录。
+机器人统一由 WebUI 启停，也可在设置中开启服务启动后自动运行。
 
 ## 日志
 

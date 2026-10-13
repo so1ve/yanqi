@@ -4,4 +4,3 @@ data/
 *.log
 **/.nuxt/
 **/.output/
-apps/web/dist

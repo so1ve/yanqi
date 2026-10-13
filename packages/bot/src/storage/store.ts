@@ -1,4 +1,4 @@
-import { $ } from "koishi";
+import { $ } from "@koishijs/core";
 
 import { Assets } from "./assets.ts";
 import { DeliveryQueue } from "./deliveries.ts";

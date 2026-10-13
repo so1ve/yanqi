@@ -1,5 +1,5 @@
 import type { Agent } from "@earendil-works/pi-agent-core";
-import { Logger } from "koishi";
+import { Logger } from "@koishijs/core";
 
 import type { Config } from "../config.ts";
 import { logDetail } from "../utils/logging.ts";

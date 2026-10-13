@@ -1,5 +1,5 @@
-import type { Tables } from "koishi";
-import { $ } from "koishi";
+import type { Tables } from "@koishijs/core";
+import { $ } from "@koishijs/core";
 
 import type { Database } from "./schema.ts";
 

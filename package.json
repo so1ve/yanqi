@@ -7,23 +7,39 @@
     "node": "^24.16.0 || >=26.3.0"
   },
   "scripts": {
-    "bot": "node --env-file-if-exists=.env apps/api/run.mjs packages/bot/src/main.ts",
-    "build": "pnpm --filter @yanqi/web build",
-    "check": "tsc && pnpm --filter @yanqi/web check",
-    "dev": "pnpm --parallel --filter @yanqi/api --filter @yanqi/web dev",
+    "build": "nuxt build",
+    "check": "nuxt typecheck && pnpm --filter @yanqi/bot check",
+    "dev": "nuxt dev --host 127.0.0.1",
     "lint": "eslint . && prettier --check . '!data/**'",
     "lint:fix": "eslint --fix . && prettier --write . '!data/**'",
-    "start": "pnpm --filter @yanqi/api start"
+    "postinstall": "nuxt prepare",
+    "start": "node --env-file-if-exists=.env .output/server/index.mjs"
+  },
+  "dependencies": {
+    "@koishijs/core": "catalog:",
+    "@koishijs/plugin-database-sqlite": "catalog:",
+    "@vicons/tabler": "catalog:",
+    "@yanqi/bot": "workspace:*",
+    "dompurify": "catalog:",
+    "h3": "catalog:",
+    "koishi": "catalog:",
+    "marked": "catalog:",
+    "naive-ui": "catalog:",
+    "nuxt": "catalog:",
+    "ofetch": "catalog:",
+    "typebox": "catalog:",
+    "vue": "catalog:",
+    "vue-router": "catalog:"
   },
   "devDependencies": {
-    "@so1ve/eslint-config": "4.7.0",
-    "@so1ve/prettier-config": "4.7.0",
-    "@types/node": "26.6.5",
-    "@types/ws": "8.18.2",
-    "eslint": "10.12.0",
-    "prettier": "3.9.10",
-    "tsx": "4.23.15",
+    "@minatojs/sql.js": "catalog:",
+    "@so1ve/eslint-config": "catalog:",
+    "@so1ve/prettier-config": "catalog:",
+    "@types/node": "catalog:",
+    "eslint": "catalog:",
+    "prettier": "catalog:",
     "typescript": "catalog:",
-    "ws": "8.22.0"
+    "unplugin-vue-components": "catalog:",
+    "vue-tsc": "catalog:"
   }
 }

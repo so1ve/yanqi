@@ -1,9 +1,9 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
+import type { Context, ForkScope, Session } from "@koishijs/core";
+import { Adapter, App, Logger } from "@koishijs/core";
 import { HTTP } from "@koishijs/plugin-http";
-import type { Context, ForkScope, Session } from "koishi";
-import { Adapter, App, Logger } from "koishi";
 import { OneBotBot } from "koishi-plugin-adapter-onebot";
 
 import type { Config } from "./config.ts";

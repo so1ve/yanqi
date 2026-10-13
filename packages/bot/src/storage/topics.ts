@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 
-import { $ } from "koishi";
+import { $ } from "@koishijs/core";
 
 import type { Message, Topic } from "../types.ts";
 import type { Database } from "./schema.ts";

@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 
-import { Logger } from "koishi";
+import { Logger } from "@koishijs/core";
 import OpenAI from "openai";
 
 import type { Config } from "../config.ts";

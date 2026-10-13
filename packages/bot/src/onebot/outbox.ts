@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import { Logger } from "koishi";
+import { Logger } from "@koishijs/core";
 
 import type { Config } from "../config.ts";
 import type { Store } from "../storage/store.ts";

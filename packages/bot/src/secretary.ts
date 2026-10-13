@@ -1,4 +1,4 @@
-import type { Context, Logger, Session } from "koishi";
+import type { Context, Logger, Session } from "@koishijs/core";
 
 import { Ai } from "./agent/ai.ts";
 import type { Config } from "./config.ts";

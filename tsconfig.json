@@ -1,15 +1,17 @@
 {
-  "compilerOptions": {
-    "target": "ES2024",
-    "module": "Preserve",
-    "moduleResolution": "Bundler",
-    "types": ["node"],
-    "allowImportingTsExtensions": true,
-    "strict": true,
-    "exactOptionalPropertyTypes": true,
-    "noUncheckedIndexedAccess": true,
-    "noEmit": true,
-    "skipLibCheck": true
-  },
-  "include": ["apps/api/src/**/*.ts", "packages/bot/src/**/*.ts"]
+  "references": [
+    {
+      "path": "./.nuxt/tsconfig.app.json"
+    },
+    {
+      "path": "./.nuxt/tsconfig.server.json"
+    },
+    {
+      "path": "./.nuxt/tsconfig.shared.json"
+    },
+    {
+      "path": "./.nuxt/tsconfig.node.json"
+    }
+  ],
+  "files": []
 }

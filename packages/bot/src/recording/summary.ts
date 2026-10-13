@@ -1,4 +1,4 @@
-import { Logger } from "koishi";
+import { Logger } from "@koishijs/core";
 
 import type { Ai } from "../agent/ai.ts";
 import { AiSizeError } from "../agent/usage.ts";

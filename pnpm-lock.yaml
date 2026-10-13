@@ -162,140 +162,213 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+catalogs:
+  default:
+    '@earendil-works/pi-agent-core':
+      specifier: 1.1.0
+      version: 1.1.0
+    '@earendil-works/pi-ai':
+      specifier: 1.1.0
+      version: 1.1.0
+    '@koishijs/core':
+      specifier: 4.18.11
+      version: 4.18.11
+    '@koishijs/plugin-database-sqlite':
+      specifier: 4.7.0
+      version: 4.7.0
+    '@koishijs/plugin-http':
+      specifier: 0.6.3
+      version: 0.6.3
+    '@minatojs/sql.js':
+      specifier: 3.1.0
+      version: 3.1.0
+    '@so1ve/eslint-config':
+      specifier: 4.7.0
+      version: 4.7.0
+    '@so1ve/prettier-config':
+      specifier: 4.7.0
+      version: 4.7.0
+    '@types/node':
+      specifier: 26.6.5
+      version: 26.6.5
+    '@vicons/tabler':
+      specifier: 0.13.0
+      version: 0.13.0
+    dompurify:
+      specifier: ^3.3.1
+      version: 3.4.17
+    entities:
+      specifier: 8.1.0
+      version: 8.1.0
+    eslint:
+      specifier: 10.12.0
+      version: 10.12.0
+    h3:
+      specifier: 1.15.11
+      version: 1.15.11
+    jsonrepair:
+      specifier: 3.15.0
+      version: 3.15.0
+    koishi:
+      specifier: 4.18.11
+      version: 4.18.11
+    koishi-plugin-adapter-onebot:
+      specifier: 6.9.5
+      version: 6.9.5
+    marked:
+      specifier: 18.1.1
+      version: 18.1.1
+    naive-ui:
+      specifier: 2.45.3
+      version: 2.45.3
+    nuxt:
+      specifier: 4.6.1
+      version: 4.6.1
+    ofetch:
+      specifier: 1.5.1
+      version: 1.5.1
+    openai:
+      specifier: 7.32.0
+      version: 7.32.0
+    prettier:
+      specifier: 3.9.10
+      version: 3.9.10
+    typebox:
+      specifier: 1.3.27
+      version: 1.3.27
+    unplugin-vue-components:
+      specifier: 32.1.0
+      version: 32.1.0
+    vue:
+      specifier: 3.5.42
+      version: 3.5.42
+    vue-router:
+      specifier: 5.3.1
+      version: 5.3.1
+    vue-tsc:
+      specifier: 3.3.11
+      version: 3.3.11
+
 overrides:
   typescript: npm:typescript-native-bridge@6.0.3-bridge.18.tsgo.7.0.2
 
 importers:
 
   .:
-    devDependencies:
-      '@so1ve/eslint-config':
-        specifier: 4.7.0
-        version: 4.7.0(@typescript-eslint/eslint-plugin@8.71.1(@typescript-eslint/parser@8.71.1(eslint@10.12.0(jiti@2.7.0)(supports-color@9.4.0))(supports-color@9.4.0)(typescript-native-bridge@6.0.3-bridge.18.tsgo.7.0.2))(eslint@10.12.0(jiti@2.7.0)(supports-color@9.4.0))(supports-color@9.4.0)(typescript-native-bridge@6.0.3-bridge.18.tsgo.7.0.2))(@typescript-eslint/typescript-estree@8.71.1(supports-color@9.4.0)(typescript-native-bridge@6.0.3-bridge.18.tsgo.7.0.2))(eslint@10.12.0(jiti@2.7.0)(supports-color@9.4.0))(prettier@3.9.10)(supports-color@9.4.0)(typescript-native-bridge@6.0.3-bridge.18.tsgo.7.0.2)
-      '@so1ve/prettier-config':
-        specifier: 4.7.0
-        version: 4.7.0(prettier@3.9.10)(supports-color@9.4.0)
-      '@types/node':
-        specifier: 26.6.5
-        version: 26.6.5
-      '@types/ws':
-        specifier: 8.18.2
-        version: 8.18.2
-      eslint:
-        specifier: 10.12.0
-        version: 10.12.0(jiti@2.7.0)(supports-color@9.4.0)
-      prettier:
-        specifier: 3.9.10
-        version: 3.9.10
-      tsx:
-        specifier: 4.23.15
-        version: 4.23.15
-      typescript:
-        specifier: npm:typescript-native-bridge@6.0.3-bridge.18.tsgo.7.0.2
-        version: typescript-native-bridge@6.0.3-bridge.18.tsgo.7.0.2
-      ws:
-        specifier: 8.22.0
-        version: 8.22.0
-
-  apps/api:
     dependencies:
-      '@hono/node-server':
-        specifier: 2.1.4
-        version: 2.1.4(hono@4.13.13)
+      '@koishijs/core':
+        specifier: 'catalog:'
+        version: 4.18.11
       '@koishijs/plugin-database-sqlite':
-        specifier: 4.7.0
+        specifier: 'catalog:'
         version: 4.7.0(koishi@4.18.11(@cordisjs/plugin-http@0.6.3(cordis@3.18.1))(cordis@3.18.1)(supports-color@9.4.0))(minato@3.7.0(cordis@3.18.1))
-      '@yanqi/bot':
-        specifier: workspace:*
-        version: link:../../packages/bot
-      hono:
-        specifier: 4.13.13
-        version: 4.13.13
-      koishi:
-        specifier: 4.18.11
-        version: 4.18.11(@cordisjs/plugin-http@0.6.3(cordis@3.18.1))(cordis@3.18.1)(supports-color@9.4.0)
-      typebox:
-        specifier: 1.3.27
-        version: 1.3.27
-      unrun:
-        specifier: 0.3.1
-        version: 0.3.1(synckit@0.11.13)
-
-  apps/web:
-    dependencies:
       '@vicons/tabler':
-        specifier: 0.13.0
+        specifier: 'catalog:'
         version: 0.13.0
       '@yanqi/bot':
         specifier: workspace:*
-        version: link:../../packages/bot
+        version: link:packages/bot
       dompurify:
-        specifier: ^3.3.1
+        specifier: 'catalog:'
         version: 3.4.17
+      h3:
+        specifier: 'catalog:'
+        version: 1.15.11
+      koishi:
+        specifier: 'catalog:'
+        version: 4.18.11(@cordisjs/plugin-http@0.6.3(cordis@3.18.1))(cordis@3.18.1)(supports-color@9.4.0)
       marked:
-        specifier: 18.1.1
+        specifier: 'catalog:'
         version: 18.1.1
       naive-ui:
-        specifier: 2.45.3
+        specifier: 'catalog:'
         version: 2.45.3(vue@3.5.42(typescript-native-bridge@6.0.3-bridge.18.tsgo.7.0.2))
       nuxt:
-        specifier: 4.6.1
+        specifier: 'catalog:'
         version: 4.6.1(@babel/plugin-syntax-jsx@7.29.7(@babel/core@7.29.7(supports-color@9.4.0)))(@babel/plugin-syntax-typescript@7.29.7(@babel/core@7.29.7(supports-color@9.4.0)))(@oxc-project/types@0.153.0)(@types/node@26.6.5)(@vue/compiler-sfc@3.5.43)(acorn@8.19.0)(confbox@0.3.1)(db0@0.3.4)(dotenv@17.4.2)(esbuild@0.28.2)(eslint@10.12.0(jiti@2.7.0)(supports-color@9.4.0))(giget@3.3.1)(ioredis@5.11.1(supports-color@9.4.0))(lightningcss@1.33.0)(mlly@1.8.2)(optionator@0.9.4)(rolldown@1.2.13)(rollup-plugin-visualizer@7.1.1(rolldown@1.2.13)(rollup@4.64.5))(rollup@4.64.5)(srvx@1.0.5)(supports-color@9.4.0)(terser@5.51.2)(tsx@4.23.15)(typescript-native-bridge@6.0.3-bridge.18.tsgo.7.0.2)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))(vue-tsc@3.3.11(typescript-native-bridge@6.0.3-bridge.18.tsgo.7.0.2))(yaml@2.9.1)
       ofetch:
-        specifier: 1.5.1
+        specifier: 'catalog:'
         version: 1.5.1
+      typebox:
+        specifier: 'catalog:'
+        version: 1.3.27
       vue:
-        specifier: 3.5.42
+        specifier: 'catalog:'
         version: 3.5.42(typescript-native-bridge@6.0.3-bridge.18.tsgo.7.0.2)
       vue-router:
-        specifier: 5.3.1
+        specifier: 'catalog:'
         version: 5.3.1(@vue/compiler-sfc@3.5.43)(esbuild@0.28.2)(rolldown@1.2.13)(rollup@4.64.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))(vue@3.5.42(typescript-native-bridge@6.0.3-bridge.18.tsgo.7.0.2))
     devDependencies:
+      '@minatojs/sql.js':
+        specifier: 'catalog:'
+        version: 3.1.0
+      '@so1ve/eslint-config':
+        specifier: 'catalog:'
+        version: 4.7.0(@typescript-eslint/eslint-plugin@8.71.1(@typescript-eslint/parser@8.71.1(eslint@10.12.0(jiti@2.7.0)(supports-color@9.4.0))(supports-color@9.4.0)(typescript-native-bridge@6.0.3-bridge.18.tsgo.7.0.2))(eslint@10.12.0(jiti@2.7.0)(supports-color@9.4.0))(supports-color@9.4.0)(typescript-native-bridge@6.0.3-bridge.18.tsgo.7.0.2))(@typescript-eslint/typescript-estree@8.71.1(supports-color@9.4.0)(typescript-native-bridge@6.0.3-bridge.18.tsgo.7.0.2))(eslint@10.12.0(jiti@2.7.0)(supports-color@9.4.0))(prettier@3.9.10)(supports-color@9.4.0)(typescript-native-bridge@6.0.3-bridge.18.tsgo.7.0.2)
+      '@so1ve/prettier-config':
+        specifier: 'catalog:'
+        version: 4.7.0(prettier@3.9.10)(supports-color@9.4.0)
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      eslint:
+        specifier: 'catalog:'
+        version: 10.12.0(jiti@2.7.0)(supports-color@9.4.0)
+      prettier:
+        specifier: 'catalog:'
+        version: 3.9.10
       typescript:
         specifier: npm:typescript-native-bridge@6.0.3-bridge.18.tsgo.7.0.2
         version: typescript-native-bridge@6.0.3-bridge.18.tsgo.7.0.2
       unplugin-vue-components:
-        specifier: 32.1.0
+        specifier: 'catalog:'
         version: 32.1.0(@nuxt/kit@4.6.1(@nuxt/schema@4.6.1)(confbox@0.3.1)(dotenv@17.4.2)(giget@3.3.1)(jiti@2.7.0)(magic-string@1.4.3)(mlly@1.8.2)(rolldown@1.2.13)(unplugin@3.4.0(esbuild@0.28.2)(rolldown@1.2.13)(rollup@4.64.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))))(esbuild@0.28.2)(rolldown@1.2.13)(rollup@4.64.5)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))(vue@3.5.42(typescript-native-bridge@6.0.3-bridge.18.tsgo.7.0.2))
       vue-tsc:
-        specifier: 3.3.11
+        specifier: 'catalog:'
         version: 3.3.11(typescript-native-bridge@6.0.3-bridge.18.tsgo.7.0.2)
 
   packages/bot:
     dependencies:
       '@earendil-works/pi-agent-core':
-        specifier: 1.1.0
+        specifier: 'catalog:'
         version: 1.1.0(@aws-sdk/credential-provider-node@3.972.85)(@smithy/signature-v4@5.7.4)(supports-color@9.4.0)(undici@6.29.0)(ws@8.22.0)(zod@3.25.76)
       '@earendil-works/pi-ai':
-        specifier: 1.1.0
+        specifier: 'catalog:'
         version: 1.1.0(@aws-sdk/credential-provider-node@3.972.85)(@smithy/signature-v4@5.7.4)(supports-color@9.4.0)(undici@6.29.0)(ws@8.22.0)(zod@3.25.76)
+      '@koishijs/core':
+        specifier: 'catalog:'
+        version: 4.18.11
       '@koishijs/plugin-database-sqlite':
-        specifier: 4.7.0
+        specifier: 'catalog:'
         version: 4.7.0(koishi@4.18.11(@cordisjs/plugin-http@0.6.3(cordis@3.18.1))(cordis@3.18.1)(supports-color@9.4.0))(minato@3.7.0(cordis@3.18.1))
       '@koishijs/plugin-http':
-        specifier: 0.6.3
+        specifier: 'catalog:'
         version: 0.6.3(cordis@3.18.1)(koishi@4.18.11(@cordisjs/plugin-http@0.6.3(cordis@3.18.1))(cordis@3.18.1)(supports-color@9.4.0))
       entities:
-        specifier: 8.1.0
+        specifier: 'catalog:'
         version: 8.1.0
       jsonrepair:
-        specifier: 3.15.0
+        specifier: 'catalog:'
         version: 3.15.0
       koishi:
-        specifier: 4.18.11
+        specifier: 'catalog:'
         version: 4.18.11(@cordisjs/plugin-http@0.6.3(cordis@3.18.1))(cordis@3.18.1)(supports-color@9.4.0)
       koishi-plugin-adapter-onebot:
-        specifier: 6.9.5
+        specifier: 'catalog:'
         version: 6.9.5(koishi@4.18.11(@cordisjs/plugin-http@0.6.3(cordis@3.18.1))(cordis@3.18.1)(supports-color@9.4.0))
       marked:
-        specifier: 18.1.1
+        specifier: 'catalog:'
         version: 18.1.1
       openai:
-        specifier: 7.32.0
+        specifier: 'catalog:'
         version: 7.32.0(@aws-sdk/credential-provider-node@3.972.85)(@smithy/signature-v4@5.7.4)(undici@6.29.0)(ws@8.22.0)(zod@3.25.76)
       typebox:
-        specifier: 1.3.27
+        specifier: 'catalog:'
         version: 1.3.27
+    devDependencies:
+      typescript:
+        specifier: npm:typescript-native-bridge@6.0.3-bridge.18.tsgo.7.0.2
+        version: typescript-native-bridge@6.0.3-bridge.18.tsgo.7.0.2
 
 packages:
 
@@ -946,12 +1019,6 @@ packages:
 
   '@hapi/bourne@3.0.0':
     resolution: {integrity: sha512-Waj1cwPXJDucOib4a3bAISsKJVb15MKi9IvmTI/7ssVEm6sywXGjVJDhl6/umt1pK1ZS7PacXU3A1PmFKHEZ2w==}
-
-  '@hono/node-server@2.1.4':
-    resolution: {integrity: sha512-2g1qeHl4BduwDn6L8nkAvDrPUWPMlkQ//a5NhP/zIyaXKMjZNRV+cG9Csu+BiJFf6+68pqzjf4Hi5sJGKHuS1g==}
-    engines: {node: '>=20'}
-    peerDependencies:
-      hono: ^4 || ^5.0.0-0
 
   '@html-eslint/core@0.65.0':
     resolution: {integrity: sha512-UJUf0dDI6xq6iitksPXrfLwu2Gc143LGFHMlVnRPZxkoLz1xIzKbkQVxrqxqNmandsSmhWfkGw//U2BsBH/QRw==}
@@ -3618,10 +3685,6 @@ packages:
     resolution: {integrity: sha512-nbfWpyRMcMrPMmDwJB+dhX/eiaPKtc2RB+0QZskqJ3WjRA/FDS0e9hZrx8EC/lbEv8gXy98FcDbNa/dspAaJMg==}
     engines: {node: '>=12.0.0'}
 
-  hono@4.13.13:
-    resolution: {integrity: sha512-CQ46U0ZkAGmbT/4UxdzzGJpacP2IeKgY4a5/tOI9AABbpOMfK739wfDXmv1usCk+3RkKj1hQy4/fjhiwa2xlrA==}
-    engines: {node: '>=16.9.0'}
-
   hookable@5.5.3:
     resolution: {integrity: sha512-Yc+BQe8SvoXH1643Qez1zqLRmbA5rCL+sSmk6TVos0LWVfNIB7PGncdlId77WzLGSIB5KaWgTaNTs2lNVEI6VQ==}
 
@@ -5740,16 +5803,6 @@ packages:
   unrs-resolver@1.12.2:
     resolution: {integrity: sha512-dmlRxBJJayXjqTwC+JtF1HhJmgf3ftQ3YejFcZrf4+KKtJv0qDsK1pjqaaVjG7wJ5NJ6UVP1OqRMQ71Z4C3rxQ==}
 
-  unrun@0.3.1:
-    resolution: {integrity: sha512-onIck/oNnCaytwths1ZVp1LK2Gq2hPoyFhiHebObuUXqR3S0uHuLLaBK8K6mRRgV7Ptip8AnNvaUsgzwWwBZuA==}
-    engines: {node: ^22.13.0 || >=24.0.0}
-    hasBin: true
-    peerDependencies:
-      synckit: ^0.11.11
-    peerDependenciesMeta:
-      synckit:
-        optional: true
-
   unstorage@1.17.5:
     resolution: {integrity: sha512-0i3iqvRfx29hkNntHyQvJTpf5W9dQ9ZadSoRU8+xVlhVtT7jAX57fazYO9EHvcRCfBCyi5YRya7XCDOsbTgkPg==}
     peerDependencies:
@@ -7005,10 +7058,6 @@ snapshots:
       - utf-8-validate
 
   '@hapi/bourne@3.0.0': {}
-
-  '@hono/node-server@2.1.4(hono@4.13.13)':
-    dependencies:
-      hono: 4.13.13
 
   '@html-eslint/core@0.65.0':
     dependencies:
@@ -10092,8 +10141,6 @@ snapshots:
 
   highlight.js@11.12.0: {}
 
-  hono@4.13.13: {}
-
   hookable@5.5.3: {}
 
   hookable@6.1.2: {}
@@ -12437,6 +12484,7 @@ snapshots:
       esbuild: 0.28.2
     optionalDependencies:
       fsevents: 2.3.3
+    optional: true
 
   type-check@0.4.0:
     dependencies:
@@ -12738,12 +12786,6 @@ snapshots:
       '@unrs/resolver-binding-win32-arm64-msvc': 1.12.2
       '@unrs/resolver-binding-win32-ia32-msvc': 1.12.2
       '@unrs/resolver-binding-win32-x64-msvc': 1.12.2
-
-  unrun@0.3.1(synckit@0.11.13):
-    dependencies:
-      rolldown: 1.2.13
-    optionalDependencies:
-      synckit: 0.11.13
 
   unstorage@1.17.5(db0@0.3.4)(ioredis@5.11.1(supports-color@9.4.0)):
     dependencies:

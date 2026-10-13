@@ -1,4 +1,4 @@
-import type { Context } from "koishi";
+import type { Context } from "@koishijs/core";
 
 import type {
   Asset,
@@ -37,7 +37,7 @@ interface MemoryRow {
   updatedAt: number;
 }
 
-declare module "koishi" {
+declare module "@koishijs/core" {
   interface Tables {
     groups: GroupRow;
     messages: Message;

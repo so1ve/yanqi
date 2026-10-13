@@ -2,8 +2,8 @@ import type { AgentState } from "@earendil-works/pi-agent-core";
 import { Agent } from "@earendil-works/pi-agent-core";
 import type { ImageContent, Model, UserMessage } from "@earendil-works/pi-ai";
 import { streamSimple } from "@earendil-works/pi-ai/api/openai-completions";
+import { Logger } from "@koishijs/core";
 import { jsonrepair } from "jsonrepair";
-import { Logger } from "koishi";
 import type { Static, TSchema } from "typebox";
 import * as Value from "typebox/value";
 

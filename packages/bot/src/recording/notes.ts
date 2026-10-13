@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-import { Logger } from "koishi";
+import { Logger } from "@koishijs/core";
 
 import type { Ai } from "../agent/ai.ts";
 import type { Config } from "../config.ts";

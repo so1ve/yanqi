@@ -1,4 +1,4 @@
-import { Logger } from "koishi";
+import { Logger } from "@koishijs/core";
 import { Type } from "typebox";
 import * as Value from "typebox/value";
 

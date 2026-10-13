@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 
-import type { Session } from "koishi";
+import type { Session } from "@koishijs/core";
 
 import type { IncomingMessage } from "../types.ts";
 

@@ -1,6 +1,6 @@
 import { setTimeout as delay } from "node:timers/promises";
 
-import { Logger } from "koishi";
+import { Logger } from "@koishijs/core";
 
 import type { Delivery, Note } from "../types.ts";
 import type { Database } from "./schema.ts";
