@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+
 import { Type } from "typebox";
 
 import { selectSources, sourceScope } from "../../recording/sources.ts";
@@ -48,12 +50,16 @@ export function followTool(context: ToolContext) {
         const included = args.include
           ? await selectSources(store, message, args.include)
           : [];
-        const topic = await store.recordings.create(message, {
-          title: args.title || "连续讨论记录",
-          messages: included.map((source) => source.id),
-          following: true,
-          directive: args.directive ?? "auto",
-        });
+        const [topic] = await store.recordings.create(message, [
+          {
+            title: args.title || "连续讨论记录",
+            messages: included.map((source) => source.id),
+            following: true,
+            directive: args.directive ?? "auto",
+          },
+        ]);
+
+        assert.ok(topic);
 
         return { topicId: topic.id, title: topic.title, state: "following" };
       }

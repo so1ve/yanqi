@@ -43,7 +43,7 @@ export class Subagents {
       this.#context,
       "subagent",
       // 工具描述与角色提示词一起维护，确需修改时遵循 prompts/README.md。
-      `委派只读查阅助手，最多同时两个。start 选择 kind：${roles}，task 写清问题和结果要求。已知范围的整理直接用 record，无需委派。start 返回任务 ID；wait 首次可返回 metadata，此后只等助手主动交付的 brief 或完成结果，后续查询不唤醒等待；cancel 放弃任务。metadata 只表示范围和规模，句柄和翻页留在助手内。两类助手各用自己的查询工具，不能操作记录、发言、写记忆或再委派。结束主对话前完成或取消助手任务。`,
+      `委派只读查阅助手，最多同时两个。start 选择 kind：${roles}，task 写清问题和结果要求。范围和主题划分已知时直接用 record；拆分多个未知话题时让 history 查明各篇范围。start 返回任务 ID；wait 首次可返回 metadata，此后只等助手主动交付的 brief 或完成结果，后续查询不唤醒等待；cancel 放弃任务。metadata 只表示范围和规模，句柄和翻页留在助手内。两类助手各用自己的查询工具，不能操作记录、发言、写记忆或再委派。结束主对话前完成或取消助手任务。`,
       subagentParameters,
       async (args, signal) => {
         const id = args.action === "start" ? this.#start(args) : args.id;
@@ -92,6 +92,7 @@ export class Subagents {
           },
           brief: report?.brief,
           scope: report?.scope,
+          records: report?.records,
           error: run.work.error,
         };
       },
@@ -135,7 +136,7 @@ export class Subagents {
     const report = tool(
       this.#context,
       "report",
-      "向小栖交付 task 的答案、必要引用和影响答案或下一步操作的缺口。done=false 在有需要小栖处理的新发现或工作量变化时发阶段简报后继续，done=true 发最终简报并结束；定位原文范围时可附 scope。简报会连同最新查询元数据唤醒小栖，无需重述数量或逐页汇报。",
+      "向小栖交付 task 的答案、必要引用和影响答案或下一步操作的缺口。done=false 在有需要小栖处理的新发现或工作量变化时发阶段简报后继续，done=true 发最终简报并结束；定位原文范围时可附 scope，任务要求按话题拆分纪要时附 records。简报会连同最新查询元数据唤醒小栖，无需重述数量或逐页汇报。",
       role.report,
       async (args) => {
         work.report = args;

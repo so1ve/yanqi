@@ -3,7 +3,7 @@ import type { Static, TSchema } from "typebox";
 import { Type } from "typebox";
 
 import { contextWithin } from "../recording/messages.ts";
-import { sourceScope } from "../recording/sources.ts";
+import { recordSelection, sourceScope } from "../recording/sources.ts";
 import { subagentPrompts } from "./prompts/subagent.ts";
 import type { ReadContext } from "./tools/context.ts";
 import { object } from "./tools/context.ts";
@@ -22,6 +22,13 @@ const reportSchema = object({
 const historyReportSchema = object({
   ...reportSchema.properties,
   scope: Type.Optional(sourceScope),
+  records: Type.Optional(
+    Type.Array(recordSelection, {
+      minItems: 1,
+      description:
+        "任务要求拆分纪要时返回的话题划分，每项包含标题、原文范围和选材重点。仅为查阅结果，尚未创建纪要。",
+    }),
+  ),
 });
 const taskDescription = Type.String({ minLength: 1, maxLength: 2000 });
 
@@ -43,7 +50,7 @@ interface Role {
 // 分工的参数、输入和工具在同一处声明，调度器不再按 kind 拼装能力。
 export const subagentRoles = {
   history: {
-    description: "history 查聊天、确定讨论范围或提取信息，可带 scope",
+    description: "history 查聊天、确定讨论范围、划分主题或提取信息，可带 scope",
     parameters: object({
       action: Type.Literal("start"),
       kind: Type.Literal("history"),

@@ -1,28 +1,26 @@
 import { Type } from "typebox";
 
-import { selectSources, sourceScope } from "../../recording/sources.ts";
-import { beijingTime } from "../../utils/time.ts";
+import {
+  recordSelection,
+  selectSources,
+  sourceScope,
+} from "../../recording/sources.ts";
 import type { ToolContext } from "./context.ts";
 import {
   directive,
   getTopic,
   object,
   revision,
-  title,
   tool,
   topicId,
 } from "./context.ts";
 
 const createParameters = object({
-  scope: sourceScope,
-  title,
-  focus: Type.Optional(
-    Type.String({
-      minLength: 1,
-      description:
-        "用户的选材目的和详略要求，例如找出优化建议及关键理由。概括整个讨论时省略，默认提炼主要议题；不要把识图描述或查阅简报当成用户要求。",
-    }),
-  ),
+  records: Type.Array(recordSelection, {
+    minItems: 1,
+    description:
+      "本次要新建的纪要，每项是一份独立文档。普通整理填一项，分点记录或分别记录不同聊天内容时按话题填多项。",
+  }),
   directive,
 });
 const editParameters = Type.Union([
@@ -44,26 +42,39 @@ export function recordTools(context: ToolContext) {
     tool(
       context,
       "record",
-      "按当前请求新建独立纪要，第 1 版。scope 指定完整范围，focus 仅写用户选材要求，标题可自拟。已知范围直接调用，范围不明再委派 history 助手。后台读取全部原文及附件，返回任务 ID、状态和 workload；有较多剩余工作时 notify 一次，再 skip_reply 让后台交付，仅后续操作依赖结果时等待。directive 省略为 auto，send 为完成后发送，hold 为暂缓全文。修改已有文档用 edit_record(update)；谈论记录功能不调用。",
+      "一次新建 records 中的全部独立纪要，各从第 1 版开始。每项给出 title、scope，拆分时用 focus 限定本篇主题；范围可重叠。同一请求的多份纪要一起提交，范围或主题划分不清时先委派 history 助手。先校验全部范围再创建；范围为空或无效时整批不创建，修正后重试。后台逐篇读取原文和附件，返回 records，每项有任务状态和 workload。全部安排后按整体工作量决定是否 notify 一次，再 skip_reply；仅后续操作依赖结果时等待。directive 对整批生效，省略为 auto，send 完成后发送，hold 暂缓全文。修改已有纪要用 edit_record(update)。",
       createParameters,
       async (args) => {
-        const sources = await selectSources(store, message, args.scope);
+        const selections = [];
 
-        if (sources.length === 0) {
-          return "这个范围内没有本地保存的群成员消息。";
+        // 先解析整批范围，避免后一项无效时留下前面已经创建的纪要。
+        for (const record of args.records) {
+          const sources = await selectSources(store, message, record.scope);
+
+          if (sources.length === 0) {
+            throw new Error(
+              `「${record.title}」的范围内没有本地保存的群成员消息，本批纪要尚未创建。`,
+            );
+          }
+
+          selections.push({
+            title: record.title,
+            messages: sources.map((source) => source.id),
+            focus: record.focus ?? "",
+            directive: args.directive ?? "auto",
+          });
         }
 
-        const topic = await store.recordings.create(message, {
-          title: args.title || `讨论记录 ${beijingTime(message.sentAt)}`,
-          messages: sources.map((source) => source.id),
-          focus: args.focus ?? "",
-          directive: args.directive ?? "auto",
-        });
-        const result = await notes.arrange(topic, message.id);
+        const topics = await store.recordings.create(message, selections);
+        const records = [];
+
+        for (const topic of topics) {
+          records.push(await notes.arrange(topic, message.id));
+        }
 
         wake();
 
-        return result;
+        return { records };
       },
     ),
     tool(

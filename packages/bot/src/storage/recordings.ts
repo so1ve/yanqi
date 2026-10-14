@@ -61,54 +61,62 @@ export class Recordings {
 
   public create(
     request: Message,
-    options: {
+    records: {
       title: string;
       focus?: string;
       directive: Topic["directive"];
       messages: number[];
       following?: boolean;
-    },
-  ): Promise<Topic> {
+    }[],
+  ): Promise<Topic[]> {
     return this.#db.transaction().execute(async (db) => {
-      const messages = [...options.messages];
+      const topics: Topic[] = [];
 
-      if (options.following) {
-        const subsequent = await db
-          .selectFrom("messages")
-          .select("id")
-          .where("groupId", "=", request.groupId)
-          .where("id", ">", request.id)
-          .where("isBot", "=", 0)
-          .where("command", "=", 0)
-          .execute();
+      for (const options of records) {
+        const messages = [...options.messages];
 
-        messages.push(...subsequent.map((message) => message.id));
+        if (options.following) {
+          const subsequent = await db
+            .selectFrom("messages")
+            .select("id")
+            .where("groupId", "=", request.groupId)
+            .where("id", ">", request.id)
+            .where("isBot", "=", 0)
+            .where("command", "=", 0)
+            .execute();
+
+          messages.push(...subsequent.map((message) => message.id));
+        }
+
+        const topic = await db
+          .insertInto("topics")
+          .values({
+            id: randomUUID(),
+            groupId: request.groupId,
+            title: options.title,
+            focus: options.focus ?? "",
+            mode: "manual",
+            ownerId: request.userId,
+            state: options.following ? "active" : "closed",
+            lastActiveAt: request.receivedAt,
+            directive: options.directive,
+            directiveMessageId: request.id,
+          })
+          .returningAll()
+          .executeTakeFirstOrThrow();
+
+        await linkMessages(db, topic.id, messages);
+
+        topics.push(
+          await db
+            .selectFrom("topics")
+            .selectAll()
+            .where("id", "=", topic.id)
+            .executeTakeFirstOrThrow(),
+        );
       }
 
-      const topic = await db
-        .insertInto("topics")
-        .values({
-          id: randomUUID(),
-          groupId: request.groupId,
-          title: options.title,
-          focus: options.focus ?? "",
-          mode: "manual",
-          ownerId: request.userId,
-          state: options.following ? "active" : "closed",
-          lastActiveAt: request.receivedAt,
-          directive: options.directive,
-          directiveMessageId: request.id,
-        })
-        .returningAll()
-        .executeTakeFirstOrThrow();
-
-      await linkMessages(db, topic.id, messages);
-
-      return db
-        .selectFrom("topics")
-        .selectAll()
-        .where("id", "=", topic.id)
-        .executeTakeFirstOrThrow();
+      return topics;
     });
   }
 

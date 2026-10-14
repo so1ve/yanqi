@@ -67,6 +67,22 @@ export const sourceScope = Type.Union([
   ),
 ]);
 
+// 主对话创建与查阅助手交接使用同一份选材结构；描述遵循 ../agent/prompts/README.md。
+export const recordSelection = Type.Object(
+  {
+    title: Type.String({ minLength: 1, maxLength: 100, pattern: "\\S" }),
+    scope: sourceScope,
+    focus: Type.Optional(
+      Type.String({
+        minLength: 1,
+        description:
+          "本篇的选材主题和详略要求。拆分时写清本篇关注什么；概括整个讨论时可省略。不要把查阅简报或识图描述当成整理要求。",
+      }),
+    ),
+  },
+  { additionalProperties: false },
+);
+
 function timestamp(value: string): number {
   if (Format.IsDate(value)) {
     return Date.parse(`${value}T00:00:00+08:00`);
