@@ -1,0 +1,5 @@
+import { defineEventHandler } from "h3";
+
+export default defineEventHandler((event) =>
+  event.context.bot.store.resources.stats(),
+);

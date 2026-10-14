@@ -5,6 +5,7 @@ import { computed, ref, watch } from "vue";
 
 import ModelsForm from "~/components/settings/ModelsForm.vue";
 import PasswordForm from "~/components/settings/PasswordForm.vue";
+import ResourcesPanel from "~/components/settings/ResourcesPanel.vue";
 import StorageForm from "~/components/settings/StorageForm.vue";
 import { useAction } from "~/composables/useAction";
 import { useApiData } from "~/composables/useApiData";
@@ -22,9 +23,15 @@ const { busy, run } = useAction();
 const workspace = useWorkspace();
 const tab = useQueryValue("tab", (value) =>
   value &&
-  ["decision", "models", "persona", "runtime", "security", "storage"].includes(
-    value,
-  )
+  [
+    "decision",
+    "models",
+    "persona",
+    "resources",
+    "runtime",
+    "security",
+    "storage",
+  ].includes(value)
     ? value
     : "connection",
 );
@@ -59,8 +66,21 @@ async function save(): Promise<void> {
 </script>
 
 <template>
-  <PageHeading description="保存后生效，服务重启后保留。" title="设置">
-    <NButton :disabled="!draft" :loading="busy" type="primary" @click="save">
+  <PageHeading
+    :description="
+      tab === 'resources'
+        ? '按资源类型独立管理，清理立即生效。'
+        : '保存后生效，服务重启后保留。'
+    "
+    title="设置"
+  >
+    <NButton
+      v-if="tab !== 'resources'"
+      :disabled="!draft"
+      :loading="busy"
+      type="primary"
+      @click="save"
+    >
       <template #icon><NIcon :component="DeviceFloppy" /></template>
       保存并应用
     </NButton>
@@ -181,6 +201,7 @@ async function save(): Promise<void> {
             :saved-days="data!.config.HISTORY_RETENTION_DAYS"
           />
         </NTabPane>
+        <NTabPane name="resources" tab="资源管理"><ResourcesPanel /></NTabPane>
         <NTabPane name="security" tab="管理密码">
           <PasswordForm />
         </NTabPane>

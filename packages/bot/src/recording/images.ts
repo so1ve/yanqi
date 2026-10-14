@@ -32,7 +32,12 @@ export function noteImages(
       .replaceAll("[", "\\[")
       .replaceAll("]", "\\]");
 
-    result = result.replaceAll(token.raw, `![${alt}](<${path}>)`);
+    result = result.replaceAll(
+      token.raw,
+      asset.state === "missing"
+        ? `[${alt || "图片"}：原图已清理]`
+        : `![${alt}](<${path}>)`,
+    );
   });
 
   return result;

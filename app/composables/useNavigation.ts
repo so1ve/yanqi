@@ -5,6 +5,7 @@ import {
   ChartBar,
   Dashboard,
   Messages,
+  Photo,
   Users,
 } from "@vicons/tabler";
 import { computed } from "vue";
@@ -20,6 +21,7 @@ const links = [
 const groupLinks = [
   { path: "records", label: "纪要", icon: Book2 },
   { path: "messages", label: "原始消息", icon: Messages },
+  { path: "images", label: "图片", icon: Photo },
   { path: "members", label: "群成员", icon: Users },
   { path: "tasks", label: "后台任务", icon: Activity },
   { path: "memories", label: "群共享记忆", icon: Bulb },

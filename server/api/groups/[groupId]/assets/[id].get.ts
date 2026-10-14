@@ -23,6 +23,10 @@ export default defineEventHandler(async (event) => {
   const id = integer(getRouterParam(event, "id"));
   const asset = requireItem(await bot.store.assets.find(groupId, id));
 
+  if (asset.state === "missing") {
+    throw createError({ statusCode: 410, message: "原件已清理" });
+  }
+
   if (!asset.path) {
     throw createError({ statusCode: 404, message: "附件尚未下载" });
   }

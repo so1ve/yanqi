@@ -44,16 +44,19 @@ export async function transcript(
     const content =
       contentText(message.content, assets, (asset) => {
         const name = assetNames[asset.kind];
-        const link = asset.path
-          ? `${imageMimeType(asset.path) ? "!" : ""}[${name}](<${relative(directory, asset.path).split(sep).join("/")}>)`
-          : name;
+        const link =
+          asset.path && asset.state !== "missing"
+            ? `${imageMimeType(asset.path) ? "!" : ""}[${name}](<${relative(directory, asset.path).split(sep).join("/")}>)`
+            : name;
         const state =
           asset.error ??
-          (asset.state === "pending"
-            ? "待保存"
-            : asset.state === "failed"
-              ? "保存失败"
-              : "已保存");
+          (asset.state === "missing"
+            ? "原件已清理"
+            : asset.state === "pending"
+              ? "待保存"
+              : asset.state === "failed"
+                ? "保存失败"
+                : "已保存");
 
         return `${link}（${state}）`;
       }) || message.text;

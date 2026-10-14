@@ -24,10 +24,11 @@ export async function collectAsset(
   messenger: Messenger,
   reportProgress: (progress: string) => Promise<void>,
   signal: AbortSignal,
+  refresh = false,
 ): Promise<void> {
   const asset = await store.assets.get(id);
   const message = await store.messages.get(asset.messageId);
-  let path = asset.path;
+  let path = asset.state === "missing" ? null : asset.path;
   let interpretation = asset.interpretation;
 
   try {
@@ -185,30 +186,24 @@ export async function collectAsset(
       await reportProgress(
         `正在识别图片，模型 ${config.AI_VISION_MODEL.model}`,
       );
-      await store.assets.save(
-        id,
-        "saved",
-        path,
-        await store.assets.interpret(savedPath, async () => {
+      await store.assets.interpret(
+        savedPath,
+        async () => {
           if (!format) {
             throw new Error("暂不支持这种图片格式。原图已保存");
           }
 
           return ai.media.understandImage(savedPath, format.mime);
-        }),
-        null,
+        },
+        refresh,
       );
       await reportProgress("图片识别完成，结果已保存");
     } else if (asset.kind === "audio" && config.AI_AUDIO_MODEL) {
       await reportProgress(`正在转写语音，模型 ${config.AI_AUDIO_MODEL.model}`);
-      await store.assets.save(
-        id,
-        "saved",
-        path,
-        await store.assets.interpret(savedPath, () =>
-          ai.media.transcribe(savedPath),
-        ),
-        null,
+      await store.assets.interpret(
+        savedPath,
+        () => ai.media.transcribe(savedPath),
+        refresh,
       );
       await reportProgress("语音转写完成，结果已保存");
     } else {
@@ -221,9 +216,9 @@ export async function collectAsset(
   } catch (error) {
     await store.assets.save(
       id,
-      path ? "saved" : "failed",
-      path,
-      interpretation,
+      path ? "saved" : asset.state === "missing" ? "missing" : "failed",
+      path ?? asset.path,
+      (await store.assets.get(id)).interpretation ?? interpretation,
       failureMessage(error),
     );
 

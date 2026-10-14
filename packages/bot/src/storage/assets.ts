@@ -14,6 +14,7 @@ import {
   interpretationPath,
   readInterpretation,
 } from "./asset-files.ts";
+import { StoreError, required } from "./errors.ts";
 import { writeMarkdown } from "./files.ts";
 import { enqueueJob } from "./jobs.ts";
 import type { Database } from "./schema.ts";
@@ -179,27 +180,170 @@ export class Assets {
       .executeTakeFirst();
   }
 
+  public async listImages(
+    groupId: string,
+    query: string | undefined,
+    before: number | undefined,
+  ) {
+    let selection = this.#db
+      .selectFrom("assets")
+      .innerJoin("messages", "messages.id", "assets.messageId")
+      .where("messages.groupId", "=", groupId)
+      .where((eb) =>
+        eb.or([
+          eb("assets.kind", "=", "image"),
+          eb("assets.path", "like", `${this.#directory}/assets/images/%`),
+        ]),
+      );
+
+    if (query) {
+      const id = /^(?:asset:|#)?(\d+)$/i.exec(query);
+
+      selection = id
+        ? selection.where("assets.id", "=", Number(id[1]))
+        : selection.where((eb) =>
+            eb(
+              eb.fn<number>("contains_text", [
+                "assets.interpretation",
+                eb.val(query),
+              ]),
+              "=",
+              1,
+            ),
+          );
+    }
+
+    if (before !== undefined) {
+      selection = selection.where("assets.id", "<", before);
+    }
+
+    const rows = await selection
+      .selectAll("assets")
+      .select("messages.sentAt")
+      .orderBy("assets.id", "desc")
+      .limit(41)
+      .execute();
+
+    return {
+      items: rows
+        .slice(0, 40)
+        .map(({ path, reference: _reference, ...asset }) => ({
+          ...asset,
+          available: Boolean(path && asset.state !== "missing"),
+        })),
+      next: rows.length > 40 ? rows[39]!.id : null,
+    };
+  }
+
+  public async retry(groupId: string, id: number): Promise<number> {
+    return this.#db.transaction().execute(async (db) => {
+      const asset = required(
+        await db
+          .selectFrom("assets")
+          .innerJoin("messages", "messages.id", "assets.messageId")
+          .selectAll("assets")
+          .where("messages.groupId", "=", groupId)
+          .where("assets.id", "=", id)
+          .executeTakeFirst(),
+      );
+      const related = await db
+        .selectFrom("assets")
+        .select("id")
+        .where((eb) =>
+          eb.or([
+            eb("id", "=", id),
+            ...(asset.path ? [eb("path", "=", asset.path)] : []),
+          ]),
+        )
+        .execute();
+      const jobs = await db
+        .selectFrom("jobs")
+        .selectAll()
+        .where("kind", "=", "asset")
+        .where((eb) =>
+          eb(
+            eb.fn<number>("json_extract", ["payload", eb.val("$.assetId")]),
+            "in",
+            related.map((item) => item.id),
+          ),
+        )
+        .execute();
+
+      if (
+        jobs.some((job) => job.state === "running" || job.state === "pending")
+      ) {
+        throw new StoreError("conflict", "这份资源已经在处理中，请等待完成");
+      }
+
+      const job = jobs.find((job) => JSON.parse(job.payload).assetId === id);
+
+      assert.ok(job, `附件 #${id} 缺少处理任务`);
+      await db
+        .updateTable("jobs")
+        .set({
+          payload: JSON.stringify({ groupId, assetId: id, refresh: true }),
+          state: "pending",
+          attempts: 0,
+          runAfter: Date.now(),
+          lastError: null,
+          progress: null,
+        })
+        .where("id", "=", job.id)
+        .execute();
+
+      return job.id;
+    });
+  }
+
   public interpret(
     path: string,
     produce: () => Promise<string>,
+    refresh = false,
   ): Promise<string> {
     const key = interpretationPath(path);
     const running = this.#interpreting.get(key);
 
     if (running) {
-      return running;
+      return refresh
+        ? running
+            .catch(() => undefined)
+            .then(() => this.interpret(path, produce, true))
+        : running;
     }
 
     const result = (async () => {
-      const cached = await readInterpretation(path);
+      const cached = refresh ? null : await readInterpretation(path);
+      const content = cached ?? (await produce());
 
-      if (cached !== null) {
-        return cached;
+      if (cached === null) {
+        await writeMarkdown(key, content);
       }
 
-      const content = await produce();
+      // 一个原件只存一份识别结果；更新所有群中对同一原件的引用。
+      await this.#db.transaction().execute(async (db) => {
+        const assets = await db
+          .selectFrom("assets")
+          .select(["id", "messageId", "interpretation", "error", "state"])
+          .where("path", "=", path)
+          .execute();
 
-      await writeMarkdown(key, content);
+        for (const asset of assets) {
+          if (
+            asset.interpretation === content &&
+            asset.error === null &&
+            asset.state === "saved"
+          ) {
+            continue;
+          }
+
+          await db
+            .updateTable("assets")
+            .set({ interpretation: content, error: null, state: "saved" })
+            .where("id", "=", asset.id)
+            .execute();
+          await messageChanged(db, asset.messageId);
+        }
+      });
 
       return content;
     })().finally(() => this.#interpreting.delete(key));
@@ -277,6 +421,19 @@ export class Assets {
         .where("id", "=", id)
         .execute();
       await messageChanged(db, asset.messageId);
+      if (state === "saved" && path) {
+        const restored = await db
+          .updateTable("assets")
+          .set({ state: "saved", error: null })
+          .where("path", "=", path)
+          .where("state", "=", "missing")
+          .returning("messageId")
+          .execute();
+
+        for (const reference of restored) {
+          await messageChanged(db, reference.messageId);
+        }
+      }
     });
   }
 }

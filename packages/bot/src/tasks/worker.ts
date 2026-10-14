@@ -191,11 +191,16 @@ export class BackgroundTasks {
             this.#messenger,
             (progress) => this.#store.jobs.reportProgress(job.id, progress),
             this.#signal,
+            job.payload.refresh,
           );
 
           const asset = await this.#store.assets.get(job.payload.assetId);
 
-          if (this.#config.AUTO_REPLY && asset.interpretation) {
+          if (
+            !job.payload.refresh &&
+            this.#config.AUTO_REPLY &&
+            asset.interpretation
+          ) {
             const message = await this.#store.inbox.getRequest(asset.messageId);
 
             if (message) {

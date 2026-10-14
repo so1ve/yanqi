@@ -88,6 +88,9 @@ const displayContent = (
       data,
       ...(asset ? { assetId: asset.id } : {}),
       ...(forward ? { forward } : {}),
+      ...(segment.type === "forward" && asset?.state === "missing" && !forward
+        ? { forwardError: "转发内容已清理" }
+        : {}),
       ...(segment.data.error
         ? { forwardError: String(segment.data.error) }
         : {}),
@@ -172,7 +175,7 @@ export async function messageDetails(
       assets: messageAssets.map(({ path, ...asset }) => ({
         ...asset,
         interpretation: asset.kind === "forward" ? null : asset.interpretation,
-        downloadable: Boolean(path),
+        downloadable: Boolean(path && asset.state !== "missing"),
         previewable: Boolean(path && imageMimeType(path)),
       })),
     };

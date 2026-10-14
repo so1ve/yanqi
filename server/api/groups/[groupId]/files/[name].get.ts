@@ -20,7 +20,13 @@ export default defineEventHandler(async (event) => {
   const asset = requireItem(
     await bot.store.assets.file(groupParam(event), name),
   );
+
+  if (asset.state === "missing") {
+    throw createError({ statusCode: 410, message: "原件已清理" });
+  }
+
   const path = asset.path!;
+  const bytes = await readDataFile(bot.store.directory, path);
   const preview = queryParam(event, "preview") === "1" && imageMimeType(path);
 
   setResponseHeader(
@@ -34,5 +40,5 @@ export default defineEventHandler(async (event) => {
     `${preview ? "inline" : "attachment"}; filename="${name}"`,
   );
 
-  return readDataFile(bot.store.directory, path);
+  return bytes;
 });

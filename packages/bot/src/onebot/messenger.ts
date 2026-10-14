@@ -158,12 +158,35 @@ export function createMessenger(config: Config, store: Store, ctx: Context) {
             throw new Error(`纪要图片不属于当前群或尚未保存：${part.href}`);
           }
 
+          let bytes: Buffer | null = null;
+
+          if (asset.state !== "missing") {
+            try {
+              bytes = await readFile(asset.path);
+            } catch (error) {
+              if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+                throw error;
+              }
+            }
+          }
+
+          if (!bytes) {
+            contents.push([
+              {
+                type: "text",
+                data: { text: `${part.text || "图片"}（原图已清理或不可用）` },
+              },
+            ]);
+
+            continue;
+          }
+
           // NapCat 使用独立容器，通过文件内容传图，不传机器人容器内的路径。
           contents.push([
             {
               type: "image",
               data: {
-                file: `base64://${(await readFile(asset.path)).toString("base64")}`,
+                file: `base64://${bytes.toString("base64")}`,
               },
             },
             ...(part.text ? [{ type: "text", data: { text: part.text } }] : []),

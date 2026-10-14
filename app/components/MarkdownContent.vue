@@ -20,6 +20,15 @@ const html = computed(() => {
     FORBID_TAGS: ["form", "input", "button", "style", "iframe"],
   });
 });
+function missingImage(event: Event): void {
+  if (!(event.target instanceof HTMLImageElement)) {
+    return;
+  }
+  const placeholder = document.createElement("span");
+  placeholder.className = "missing-resource";
+  placeholder.textContent = `${event.target.alt || "图片"} · 已清理或暂不可用`;
+  event.target.replaceWith(placeholder);
+}
 function follow(event: MouseEvent): void {
   const link = (event.target as HTMLElement).closest("a");
   if (link?.getAttribute("href") === "transcript.md") {
@@ -29,7 +38,14 @@ function follow(event: MouseEvent): void {
 }
 </script>
 
-<template><div class="markdown" @click="follow" v-html="html" /></template>
+<template>
+  <div
+    class="markdown"
+    @click="follow"
+    @error.capture="missingImage"
+    v-html="html"
+  />
+</template>
 
 <style scoped>
 .markdown {
@@ -116,6 +132,14 @@ function follow(event: MouseEvent): void {
 
 .markdown :deep(th) {
   background: #f6f8fa;
+}
+
+.markdown :deep(.missing-resource) {
+  display: block;
+  padding: 20px;
+  border-radius: 8px;
+  background: #f3f6f8;
+  color: #738397;
 }
 
 .markdown :deep(img) {

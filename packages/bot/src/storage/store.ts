@@ -12,6 +12,7 @@ import { overview } from "./overview.ts";
 import { purgeHistory } from "./purge.ts";
 import { Reactions } from "./reactions.ts";
 import { Recordings } from "./recordings.ts";
+import { Resources } from "./resources.ts";
 import type { Database } from "./schema.ts";
 import { Topics } from "./topics.ts";
 import { Usage } from "./usage.ts";
@@ -27,6 +28,7 @@ export class Store {
   public readonly recordings: Recordings;
   public readonly notes: SavedNotes;
   public readonly assets: Assets;
+  public readonly resources: Resources;
   public readonly usage: Usage;
   public readonly groups: Groups;
   public readonly jobs: JobQueue;
@@ -44,6 +46,7 @@ export class Store {
     this.recordings = new Recordings(db);
     this.notes = new SavedNotes(db, directory);
     this.assets = new Assets(db, directory);
+    this.resources = new Resources(db, directory);
     this.usage = new Usage(db);
     this.groups = new Groups(db);
     this.jobs = new JobQueue(db);

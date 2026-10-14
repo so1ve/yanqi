@@ -8,6 +8,8 @@ import { configurationError } from "./config.ts";
 import { recallMessage, saveMessage } from "./onebot/message.ts";
 import { ReactionSync } from "./onebot/reactions.ts";
 import { Secretary } from "./secretary.ts";
+import { StoreError } from "./storage/errors.ts";
+import type { ResourceKind } from "./storage/resources.ts";
 import type { Database } from "./storage/schema.ts";
 import { Store } from "./storage/store.ts";
 
@@ -203,6 +205,16 @@ export class Yanqi {
 
   public wake(): void {
     this.#secretary?.processPending();
+  }
+
+  public clearResources(kind: ResourceKind) {
+    return this.#change(async () => {
+      if (this.running) {
+        throw new StoreError("conflict", "请先暂停 AI，再清理资源");
+      }
+
+      return this.store.resources.clear(kind);
+    });
   }
 
   public purge() {

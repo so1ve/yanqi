@@ -52,7 +52,7 @@ export interface Asset {
   messageId: number;
   kind: "image" | "audio" | "video" | "file" | "forward";
   reference: string;
-  state: "pending" | "saved" | "failed";
+  state: "pending" | "saved" | "failed" | "missing";
   path: string | null;
   interpretation: string | null;
   error: string | null;
@@ -76,7 +76,7 @@ export interface JobPayloads {
     requestIds: number[];
     replyTo?: string | null;
   };
-  asset: { groupId: string; assetId: number };
+  asset: { groupId: string; assetId: number; refresh?: boolean };
 }
 
 export type JobKind = keyof JobPayloads;

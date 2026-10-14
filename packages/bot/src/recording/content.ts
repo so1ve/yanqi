@@ -86,16 +86,18 @@ export const contentText = (
 
 function describeAttachment(asset: Asset): string {
   const imageRef =
-    asset.path && imageMimeType(asset.path)
+    asset.state !== "missing" && asset.path && imageMimeType(asset.path)
       ? `，imageRef=asset:${asset.id}`
       : "";
   const state =
     asset.error ||
-    (asset.state === "pending"
-      ? "等待解析"
-      : asset.state === "failed"
-        ? "解析失败"
-        : "文件已保存");
+    (asset.state === "missing"
+      ? "原件已清理"
+      : asset.state === "pending"
+        ? "等待解析"
+        : asset.state === "failed"
+          ? "解析失败"
+          : "文件已保存");
   const result = asset.interpretation
     ? `\n[${asset.kind === "audio" ? "语音转写" : "附件识别结果，非用户发言"}] ${asset.interpretation}`
     : "";

@@ -13,6 +13,8 @@ export {
   memoryScope,
   memorySummary,
 } from "./storage/memories.ts";
+export type { ResourceKind } from "./storage/resources.ts";
+export { resourceKinds } from "./storage/resources.ts";
 export type { Tables as BotTables, Database } from "./storage/schema.ts";
 export { createTables } from "./storage/schema.ts";
 export type { Store } from "./storage/store.ts";

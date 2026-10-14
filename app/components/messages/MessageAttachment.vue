@@ -2,16 +2,19 @@
 import { FileText, Messages, Microphone, Movie, Photo } from "@vicons/tabler";
 import { computed } from "vue";
 
-import { useAction } from "~/composables/useAction";
+import { useAssetRecognition } from "~/composables/useAssetRecognition";
 import type { Message } from "~/types/api";
-import { api } from "~/utils/api";
 
 const emit = defineEmits<{ updated: [] }>();
 const props = defineProps<{
   asset: Message["assets"][number];
   groupId: string;
 }>();
-const { busy, run } = useAction();
+const { processing, retry } = useAssetRecognition(
+  () => props.groupId,
+  () => props.asset.id,
+  () => emit("updated"),
+);
 const path = computed(
   () => `/api/groups/${props.groupId}/assets/${props.asset.id}`,
 );
@@ -25,30 +28,14 @@ const kinds = {
 const kind = computed(
   () => kinds[props.asset.previewable ? "image" : props.asset.kind],
 );
-
-async function retry(): Promise<void> {
-  if (
-    await run(
-      () =>
-        api(`groups/${props.groupId}/assets/${props.asset.id}/retry`, {
-          method: "POST",
-        }),
-      "已安排重新解析",
-    )
-  ) {
-    emit("updated");
-  }
-}
 </script>
 
 <template>
   <section :aria-label="kind.label" class="attachment">
-    <NImage
-      v-if="asset.previewable"
+    <StoredImage
+      v-if="asset.previewable && asset.downloadable"
       :alt="kind.label"
       class="image"
-      :img-props="{ loading: 'lazy' }"
-      object-fit="contain"
       :src="`${path}?preview=1`"
     />
     <div class="attachment-bar">
@@ -58,7 +45,13 @@ async function retry(): Promise<void> {
       </span>
       <a v-if="asset.downloadable" :href="path">下载原件</a>
       <span v-else class="pending">
-        {{ asset.state === "pending" ? "等待保存" : "尚未保存" }}
+        {{
+          asset.state === "missing"
+            ? "原件已清理"
+            : asset.state === "pending"
+              ? "等待保存"
+              : "尚未保存"
+        }}
       </span>
     </div>
     <p v-if="asset.error" class="error-text">{{ asset.error }}</p>
@@ -66,15 +59,22 @@ async function retry(): Promise<void> {
       v-if="
         asset.error ||
         asset.state === 'failed' ||
-        (asset.previewable && !asset.interpretation)
+        asset.previewable ||
+        asset.kind === 'image'
       "
       class="retry"
-      :loading="busy"
+      :loading="processing"
       size="small"
       text
       @click="retry"
     >
-      重新解析
+      {{
+        asset.state === "missing"
+          ? "重新获取并识别"
+          : asset.previewable || asset.kind === "image"
+            ? "重新识别"
+            : "重新解析"
+      }}
     </NButton>
     <details v-if="asset.interpretation" class="interpretation">
       <summary>查看识别内容</summary>

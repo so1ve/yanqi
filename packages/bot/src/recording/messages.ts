@@ -55,7 +55,9 @@ export async function messageChunks(
             assetId: asset.id,
             kind: asset.kind,
             imageRef:
-              asset.path && imageMimeType(asset.path)
+              asset.state !== "missing" &&
+              asset.path &&
+              imageMimeType(asset.path)
                 ? `asset:${asset.id}`
                 : null,
             taskId: job.id,
