@@ -14,9 +14,8 @@ import { readTool } from "./tools/read.ts";
 const reportSchema = object({
   brief: Type.String({
     minLength: 1,
-    maxLength: 1600,
     description:
-      "已查明的内容、工具返回的资料规模和仍需查阅的部分，供小栖判断后续工作。",
+      "供小栖直接使用的 task 答案和必要引用。仅在 task 中的问题无法回答时说明具体缺口，不附阅读过程或任务外的检查事项。",
   }),
   done: Type.Boolean(),
 });
