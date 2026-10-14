@@ -167,61 +167,131 @@ export class Summarizer {
     }
   }
 
-  async #merge(topic: Topic, sections: string[]): Promise<string> {
-    if (sections.length === 1) {
-      return sections[0]!;
+  #batches(sections: string[], budget: number): string[][] {
+    const batches: string[][] = [];
+    let batch: string[] = [];
+
+    for (let remaining of sections) {
+      while (remaining.length > 0) {
+        let end = Math.min(remaining.length, budget - 4);
+
+        while (JSON.stringify([remaining.slice(0, end)]).length > budget) {
+          end = Math.floor(end / 2);
+        }
+
+        if (end < remaining.length) {
+          const newline = remaining.lastIndexOf("\n", end - 1);
+
+          if (newline >= end / 2) {
+            end = newline + 1;
+          }
+        }
+
+        const part = remaining.slice(0, end);
+
+        if (JSON.stringify([...batch, part]).length > budget) {
+          batches.push(batch);
+          batch = [];
+        }
+
+        batch.push(part);
+        remaining = remaining.slice(end);
+      }
     }
 
-    try {
-      return await this.#ai.recording.merge(topic, sections);
-    } catch (error) {
-      if (!(error instanceof AiSizeError)) {
-        throw error;
+    if (batch.length > 0) {
+      batches.push(batch);
+    }
+
+    return batches;
+  }
+
+  async #reduce(
+    topic: Topic,
+    sections: string[],
+    budget: number,
+  ): Promise<string[]> {
+    const reduced: string[] = [];
+
+    for (const batch of this.#batches(sections, budget)) {
+      const size = JSON.stringify(batch).length;
+
+      if (size <= budget / 2) {
+        reduced.push(...batch);
+
+        continue;
       }
 
-      this.#logger.warn(
-        "合并超出模型限制，拆小批次继续：sections=%s",
-        sections.length,
-      );
-      const middle = Math.ceil(sections.length / 2);
-      const first = await this.#merge(topic, sections.slice(0, middle));
-      const second = await this.#merge(topic, sections.slice(middle));
+      let targetChars = Math.floor(size / 2);
 
-      return `${first}\n\n${second}`;
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const draft = await this.#ai.recording.merge(
+            topic,
+            batch,
+            targetChars,
+          );
+
+          if (JSON.stringify([draft]).length > size * 0.75) {
+            throw new AiSizeError("中间摘要未充分缩短，无法继续整体合并");
+          }
+
+          reduced.push(draft);
+
+          break;
+        } catch (error) {
+          if (!(error instanceof AiSizeError) || attempt === 1) {
+            throw error;
+          }
+
+          targetChars = Math.floor(targetChars / 2);
+        }
+      }
     }
+
+    if (JSON.stringify(reduced).length >= JSON.stringify(sections).length) {
+      throw new AiSizeError("摘要合并输入未缩短，已停止重复合并");
+    }
+
+    return reduced;
   }
 
   public async compose(
     topic: Topic,
     sections: Note["sections"],
   ): Promise<string> {
-    const paragraphs = sections
-      .map((section) => section.content)
+    let drafts = sections
+      .map((section) => section.content.trim())
       .filter(Boolean);
-    const budget = Math.floor(this.#config.AI_INPUT_CHARS / 3);
-    const chapters: string[] = [];
-    let batch: string[] = [];
 
-    const merge = async () => {
-      if (batch.length === 0) {
-        return;
-      }
-
-      chapters.push(await this.#merge(topic, batch));
-      batch = [];
-    };
-
-    // 汇总也分批，避免长历史在最后一步又塞进单次模型调用。
-    for (const paragraph of paragraphs) {
-      if (JSON.stringify([...batch, paragraph]).length > budget) {
-        await merge();
-      }
-
-      batch.push(paragraph);
+    if (drafts.length === 0) {
+      return "";
     }
 
-    await merge();
+    let budget = Math.floor(this.#config.AI_INPUT_CHARS / 3);
 
-    return chapters.join("\n\n");
+    for (let attempt = 0; ; attempt++) {
+      while (JSON.stringify(drafts).length > budget) {
+        this.#logger.info(
+          "纪要逐级合并：topic=%s sections=%s chars=%s",
+          topic.id,
+          drafts.length,
+          JSON.stringify(drafts).length,
+        );
+        drafts = await this.#reduce(topic, drafts, budget);
+      }
+
+      try {
+        // 最后一次调用统一整理全部议题；即使只有一批，也不直接交付分批草稿。
+        return await this.#ai.recording.merge(topic, drafts);
+      } catch (error) {
+        if (!(error instanceof AiSizeError) || attempt === 1) {
+          throw error;
+        }
+
+        budget = Math.floor(budget / 2);
+        drafts = await this.#reduce(topic, drafts, budget);
+      }
+    }
   }
 }

@@ -72,14 +72,19 @@ export class RecordingAI {
     return result.markdown.trim();
   }
 
-  public async merge(topic: Topic, sections: string[]): Promise<string> {
+  public async merge(
+    topic: Topic,
+    sections: string[],
+    targetChars?: number,
+  ): Promise<string> {
     return this.#runtime.text(
       "summary_merge",
-      `${summaryPrompts.merge}\n${this.#sourceRules}\n${summaryMemory}`,
+      `${summaryPrompts.merge}\n${targetChars === undefined ? "" : summaryPrompts.reduce}\n${this.#sourceRules}\n${summaryMemory}`,
       {
         topic: { title: topic.title, description: topic.description },
         focus: topic.focus,
         sections,
+        ...(targetChars === undefined ? {} : { targetChars }),
         memory: await this.#store.memories.context(
           topic.groupId,
           topic.ownerId,
