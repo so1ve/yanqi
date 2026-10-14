@@ -19,7 +19,6 @@ export interface MessageMetadata {
   userId: string;
   sentAt: number;
   textChars: number;
-  attachmentCount: number;
 }
 
 export interface HistoryAvailability {
@@ -178,15 +177,7 @@ export class Messages {
     let selection = this.#db
       .selectFrom("messages")
       .select(["id", "userId", "sentAt"])
-      .select((eb) => [
-        eb.fn<number>("length", ["text"]).as("textChars"),
-        eb
-          .selectFrom("assets")
-          .select((eb) => eb.fn.countAll<number>().as("count"))
-          .whereRef("assets.messageId", "=", "messages.id")
-          .$asScalar()
-          .as("attachmentCount"),
-      ])
+      .select((eb) => eb.fn<number>("length", ["text"]).as("textChars"))
       .where("groupId", "=", groupId)
       .where("sentAt", ">=", from)
       .where("sentAt", "<", to)

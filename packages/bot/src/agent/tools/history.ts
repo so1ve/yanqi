@@ -7,6 +7,7 @@ import {
   sourceId,
   sourceScope,
 } from "../../recording/sources.ts";
+import type { AssetMetadata } from "../../storage/assets.ts";
 import type { HistoryAvailability } from "../../storage/messages.ts";
 import type { ChatMessage } from "../../types.ts";
 import { beijingTime } from "../../utils/time.ts";
@@ -33,7 +34,7 @@ export interface HistoryMetadata {
     | ({ action: "note" } & Static<typeof noteParameters>);
   textChars: number;
   sourceCount?: number;
-  attachmentCount?: number;
+  attachments?: AssetMetadata;
   availableHistory?: HistoryAvailability;
   range?: {
     fromMessageId: string;
@@ -109,7 +110,7 @@ export function chatHistoryTools(context: ReadContext, onMetadata: OnMetadata) {
     tool(
       context,
       "history",
-      "先查询本群聊天的元数据，不返回正文。context 查询 beforeId 之前最近 40 条对话，省略时从请求前开始；messages 按 scope 查询；search 字面搜索聊天，均包含成员和言栖的发言。返回句柄、消息数、文本字符数、附件数和时间范围。availableHistory 是本群请求前全部可读历史的数量和时间边界，不代表入群时间；textChars 不含附件解析内容，搜索统计只覆盖命中消息。元数据会立即转交小栖，需要正文时用 read_history 携带句柄读取。",
+      "先查询本群聊天的元数据，不返回正文。context 查询 beforeId 之前最近 40 条对话，省略时从请求前开始；messages 按 scope 查询；search 字面搜索聊天，均包含成员和言栖的发言。返回句柄、消息数、文本字符数、附件规模和时间范围。availableHistory 是本群请求前全部可读历史的数量和时间边界，不代表入群时间；textChars 不含附件，attachments.parsedTextChars 包括已解析的转发正文、识图和转写，forwardedMessages 包括嵌套转发中的消息，pending 是尚未解析的附件数。搜索统计只覆盖命中消息。元数据会立即转交小栖，需要正文时用 read_history 携带句柄读取。",
       chatParameters,
       async (args) => {
         const sources =
@@ -145,9 +146,8 @@ export function chatHistoryTools(context: ReadContext, onMetadata: OnMetadata) {
             ),
             sourceCount: sources.length,
             textChars: sources.reduce((sum, item) => sum + item.textChars, 0),
-            attachmentCount: sources.reduce(
-              (sum, item) => sum + item.attachmentCount,
-              0,
+            attachments: await store.assets.metadata(
+              sources.map((source) => source.id),
             ),
             range:
               first && last

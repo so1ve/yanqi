@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 
+import { sql } from "kysely";
+
 import {
   attachmentReference,
   forwardAttachments,
@@ -15,6 +17,14 @@ import { writeMarkdown } from "./files.ts";
 import { enqueueJob } from "./jobs.ts";
 import type { Database } from "./schema.ts";
 import { messageChanged } from "./topic-sources.ts";
+
+export interface AssetMetadata {
+  count: number;
+  pending: number;
+  failed: number;
+  parsedTextChars: number;
+  forwardedMessages: number;
+}
 
 export async function captureAssets(
   db: Database,
@@ -76,6 +86,48 @@ export class Assets {
       .selectAll()
       .where("messageId", "in", messageIds)
       .execute();
+  }
+
+  public async metadata(messageIds: number[]): Promise<AssetMetadata> {
+    const selection = this.#db
+      .selectFrom("assets")
+      .where("messageId", "in", messageIds);
+    const [assets, forwards] = await Promise.all([
+      selection
+        .select((eb) => [
+          eb.fn.countAll<number>().as("count"),
+          eb.fn
+            .countAll<number>()
+            .filterWhere("state", "=", "pending")
+            .as("pending"),
+          eb.fn
+            .countAll<number>()
+            .filterWhere("state", "=", "failed")
+            .as("failed"),
+          eb.fn
+            .coalesce(
+              eb.fn
+                .sum<number>(eb.fn<number>("length", ["interpretation"]))
+                .filterWhere("kind", "!=", "forward"),
+              eb.val(0),
+            )
+            .as("parsedTextChars"),
+        ])
+        .executeTakeFirstOrThrow(),
+      sql<{ messages: number; textChars: number }>`
+        select count(*) filter (where node.key = 'sender' and node.type = 'object') as messages,
+          coalesce(sum(length(node.value)) filter (where node.key = 'text' and node.type = 'text'), 0) as textChars
+        from (${selection.where("kind", "=", "forward").select("interpretation")}) as cards,
+          json_tree(cards.interpretation) as node
+      `.execute(this.#db),
+    ]);
+    const forward = forwards.rows[0]!;
+
+    return {
+      ...assets,
+      forwardedMessages: forward.messages,
+      parsedTextChars: assets.parsedTextChars + forward.textChars,
+    };
   }
 
   public capture(

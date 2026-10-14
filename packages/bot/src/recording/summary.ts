@@ -7,6 +7,20 @@ import type { Store } from "../storage/store.ts";
 import type { ChatMessage, Message, Note, Topic } from "../types.ts";
 import { contextWithin, messageChunks } from "./messages.ts";
 
+export function reusableSections(
+  sources: { id: number }[],
+  previous: Note | null,
+  changed: Set<number>,
+): Note["sections"] {
+  const sourceIds = new Set(sources.map((message) => message.id));
+
+  return (previous?.sections ?? []).filter(
+    (section) =>
+      section.messageIds.length > 0 &&
+      section.messageIds.every((id) => sourceIds.has(id) && !changed.has(id)),
+  );
+}
+
 export class Summarizer {
   #config: Config;
   #store: Store;
@@ -71,16 +85,11 @@ export class Summarizer {
     completed: number;
     total: number;
   }> {
-    const sourceIds = new Set(sources.map((message) => message.id));
     const changed = await this.#store.topics.changedMessages(
       topic.id,
       previous?.generation ?? -1,
     );
-    const sections = (previous?.sections ?? []).filter(
-      (section) =>
-        section.messageIds.length > 0 &&
-        section.messageIds.every((id) => sourceIds.has(id) && !changed.has(id)),
-    );
+    const sections = reusableSections(sources, previous, changed);
     const budget = Math.floor(this.#config.AI_INPUT_CHARS / 4);
     const contextFor = async (chunk: ChatMessage[]) => {
       const ids = new Set(chunk.map((message) => message.id));

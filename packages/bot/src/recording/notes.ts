@@ -11,7 +11,7 @@ import { waitForAsset } from "../tasks/assets.ts";
 import type { Job, Note, Topic } from "../types.ts";
 import { noteImages } from "./images.ts";
 import { publishNote } from "./publication.ts";
-import { Summarizer } from "./summary.ts";
+import { Summarizer, reusableSections } from "./summary.ts";
 import { transcript } from "./transcript.ts";
 
 export class Notes {
@@ -32,7 +32,11 @@ export class Notes {
 
   public async arrange(topic: Topic, requestId: number) {
     const note = await this.#store.notes.find(topic.id);
-    const record = { topicId: topic.id, title: topic.title };
+    const record = {
+      topicId: topic.id,
+      title: topic.title,
+      focus: topic.focus,
+    };
 
     if (note?.generation === topic.generation) {
       const delivery =
@@ -49,6 +53,21 @@ export class Notes {
       };
     }
 
+    const sources = await this.#store.messages.listMetadata(
+      topic.groupId,
+      topic.lastSourceId,
+      { topicIds: [topic.id], includeBot: true },
+    );
+    const changed = await this.#store.topics.changedMessages(
+      topic.id,
+      note?.generation ?? -1,
+    );
+    const sections = reusableSections(sources, note, changed);
+    const recorded = new Set(sections.flatMap((section) => section.messageIds));
+    const remaining = sources.filter((source) => !recorded.has(source.id));
+    const attachments = await this.#store.assets.metadata(
+      remaining.map((source) => source.id),
+    );
     const taskId = await this.#store.jobs.summarize(topic, true);
 
     return {
@@ -56,6 +75,14 @@ export class Notes {
       taskId,
       state: taskId === null ? "empty" : "processing",
       pendingRevision: taskId === null ? null : topic.revision + 1,
+      sourceCount: sources.length,
+      workload: {
+        sourcesToRead: remaining.length,
+        textChars: remaining.reduce((sum, source) => sum + source.textChars, 0),
+        attachments,
+        reusedSections: sections.length,
+        charsPerBatch: Math.floor(this.#config.AI_INPUT_CHARS / 4),
+      },
     };
   }
 

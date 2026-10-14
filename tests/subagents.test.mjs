@@ -17,7 +17,26 @@ async function call(tool, args, signal) {
 
 test("查阅先返回元数据，再等待内容简报，不因等待时间自行唤醒", async (t) => {
   const { store } = await fixture(t);
-  const source = await capture(store, "100", "1", { text: "确定使用 Docker" });
+  const source = await capture(store, "100", "1", {
+    text: "",
+    content: [{ type: "forward", data: { id: "card" } }],
+  });
+  const [card] = await store.assets.forMessage(source.id);
+  const forwardedText = "确定使用 Docker";
+
+  await store.assets.save(
+    card.id,
+    "saved",
+    null,
+    JSON.stringify([
+      {
+        sender: { user_id: "301", nickname: "讨论者" },
+        time: 1,
+        content: [{ type: "text", data: { text: forwardedText } }],
+      },
+    ]),
+    null,
+  );
 
   await capture(store, "200", "1", { text: "其他群的讨论" });
   const message = await capture(store, "100", "2", {
@@ -79,6 +98,12 @@ test("查阅先返回元数据，再等待内容简报，不因等待时间自�
 
     assert.equal(metadata.state, "running");
     assert.equal(metadata.metadata.sourceCount, 1);
+    assert.equal(metadata.metadata.textChars, 0);
+    assert.equal(metadata.metadata.attachments.forwardedMessages, 1);
+    assert.equal(
+      metadata.metadata.attachments.parsedTextChars,
+      forwardedText.length,
+    );
     assert.equal(metadata.brief, null);
     assert.equal(readMessages, undefined);
     assert.throws(() => subagents.assertIdle());
