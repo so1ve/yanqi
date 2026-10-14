@@ -4,6 +4,7 @@ export const kindNames: Record<string, string> = {
   memory: "更新记忆",
   detect: "识别讨论",
   summarize: "整理纪要",
+  publish: "统一交付纪要",
   asset: "解析附件",
   text: "文字回复",
   note: "纪要全文",

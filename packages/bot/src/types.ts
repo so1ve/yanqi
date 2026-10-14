@@ -67,6 +67,11 @@ export interface JobPayloads {
     requested: boolean;
     publish?: boolean;
   };
+  publish: {
+    groupId: string;
+    topics: { id: string; requested: boolean }[];
+    requestIds: number[];
+  };
   asset: { groupId: string; assetId: number };
 }
 

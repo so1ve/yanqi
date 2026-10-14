@@ -11,7 +11,6 @@ import type { Store } from "../storage/store.ts";
 import { waitForAsset } from "../tasks/assets.ts";
 import type { Job, Note, Topic } from "../types.ts";
 import { noteImages } from "./images.ts";
-import { publishNote } from "./publication.ts";
 import { Summarizer, reusableSections } from "./summary.ts";
 import { transcript } from "./transcript.ts";
 
@@ -96,7 +95,24 @@ export class Notes {
   }
 
   public async generate(job: Job<"summarize">): Promise<void> {
-    const { topicId, requested } = job.payload;
+    while (true) {
+      this.#signal.throwIfAborted();
+      await this.#generate(job);
+      const topic = await this.#store.topics.get(job.payload.topicId);
+
+      if (!topic.lastSourceId || topic.generation === topic.noteGeneration) {
+        return;
+      }
+
+      await this.#store.jobs.reportProgress(
+        job.id,
+        "原文有更新，继续整理后统一交付",
+      );
+    }
+  }
+
+  async #generate(job: Job<"summarize">): Promise<void> {
+    const { topicId } = job.payload;
     const pendingSources = await this.#store.topics.messages(topicId);
 
     await this.#store.jobs.reportProgress(
@@ -230,18 +246,5 @@ export class Notes {
         note.path,
       );
     }
-
-    if (job.payload.publish === false) {
-      return;
-    }
-
-    await publishNote(
-      this.#config,
-      this.#store,
-      this.#ai,
-      note,
-      sources,
-      requested,
-    );
   }
 }

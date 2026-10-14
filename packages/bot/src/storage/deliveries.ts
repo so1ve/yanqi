@@ -1,14 +1,14 @@
 import { EventEmitter, on } from "node:events";
 
 import { Logger } from "@koishijs/core";
+import type { Selectable } from "kysely";
 
 import type { Delivery, Note } from "../types.ts";
-import type { Database } from "./schema.ts";
+import type { Database, Tables } from "./schema.ts";
 
 type Outgoing =
   | { kind: "text"; groupId: string; content: string }
-  | { kind: "note"; note: Note; repeat?: boolean }
-  | { kind: "saved"; note: Note; content: string };
+  | { kind: "note"; note: Note; repeat?: boolean };
 
 export class DeliveryQueue {
   #db: Database;
@@ -50,76 +50,102 @@ export class DeliveryQueue {
     return { items, total: total.count };
   }
 
-  public enqueueNote(note: Note, requestId?: number) {
-    return this.enqueue(
-      requestId === undefined
-        ? `auto-note:${note.id}`
-        : `requested:${requestId}:note:${note.id}`,
-      { kind: "note", note, repeat: requestId !== undefined },
-    );
+  public async enqueueNote(note: Note, requestId?: number) {
+    return (await this.enqueueNotes([{ note, requestId }]))[0]!;
+  }
+
+  // 整批入队，发送器不会在后续纪要入队前抢先发出第一篇。
+  public async enqueueNotes(
+    notes: { note: Note; requestId: number | undefined }[],
+    notification = "",
+  ) {
+    const results = await this.#db.transaction().execute(async (db) => {
+      const results = [];
+
+      for (const { note, requestId } of notes) {
+        results.push(
+          await this.#enqueue(
+            db,
+            requestId === undefined
+              ? `auto-note:${note.id}`
+              : `requested:${requestId}:note:${note.id}`,
+            { kind: "note", note, repeat: requestId !== undefined },
+          ),
+        );
+      }
+
+      const first = results.find(
+        ({ delivery }) => delivery.state === "pending",
+      );
+
+      if (first && notification) {
+        await db
+          .updateTable("deliveries")
+          .set({ content: notification })
+          .where("id", "=", first.delivery.id)
+          .execute();
+      }
+
+      return results;
+    });
+
+    return results.map((result) => this.#completedEnqueue(result));
   }
 
   public async enqueue(key: string, outgoing: Outgoing) {
-    let cancelled: { id: number }[] = [];
-    const delivery = await this.#db.transaction().execute(async (db) => {
-      const note = outgoing.kind === "text" ? null : outgoing.note;
-      const repeat = outgoing.kind === "note" && outgoing.repeat;
-      let existing = await db
-        .selectFrom("deliveries")
-        .selectAll()
-        .where("key", "=", key)
-        .executeTakeFirst();
+    return this.#completedEnqueue(
+      await this.#db
+        .transaction()
+        .execute((db) => this.#enqueue(db, key, outgoing)),
+    );
+  }
 
-      if (note && outgoing.kind === "note") {
-        cancelled = await db
+  async #enqueue(db: Database, key: string, outgoing: Outgoing) {
+    const note = outgoing.kind === "text" ? null : outgoing.note;
+    const repeat = outgoing.kind === "note" && outgoing.repeat;
+    let existing = await db
+      .selectFrom("deliveries")
+      .selectAll()
+      .where("key", "=", key)
+      .executeTakeFirst();
+    const cancelled = note
+      ? await db
           .updateTable("deliveries")
           .set({ state: "cancelled" })
           .where("noteId", "=", note.id)
           .where("kind", "=", "text")
           .where("state", "=", "pending")
           .returning("id")
-          .execute();
-      }
+          .execute()
+      : [];
 
-      if (!existing && note && !repeat) {
-        existing = await db
-          .selectFrom("deliveries")
-          .selectAll()
-          .where("noteId", "=", note.id)
-          .where("state", "in", ["pending", "done"])
-          .executeTakeFirst();
-      }
+    if (!existing && note && !repeat) {
+      existing = await db
+        .selectFrom("deliveries")
+        .selectAll()
+        .where("noteId", "=", note.id)
+        .where("state", "in", ["pending", "done"])
+        .executeTakeFirst();
+    }
 
-      if (existing) {
-        this.#logger.debug(
-          "忽略重复发送：key=%s existing=%s",
-          key,
-          existing.id,
-        );
-
-        return existing;
-      }
-
-      const delivery = await db
+    const delivery =
+      existing ??
+      (await db
         .insertInto("deliveries")
         .values({
           key,
-          kind: outgoing.kind === "saved" ? "text" : outgoing.kind,
+          kind: outgoing.kind,
           groupId:
             outgoing.kind === "text" ? outgoing.groupId : outgoing.note.groupId,
           topicId: note?.topicId ?? null,
           noteId: note?.id ?? null,
-          content:
-            outgoing.kind === "text"
-              ? outgoing.content
-              : outgoing.kind === "saved"
-                ? outgoing.content
-                : "",
+          content: outgoing.kind === "text" ? outgoing.content : "",
           createdAt: Date.now(),
         })
         .returningAll()
-        .executeTakeFirstOrThrow();
+        .executeTakeFirstOrThrow());
 
+    if (!existing) {
       this.#logger.info(
         "发送 #%s 入队：key=%s group=%s kind=%s note=%s",
         delivery.id,
@@ -128,15 +154,34 @@ export class DeliveryQueue {
         delivery.kind,
         delivery.noteId,
       );
+    }
 
-      return delivery;
-    });
+    return { delivery, cancelled };
+  }
 
+  #completedEnqueue({
+    delivery,
+    cancelled,
+  }: {
+    delivery: Selectable<Tables["deliveries"]>;
+    cancelled: { id: number }[];
+  }) {
     for (const { id } of cancelled) {
       this.#changes.emit(String(id));
     }
 
     return { id: delivery.id, kind: delivery.kind, state: delivery.state };
+  }
+
+  public pendingNotes(groupId: string) {
+    return this.#db
+      .selectFrom("deliveries")
+      .selectAll()
+      .where("groupId", "=", groupId)
+      .where("kind", "=", "note")
+      .where("state", "=", "pending")
+      .orderBy("id")
+      .execute();
   }
 
   public async isPending(id: number): Promise<boolean> {
@@ -203,6 +248,21 @@ export class DeliveryQueue {
         .selectAll()
         .where("state", "=", "pending")
         .where("kind", "=", kind)
+        .$if(kind === "note", (query) =>
+          query.where(
+            "groupId",
+            "not in",
+            this.#db
+              .selectFrom("jobs")
+              .select((eb) =>
+                eb
+                  .fn<string>("json_extract", ["payload", eb.val("$.groupId")])
+                  .as("groupId"),
+              )
+              .where("kind", "in", ["intent", "detect", "summarize", "publish"])
+              .where("state", "in", ["pending", "running"]),
+          ),
+        )
         .orderBy("id")
         .limit(1)
         .executeTakeFirst()) ?? null

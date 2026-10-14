@@ -18,6 +18,19 @@ export function replyTool(context: ToolContext, subagents: Subagents) {
     parameters,
     async ({ text }, signal) => {
       subagents.assertIdle();
+      if (
+        (await store.jobs.publishesRequest(message.groupId, message.id)) ||
+        (await store.deliveries.forRequest(message.id)).some(
+          (delivery) =>
+            delivery.kind === "note" &&
+            (delivery.state === "pending" || delivery.state === "done"),
+        )
+      ) {
+        return {
+          state: "deferred",
+          message: "本次纪要已交给后台，全部完成后统一交付，本轮不再另发回复。",
+        };
+      }
 
       const key = `command:${message.id}`;
 
@@ -65,6 +78,20 @@ export function notifyTool(context: ToolContext) {
     "发送一次简短进度提示，随后继续处理。助手 metadata/brief 或记录工具 workload 已表明剩余整理较多时调用，无需等正文读完。只说明实际处理的内容，不估计未知时间；响应慢或任务未完成本身不是依据。每次请求最多一次，明确静默要求时不发。最终答复用 reply，无需补充时用 skip_reply。",
     object({ text: Type.String({ minLength: 1, pattern: "\\S" }) }),
     async ({ text }, signal) => {
+      if (
+        (await store.jobs.publishesRequest(message.groupId, message.id)) ||
+        (await store.deliveries.forRequest(message.id)).some(
+          (delivery) =>
+            delivery.kind === "note" &&
+            (delivery.state === "pending" || delivery.state === "done"),
+        )
+      ) {
+        return {
+          state: "deferred",
+          message: "本批纪要整理完成后统一发消息，请用 skip_reply 结束。",
+        };
+      }
+
       const key = `progress:${message.id}`;
       const delivery = await store.deliveries.enqueue(key, {
         kind: "text",

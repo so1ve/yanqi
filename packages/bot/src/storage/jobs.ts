@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { EventEmitter, on } from "node:events";
+import { randomUUID } from "node:crypto";
+import { getEventListeners, on } from "node:events";
 
 import { Logger } from "@koishijs/core";
 
@@ -21,48 +22,168 @@ export async function enqueueJob<K extends JobKind>(
   payload: JobPayloads[K],
   now = Date.now(),
 ): Promise<number> {
+  // 整理任务读取的是最新原文。同一话题正在排队或执行时，复用该任务。
+  const summary =
+    kind === "summarize" ? (payload as JobPayloads["summarize"]) : null;
+  const active = summary
+    ? await db
+        .selectFrom("jobs")
+        .selectAll()
+        .where("kind", "=", "summarize")
+        .where("state", "in", ["pending", "running"])
+        .where((eb) =>
+          eb(
+            eb.fn<string>("json_extract", ["payload", eb.val("$.topicId")]),
+            "=",
+            summary.topicId,
+          ),
+        )
+        .executeTakeFirst()
+    : undefined;
+  const existing =
+    active ??
+    (await db
+      .selectFrom("jobs")
+      .selectAll()
+      .where("key", "=", key)
+      .executeTakeFirst());
+  let id: number;
+
+  if (existing) {
+    id = existing.id;
+    if (summary && (active || summary.requested)) {
+      const previous: JobPayloads["summarize"] = JSON.parse(existing.payload);
+      const merged = {
+        ...summary,
+        requested: previous.requested || summary.requested,
+        publish:
+          previous.publish === false && !summary.requested
+            ? false
+            : previous.publish !== false || summary.publish !== false,
+      };
+
+      await db
+        .updateTable("jobs")
+        .set({
+          payload: JSON.stringify(merged),
+          ...(active
+            ? {}
+            : {
+                state: "pending" as const,
+                attempts: 0,
+                runAfter: now,
+                lastError: null,
+              }),
+        })
+        .where("id", "=", id)
+        .execute();
+      if (merged.publish && (summary.requested || previous.publish === false)) {
+        await enqueuePublication(db, merged.groupId, [
+          { id: merged.topicId, requested: merged.requested },
+        ]);
+      }
+    }
+
+    return id;
+  }
+
+  const job = await db
+    .insertInto("jobs")
+    .values({ kind, key, payload: JSON.stringify(payload), runAfter: now })
+    .returning("id")
+    .executeTakeFirstOrThrow();
+
+  id = job.id;
+  if (summary && summary.publish !== false) {
+    await enqueuePublication(db, summary.groupId, [
+      { id: summary.topicId, requested: summary.requested },
+    ]);
+  }
+
+  logger.info("任务 #%s 入队：kind=%s key=%s", id, kind, key);
+
+  return id;
+}
+
+// 一个群尚未开始发布的纪要归为一批；工作队列清空后再统一决定如何交付。
+async function enqueuePublication(
+  db: Database,
+  groupId: string,
+  topics: JobPayloads["publish"]["topics"],
+  requestIds: number[] = [],
+): Promise<number> {
   const existing = await db
     .selectFrom("jobs")
     .selectAll()
-    .where("key", "=", key)
+    .where("kind", "=", "publish")
+    .where("state", "=", "pending")
+    .where((eb) =>
+      eb(
+        eb.fn<string>("json_extract", ["payload", eb.val("$.groupId")]),
+        "=",
+        groupId,
+      ),
+    )
     .executeTakeFirst();
+  const previous: JobPayloads["publish"] = existing
+    ? JSON.parse(existing.payload)
+    : { groupId, topics: [], requestIds: [] };
+  const merged = new Map(previous.topics.map((topic) => [topic.id, topic]));
 
-  if (!existing) {
-    const job = await db
-      .insertInto("jobs")
-      .values({ kind, key, payload: JSON.stringify(payload), runAfter: now })
-      .returning("id")
-      .executeTakeFirstOrThrow();
-
-    logger.info("任务 #%s 入队：kind=%s key=%s", job.id, kind, key);
-
-    return job.id;
-  } else if (
-    kind === "summarize" &&
-    "requested" in payload &&
-    payload.requested &&
-    existing.state !== "running"
-  ) {
-    await db
-      .updateTable("jobs")
-      .set({
-        payload: JSON.stringify(payload),
-        state: "pending",
-        attempts: 0,
-        runAfter: now,
-        lastError: null,
-      })
-      .where("id", "=", existing.id)
-      .execute();
-    logger.info("任务 #%s 重新安排：kind=%s key=%s", existing.id, kind, key);
+  for (const topic of topics) {
+    merged.set(topic.id, {
+      id: topic.id,
+      requested: topic.requested || merged.get(topic.id)?.requested === true,
+    });
   }
 
-  return existing.id;
+  const requests = await db
+    .selectFrom("topics")
+    .select("directiveMessageId")
+    .where("id", "in", [...merged.keys()])
+    .where("directiveMessageId", "is not", null)
+    .execute();
+  const payload = JSON.stringify({
+    groupId,
+    topics: [...merged.values()],
+    requestIds: [
+      ...new Set([
+        ...previous.requestIds,
+        ...requestIds,
+        ...requests.map((topic) => topic.directiveMessageId!),
+      ]),
+    ],
+  });
+  const progress = `等待本批 ${merged.size} 份纪要全部整理完毕后统一交付`;
+
+  if (existing) {
+    await db
+      .updateTable("jobs")
+      .set({ payload, progress })
+      .where("id", "=", existing.id)
+      .execute();
+
+    return existing.id;
+  }
+
+  const job = await db
+    .insertInto("jobs")
+    .values({
+      kind: "publish",
+      key: `publish:${groupId}:${randomUUID()}`,
+      payload,
+      progress,
+      runAfter: Date.now(),
+    })
+    .returning("id")
+    .executeTakeFirstOrThrow();
+
+  return job.id;
 }
 
 export class JobQueue {
   #db: Database;
-  #changes = new EventEmitter();
+  #changes = new EventTarget();
 
   constructor(db: Database) {
     this.#db = db;
@@ -98,7 +219,28 @@ export class JobQueue {
         .executeTakeFirstOrThrow(),
     ]);
 
-    return { items: items.map(decodeJob), total: total.count };
+    const topics = await this.#db
+      .selectFrom("topics")
+      .select(["id", "title"])
+      .where("groupId", "=", groupId)
+      .execute();
+    const titles = new Map(topics.map((topic) => [topic.id, topic.title]));
+
+    return {
+      items: items.map((row) => {
+        const job = decodeJob(row);
+
+        return {
+          ...job,
+          progress:
+            job.progress ??
+            (job.kind === "summarize" && "topicId" in job.payload
+              ? `等待整理「${titles.get(job.payload.topicId) ?? job.payload.topicId}」`
+              : null),
+        };
+      }),
+      total: total.count,
+    };
   }
 
   public async recover(): Promise<void> {
@@ -146,6 +288,59 @@ export class JobQueue {
         topicId: topic.id,
         requested,
       },
+    );
+  }
+
+  public publish(
+    groupId: string,
+    topics: JobPayloads["publish"]["topics"],
+    requestIds: number[] = [],
+  ) {
+    return this.#db
+      .transaction()
+      .execute((db) => enqueuePublication(db, groupId, topics, requestIds));
+  }
+
+  public async recordingBusy(groupId: string): Promise<boolean> {
+    return (
+      (await this.#db
+        .selectFrom("jobs")
+        .select("id")
+        .where("kind", "in", ["intent", "detect", "summarize"])
+        .where("state", "in", ["pending", "running"])
+        .where((eb) =>
+          eb(
+            eb.fn<string>("json_extract", ["payload", eb.val("$.groupId")]),
+            "=",
+            groupId,
+          ),
+        )
+        .executeTakeFirst()) !== undefined
+    );
+  }
+
+  public async publishesRequest(
+    groupId: string,
+    requestId: number,
+  ): Promise<boolean> {
+    const jobs = await this.#db
+      .selectFrom("jobs")
+      .select("payload")
+      .where("kind", "=", "publish")
+      .where("state", "in", ["pending", "running"])
+      .where((eb) =>
+        eb(
+          eb.fn<string>("json_extract", ["payload", eb.val("$.groupId")]),
+          "=",
+          groupId,
+        ),
+      )
+      .execute();
+
+    return jobs.some(({ payload }) =>
+      (JSON.parse(payload) as JobPayloads["publish"]).requestIds.includes(
+        requestId,
+      ),
     );
   }
 
@@ -205,8 +400,8 @@ export class JobQueue {
       // 等待工具所需的任务优先，其他任务仍按入队顺序处理。
       pending.sort(
         (a, b) =>
-          Number(this.#changes.listenerCount(String(b.id)) > 0) -
-          Number(this.#changes.listenerCount(String(a.id)) > 0),
+          Number(getEventListeners(this.#changes, String(b.id)).length > 0) -
+          Number(getEventListeners(this.#changes, String(a.id)).length > 0),
       );
       const busyGroups =
         kind === "intent"
@@ -221,7 +416,39 @@ export class JobQueue {
               .where("state", "=", "running")
               .execute()
           : [];
+      const busyPublications =
+        kind === "publish"
+          ? await db
+              .selectFrom("jobs")
+              .select((eb) =>
+                eb
+                  .fn<string>("json_extract", ["payload", eb.val("$.groupId")])
+                  .as("groupId"),
+              )
+              .where("kind", "in", ["intent", "detect", "summarize"])
+              .where("state", "in", ["pending", "running"])
+              .execute()
+          : [];
+      const detecting =
+        kind === "summarize"
+          ? await db
+              .selectFrom("jobs")
+              .select((eb) =>
+                eb
+                  .fn<string>("json_extract", ["payload", eb.val("$.groupId")])
+                  .as("groupId"),
+              )
+              .where("kind", "=", "detect")
+              .where("state", "in", ["pending", "running"])
+              .execute()
+          : [];
       const job = pending.find(({ payload }) => {
+        if (kind === "publish") {
+          return !busyPublications.some(
+            (group) => group.groupId === payload.groupId,
+          );
+        }
+
         if (kind === "detect") {
           return !pausedGroups.includes(payload.groupId);
         }
@@ -233,7 +460,9 @@ export class JobQueue {
         return (
           kind !== "summarize" ||
           ("topicId" in payload &&
-            (payload.requested || !pausedTopics.includes(payload.topicId)))
+            (payload.requested ||
+              (!pausedTopics.includes(payload.topicId) &&
+                !detecting.some((group) => group.groupId === payload.groupId))))
         );
       });
 
@@ -313,29 +542,96 @@ export class JobQueue {
     return rows.map(decodeJob);
   }
 
-  public async restart(groupId: string, id: number): Promise<boolean> {
-    const result = await this.#db
-      .updateTable("jobs")
-      .set({
-        state: "pending",
-        attempts: 0,
-        runAfter: Date.now(),
-        lastError: null,
-        progress: null,
-      })
-      .where("id", "=", id)
-      .where("state", "in", ["failed", "done"])
-      .where("kind", "not in", ["intent", "observe"])
-      .where((eb) =>
-        eb(
-          eb.fn<string>("json_extract", ["payload", eb.val("$.groupId")]),
-          "=",
-          groupId,
-        ),
-      )
-      .executeTakeFirst();
+  public async restart(
+    groupId: string,
+    id: number,
+    requestId?: number,
+  ): Promise<number | null> {
+    return this.#db.transaction().execute(async (db) => {
+      const row = await db
+        .selectFrom("jobs")
+        .selectAll()
+        .where("id", "=", id)
+        .where("state", "in", ["failed", "done"])
+        .where("kind", "not in", ["intent", "observe"])
+        .where((eb) =>
+          eb(
+            eb.fn<string>("json_extract", ["payload", eb.val("$.groupId")]),
+            "=",
+            groupId,
+          ),
+        )
+        .executeTakeFirst();
 
-    return result.numUpdatedRows === 1n;
+      if (!row) {
+        return null;
+      }
+
+      if (row.kind === "summarize") {
+        const payload: JobPayloads["summarize"] = JSON.parse(row.payload);
+        const target = await enqueueJob(db, "summarize", row.key, {
+          ...payload,
+          requested: true,
+        });
+
+        if (payload.publish !== false && requestId !== undefined) {
+          await enqueuePublication(
+            db,
+            groupId,
+            [{ id: payload.topicId, requested: true }],
+            [requestId],
+          );
+        }
+
+        if (target !== row.id) {
+          await db
+            .updateTable("jobs")
+            .set({
+              state: "done",
+              lastError: null,
+              progress: `已合并到任务 #${target}`,
+            })
+            .where("id", "=", row.id)
+            .execute();
+        }
+
+        return target;
+      }
+
+      if (row.kind === "publish") {
+        const payload: JobPayloads["publish"] = JSON.parse(row.payload);
+        const target = await enqueuePublication(db, groupId, payload.topics, [
+          ...payload.requestIds,
+          ...(requestId === undefined ? [] : [requestId]),
+        ]);
+
+        await db
+          .updateTable("jobs")
+          .set({
+            state: "done",
+            lastError: null,
+            progress: `已合并到任务 #${target}`,
+          })
+          .where("id", "=", id)
+          .execute();
+
+        return target;
+      }
+
+      await db
+        .updateTable("jobs")
+        .set({
+          state: "pending",
+          attempts: 0,
+          runAfter: Date.now(),
+          lastError: null,
+          progress: null,
+        })
+        .where("id", "=", id)
+        .execute();
+
+      return id;
+    });
   }
 
   public async wait(groupId: string, id: number, signal?: AbortSignal) {
@@ -347,8 +643,12 @@ export class JobQueue {
         signal?.throwIfAborted();
         const job = await this.get(groupId, id);
 
-        if (job.kind === "intent" || job.kind === "observe") {
-          throw new Error("不能等待对话任务，请等待附件或纪要任务");
+        if (
+          job.kind === "intent" ||
+          job.kind === "observe" ||
+          job.kind === "publish"
+        ) {
+          throw new Error("不能等待对话或发布任务，请等待附件或纪要任务");
         }
 
         if (
@@ -372,7 +672,7 @@ export class JobQueue {
       .set({ state: "done", lastError: null })
       .where("id", "=", id)
       .execute();
-    this.#changes.emit(String(id));
+    this.#changes.dispatchEvent(new Event(String(id)));
   }
 
   public async cancel(groupId: string, id: number) {
@@ -422,7 +722,7 @@ export class JobQueue {
     });
 
     if (result === "cancelled") {
-      this.#changes.emit(String(id));
+      this.#changes.dispatchEvent(new Event(String(id)));
     }
 
     return result;
@@ -450,7 +750,7 @@ export class JobQueue {
       })
       .where("id", "=", job.id)
       .execute();
-    this.#changes.emit(String(job.id));
+    this.#changes.dispatchEvent(new Event(String(job.id)));
   }
 
   public forTopic(topicId: string) {
@@ -495,20 +795,18 @@ export class JobQueue {
       })
       .where("id", "=", job.id)
       .execute();
-    this.#changes.emit(String(job.id));
+    this.#changes.dispatchEvent(new Event(String(job.id)));
 
     return { state, runAfter };
   }
 
-  public async retryFailed(groupId: string): Promise<number> {
-    const result = await this.#db
-      .updateTable("jobs")
-      .set({
-        state: "pending",
-        attempts: 0,
-        runAfter: Date.now(),
-        lastError: null,
-      })
+  public async retryFailed(
+    groupId: string,
+    requestId?: number,
+  ): Promise<number> {
+    const rows = await this.#db
+      .selectFrom("jobs")
+      .select("id")
       .where("kind", "not in", ["intent", "observe"])
       .where("state", "=", "failed")
       .where((eb) =>
@@ -518,8 +816,17 @@ export class JobQueue {
           groupId,
         ),
       )
-      .executeTakeFirst();
+      .execute();
+    const restarted = new Set<number>();
 
-    return Number(result.numUpdatedRows);
+    for (const row of rows) {
+      const id = await this.restart(groupId, row.id, requestId);
+
+      if (id !== null) {
+        restarted.add(id);
+      }
+    }
+
+    return restarted.size;
   }
 }

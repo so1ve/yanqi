@@ -96,15 +96,22 @@ export class RecordingAI {
   }
 
   public async choosePublication(
-    topic: Topic,
-    recording: { revision: number; sources: number; requested: boolean },
+    records: {
+      topic: Topic;
+      revision: number | null;
+      sources: number;
+      requested: boolean;
+    }[],
     context: ChatMessage[],
     request: ChatMessage[],
     recent: ChatMessage[],
   ): Promise<Publication> {
+    const groupId = records[0]!.topic.groupId;
+    const userId = request[0]?.userId ?? records[0]!.topic.ownerId;
     const input = {
-      topic: {
-        id: topic.id,
+      records: records.map(({ topic, ...record }) => ({
+        ...record,
+        state: record.revision === null ? "failed" : "saved",
         title: topic.title,
         description: topic.description,
         focus: topic.focus,
@@ -113,15 +120,11 @@ export class RecordingAI {
           topic.directiveMessageId === null
             ? null
             : `m${topic.directiveMessageId}`,
-      },
-      recording,
+      })),
       context,
       request,
       recent,
-      memory: await this.#store.memories.index(
-        topic.groupId,
-        request[0]?.userId ?? topic.ownerId,
-      ),
+      memory: await this.#store.memories.index(groupId, userId),
       now: beijingTime(Date.now()),
     };
 
@@ -130,15 +133,7 @@ export class RecordingAI {
       publicationSchema,
       `${prompts.publication}\n${this.#sourceRules}\n${summaryMemory}\n${this.#persona}`,
       input,
-      {
-        tools: [
-          recallMemoryTool(
-            this.#store,
-            topic.groupId,
-            request[0]?.userId ?? topic.ownerId,
-          ),
-        ],
-      },
+      { tools: [recallMemoryTool(this.#store, groupId, userId)] },
     );
   }
 }

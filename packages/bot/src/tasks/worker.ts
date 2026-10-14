@@ -11,6 +11,7 @@ import { Outbox } from "../onebot/outbox.ts";
 import type { ReactionSync } from "../onebot/reactions.ts";
 import { detectTopics } from "../recording/detection.ts";
 import type { Notes } from "../recording/notes.ts";
+import { publishNotes } from "../recording/publication.ts";
 import type { Store } from "../storage/store.ts";
 import type { Job, JobKind } from "../types.ts";
 import { AiError, failureMessage } from "../utils/errors.ts";
@@ -62,6 +63,7 @@ export class BackgroundTasks {
       "memory",
       "detect",
       "summarize",
+      "publish",
       "asset",
     ] as const) {
       const concurrency = kind === "intent" ? 4 : kind === "asset" ? 2 : 1;
@@ -180,6 +182,12 @@ export class BackgroundTasks {
           break;
         }
 
+        case "publish": {
+          await publishNotes(this.#config, this.#store, this.#ai, job);
+
+          break;
+        }
+
         case "asset": {
           await collectAsset(
             job.payload.assetId,
@@ -249,6 +257,10 @@ export class BackgroundTasks {
         );
 
         if (
+          (await this.#store.jobs.publishesRequest(
+            groupId,
+            job.payload.messageId,
+          )) ||
           deliveries.some(
             ({ state }) => state === "pending" || state === "done",
           )

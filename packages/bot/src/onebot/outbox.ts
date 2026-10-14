@@ -4,7 +4,7 @@ import { Logger } from "@koishijs/core";
 
 import type { Config } from "../config.ts";
 import type { Store } from "../storage/store.ts";
-import type { Delivery } from "../types.ts";
+import type { Delivery, Note } from "../types.ts";
 import { failureMessage } from "../utils/errors.ts";
 import { logDetail } from "../utils/logging.ts";
 import type { Messenger } from "./messenger.ts";
@@ -68,19 +68,33 @@ export class Outbox {
         continue;
       }
 
-      if (delivery.kind === "note" && delivery.topicId) {
-        const topic = await this.#store.topics.get(delivery.topicId);
+      const batch: Delivery[] = [];
+      const notes: Note[] = [];
 
-        if (topic.directive === "hold") {
-          await this.#store.deliveries.cancel(delivery.id);
-          this.#logger.info(
-            "发送 #%s 取消：topic=%s 已要求暂缓",
-            delivery.id,
-            topic.id,
-          );
+      if (delivery.kind === "note") {
+        for (const item of await this.#store.deliveries.pendingNotes(
+          delivery.groupId,
+        )) {
+          assert.ok(item.noteId !== null && item.topicId !== null);
+          const topic = await this.#store.topics.get(item.topicId);
 
+          if (topic.directive === "hold") {
+            await this.#store.deliveries.cancel(item.id);
+
+            continue;
+          }
+
+          batch.push(item);
+          if (!notes.some((note) => note.id === item.noteId)) {
+            notes.push(await this.#store.notes.get(item.noteId));
+          }
+        }
+
+        if (batch.length === 0) {
           continue;
         }
+      } else {
+        batch.push(delivery);
       }
 
       const startedAt = performance.now();
@@ -96,10 +110,12 @@ export class Outbox {
 
       try {
         if (delivery.kind === "note") {
-          assert.ok(delivery.noteId !== null);
-          const note = await this.#store.notes.get(delivery.noteId);
-
-          await this.#messenger.sendNote(note);
+          await this.#messenger.sendNotes(
+            notes,
+            [
+              ...new Set(batch.map((item) => item.content).filter(Boolean)),
+            ].join("\n"),
+          );
         } else {
           this.#logger.debug(
             "发送 #%s 文字：%s",
@@ -113,14 +129,20 @@ export class Outbox {
           await this.#messenger.sendText(delivery.groupId, delivery.content);
         }
 
-        await this.#store.deliveries.done(delivery.id);
+        for (const item of batch) {
+          await this.#store.deliveries.done(item.id);
+        }
+
         this.#logger.info(
           "发送 #%s 完成：耗时=%s ms",
           delivery.id,
           Math.round(performance.now() - startedAt),
         );
       } catch (error) {
-        await this.#store.deliveries.fail(delivery.id);
+        for (const item of batch) {
+          await this.#store.deliveries.fail(item.id);
+        }
+
         this.#logger.warn(
           "发送 #%s 失败：group=%s 耗时=%s ms %s",
           delivery.id,

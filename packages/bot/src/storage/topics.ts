@@ -351,8 +351,51 @@ export class Topics {
         )
         .executeTakeFirst();
 
-      if (busy !== undefined) {
+      const publications = await db
+        .selectFrom("jobs")
+        .selectAll()
+        .where("kind", "=", "publish")
+        .where("state", "in", ["pending", "running", "failed"])
+        .where((eb) =>
+          eb(
+            eb.fn<string>("json_extract", ["payload", eb.val("$.groupId")]),
+            "=",
+            groupId,
+          ),
+        )
+        .execute();
+      const affected = publications
+        .map((job) => ({
+          job,
+          payload: JSON.parse(
+            job.payload,
+          ) as import("../types.ts").JobPayloads["publish"],
+        }))
+        .filter(({ payload }) =>
+          payload.topics.some((topic) => topic.id === topicId),
+        );
+
+      if (
+        busy !== undefined ||
+        affected.some(({ job }) => job.state === "running")
+      ) {
         throw new StoreError("conflict", "请先暂停 AI，再删除纪要");
+      }
+
+      for (const { job, payload } of affected) {
+        payload.topics = payload.topics.filter((topic) => topic.id !== topicId);
+        if (payload.topics.length === 0) {
+          await db.deleteFrom("jobs").where("id", "=", job.id).execute();
+        } else {
+          await db
+            .updateTable("jobs")
+            .set({
+              payload: JSON.stringify(payload),
+              progress: `等待本批 ${payload.topics.length} 份纪要全部整理完毕后统一交付`,
+            })
+            .where("id", "=", job.id)
+            .execute();
+        }
       }
 
       await rm(topicDirectory(this.#directory, topic), {

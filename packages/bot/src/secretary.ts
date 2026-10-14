@@ -112,6 +112,13 @@ export class Secretary {
       now,
       this.#config.TOPIC_IDLE_MS,
     )) {
+      if (
+        topic.mode === "auto" &&
+        (await this.#store.jobs.hasDetection(topic.groupId))
+      ) {
+        continue;
+      }
+
       await this.#store.jobs.summarize(topic);
     }
   }

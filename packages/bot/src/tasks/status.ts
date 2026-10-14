@@ -32,13 +32,15 @@ export async function taskStatus(store: Store, groupId: string, id: number) {
       ? `解析消息 m${asset.messageId} 的附件 #${asset.id}（${asset.kind}）`
       : topic
         ? `整理「${topic.title}」`
-        : job.kind === "detect"
-          ? "识别讨论话题"
-          : job.kind === "observe"
-            ? "识别请求"
-            : job.kind === "memory"
-              ? "更新记忆"
-              : "处理对话请求（与后台整理和发送分别执行）",
+        : job.kind === "publish"
+          ? "等待本批纪要完成后统一交付"
+          : job.kind === "detect"
+            ? "识别讨论话题"
+            : job.kind === "observe"
+              ? "识别请求"
+              : job.kind === "memory"
+                ? "更新记忆"
+                : "处理对话请求（与后台整理和发送分别执行）",
     state: job.state,
     attempts: job.attempts,
     progress: job.progress,

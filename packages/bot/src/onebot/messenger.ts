@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 import type { Bot, Context } from "@koishijs/core";
@@ -113,73 +114,92 @@ export function createMessenger(config: Config, store: Store, ctx: Context) {
         await saveOutgoing(groupId, id, text, segments);
       }
     },
-    async sendNote(note: Note) {
+    async sendNotes(notes: Note[], notification = "") {
       const bot = getBot();
-      const contents: Segment[][] = [];
 
-      for (const part of renderQQParts(note.markdown)) {
-        if (part.kind === "text") {
-          contents.push(
-            ...textParts(part.text, 1800).map((text) => [
-              { type: "text", data: { text } },
-            ]),
-          );
+      assert.ok(notes.length > 0);
+      const groupId = notes[0]!.groupId;
 
-          continue;
-        }
+      assert.ok(notes.every((note) => note.groupId === groupId));
+      const documents: Segment[][][] = [];
 
-        const match =
-          /^(?:\.\.\/)+assets\/[a-f0-9]{2}\/[a-f0-9]{2}\/([a-f0-9]{64}\.[a-z0-9]+)$/.exec(
-            part.href,
-          );
-        const asset = match
-          ? await store.assets.file(note.groupId, match[1]!)
-          : undefined;
+      for (const note of notes) {
+        const contents: Segment[][] = [];
 
-        if (!asset?.path || asset.kind !== "image") {
-          throw new Error(`纪要图片不属于当前群或尚未保存：${part.href}`);
-        }
+        for (const part of renderQQParts(note.markdown)) {
+          if (part.kind === "text") {
+            contents.push(
+              ...textParts(part.text, 1800).map((text) => [
+                { type: "text", data: { text } },
+              ]),
+            );
 
-        // NapCat 使用独立容器，通过文件内容传图，不传机器人容器内的路径。
-        contents.push([
-          {
-            type: "image",
-            data: {
-              file: `base64://${(await readFile(asset.path)).toString("base64")}`,
+            continue;
+          }
+
+          const match =
+            /^(?:\.\.\/)+assets\/[a-f0-9]{2}\/[a-f0-9]{2}\/([a-f0-9]{64}\.[a-z0-9]+)$/.exec(
+              part.href,
+            );
+          const asset = match
+            ? await store.assets.file(note.groupId, match[1]!)
+            : undefined;
+
+          if (!asset?.path || asset.kind !== "image") {
+            throw new Error(`纪要图片不属于当前群或尚未保存：${part.href}`);
+          }
+
+          // NapCat 使用独立容器，通过文件内容传图，不传机器人容器内的路径。
+          contents.push([
+            {
+              type: "image",
+              data: {
+                file: `base64://${(await readFile(asset.path)).toString("base64")}`,
+              },
             },
-          },
-          ...(part.text ? [{ type: "text", data: { text: part.text } }] : []),
-        ]);
+            ...(part.text ? [{ type: "text", data: { text: part.text } }] : []),
+          ]);
+        }
+
+        documents.push(contents);
       }
 
-      const nodes = contents.map((content) => ({
+      const node = (content: Segment[]): Segment => ({
         type: "node",
         data: {
           user_id: config.BOT_QQ,
           nickname: "言栖",
           content,
         },
-      }));
+      });
+      const nodes = documents.flatMap((contents) => {
+        const children = contents.map(node);
 
-      // The universal encoder trims node whitespace; preserve code with the adapter's native API.
-      for (let position = 0; position < nodes.length; position += 50) {
-        const part = nodes.slice(position, position + 50);
-        const id = await bot.internal.sendGroupForwardMsg(note.groupId, part);
+        // NapCat 把 node 内的 node 列表生成嵌套转发，无需先向群里发送子卡片。
+        return notes.length === 1 ? children : [node(children)];
+      });
+      const announcement = renderQQ(notification);
 
-        await saveOutgoing(
-          note.groupId,
-          String(id),
-          part
-            .flatMap((node) =>
-              node.data.content
-                .filter((segment) => segment.type === "text")
-                .map((segment) => String(segment.data.text)),
-            )
-            .join("\n"),
-          [],
-          note.id,
-        );
+      if (announcement) {
+        nodes.unshift(node([{ type: "text", data: { text: announcement } }]));
       }
+
+      // 使用原生接口保留代码空白，并把整批纪要作为一条群消息发送。
+      const id = await bot.internal.sendGroupForwardMsg(groupId, nodes);
+
+      await saveOutgoing(
+        groupId,
+        String(id),
+        [
+          ...(announcement ? [announcement] : []),
+          ...documents
+            .flat(2)
+            .filter((segment) => segment.type === "text")
+            .map((segment) => String(segment.data.text)),
+        ].join("\n"),
+        [],
+        notes.length === 1 ? notes[0]!.id : undefined,
+      );
     },
     async getAsset(groupId: string, kind: Asset["kind"], reference: string) {
       const internal = getBot().internal;
