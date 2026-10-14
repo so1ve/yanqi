@@ -19,7 +19,7 @@ async function regenerate(): Promise<void> {
           method: "POST",
           body: { focus: focus.value },
         }),
-      "已安排重新整理",
+      topic.mode === "auto" ? "已安排生成纪要" : "已安排重新整理",
     )
   ) {
     emit("saved");
@@ -29,9 +29,16 @@ async function regenerate(): Promise<void> {
 </script>
 
 <template>
-  <AppDialog title="重新整理这篇纪要" @close="emit('close')">
+  <AppDialog
+    :title="topic.mode === 'auto' ? '将讨论草稿生成纪要' : '重新整理这篇纪要'"
+    @close="emit('close')"
+  >
     <p class="muted mb-20">
-      按下方要求重新整理原文，保存为新版本。完成后不会自动发到群里。
+      {{
+        topic.mode === "auto"
+          ? "按下方要求整理草稿中的原文，保存为正式纪要。"
+          : "按下方要求重新整理原文，保存为新版本。"
+      }}完成后不会自动发到群里。
     </p>
     <NInput
       v-model:value="focus"

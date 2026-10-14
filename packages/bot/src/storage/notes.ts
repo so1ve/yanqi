@@ -183,6 +183,11 @@ export class SavedNotes {
           .where("groupId", "=", groupId)
           .executeTakeFirst(),
       );
+
+      if (topic.mode === "auto") {
+        throw new StoreError("conflict", "讨论草稿需先生成纪要，再编辑正文");
+      }
+
       const current = required(
         await db
           .selectFrom("notes")

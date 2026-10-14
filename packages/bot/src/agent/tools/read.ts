@@ -18,7 +18,7 @@ export function readTool(context: RequestContext) {
   return tool(
     context,
     "read",
-    "查阅本群纪要目录，不返回全文。search 按标题、正文或编号查找文档，返回标题、简介和版本号；versions 列出指定文档的历史版本。",
+    "查阅本群纪要和讨论草稿目录，不返回全文。mode=auto 是自动留存的草稿，mode=manual 是用户要求的纪要。search 按标题、正文或编号查找文档，返回标题、简介和版本号；versions 列出指定文档的历史版本。",
     parameters,
     async (args) => {
       switch (args.action) {
@@ -28,6 +28,7 @@ export function readTool(context: RequestContext) {
           return {
             topicId: topic.id,
             title: topic.title,
+            mode: topic.mode,
             versions: (await store.notes.versions(topic.id)).map((note) => ({
               revision: note.revision,
               createdAt: beijingTime(note.createdAt),
@@ -41,12 +42,13 @@ export function readTool(context: RequestContext) {
 
           if (matches.length > 0) {
             return matches.map(
-              ({ id, title, description, focus, state, revision }) => ({
+              ({ id, title, description, focus, state, mode, revision }) => ({
                 id,
                 title,
                 description,
                 focus,
                 state,
+                mode,
                 revision,
               }),
             );
@@ -54,7 +56,7 @@ export function readTool(context: RequestContext) {
 
           return {
             records: [],
-            hint: "未找到匹配的纪要。可换用标题中的词或文档编号；这个结果不代表原始聊天中没有相关讨论。",
+            hint: "未找到匹配的纪要或讨论草稿。可换用标题中的词或文档编号；这个结果不代表原始聊天中没有相关讨论。",
           };
         }
       }

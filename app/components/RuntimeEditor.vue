@@ -14,7 +14,6 @@ const fields: { key: NumericKey; label: string; min?: number }[] = [
   { key: "AI_DAILY_CALL_LIMIT", label: "每日模型调用上限" },
   { key: "DETECT_INTERVAL_MS", label: "每批消息最长收集时间（毫秒）" },
   { key: "DETECT_BATCH_SIZE", label: "每批识别的消息数" },
-  { key: "TOPIC_IDLE_MS", label: "讨论暂停多久后整理（毫秒）" },
   { key: "TOPIC_REOPEN_MS", label: "自动识别时回看旧话题的时间范围（毫秒）" },
   { key: "WORK_INTERVAL_MS", label: "后台轮询间隔（毫秒）" },
   { key: "MAX_ATTACHMENT_BYTES", label: "附件大小上限（字节）" },

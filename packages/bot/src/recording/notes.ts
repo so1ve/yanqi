@@ -43,6 +43,7 @@ export class Notes {
     requestId: number,
     replyTo: string | null = null,
   ) {
+    topic = await this.#store.topics.promote(topic.id);
     const note = await this.#store.notes.find(topic.id);
     const record = {
       topicId: topic.id,
@@ -78,6 +79,18 @@ export class Notes {
   }
 
   public async generate(job: Job<"summarize">): Promise<void> {
+    const topic = await this.#store.topics.get(job.payload.topicId);
+
+    // 已持久化的旧自动任务也只保留讨论草稿，不再调用整理模型。
+    if (topic.mode === "auto") {
+      await this.#store.jobs.reportProgress(
+        job.id,
+        "已保留为讨论草稿，无需生成纪要",
+      );
+
+      return;
+    }
+
     while (true) {
       this.#signal.throwIfAborted();
       await this.#generate(job);

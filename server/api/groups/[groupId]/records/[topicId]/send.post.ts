@@ -19,6 +19,14 @@ export default defineEventHandler(async (event) => {
   const topic = requireItem(
     await bot.store.topics.find(groupId, getRouterParam(event, "topicId")!),
   );
+
+  if (topic.mode === "auto") {
+    throw createError({
+      statusCode: 409,
+      message: "讨论草稿需先生成纪要，再发送到群",
+    });
+  }
+
   const input = await body(
     event,
     Type.Object({ noteId: Type.Integer({ minimum: 1 }) }),

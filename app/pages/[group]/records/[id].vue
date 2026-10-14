@@ -39,12 +39,17 @@ const { data, loading, error, refresh } = useApiData<RecordDetail>(
 const tab = useQueryValue("tab", (value) =>
   value === "original" ? "original" : "note",
 );
+const isDraft = computed(() => data.value?.topic.mode === "auto");
+const listLink = computed(
+  () => `/${groupId.value}/records${isDraft.value ? "?view=drafts" : ""}`,
+);
 const editing = ref(false);
 const showRegenerate = ref(false);
 const { busy, run } = useAction();
 const dialog = useDialog();
 usePoll(async () => {
   if (
+    !isDraft.value &&
     !editing.value &&
     data.value?.tasks.some(
       (task) => task.state === "running" || task.state === "pending",
@@ -93,17 +98,14 @@ function remove(): void {
   const path = base.value;
 
   dialog.warning({
-    title: "删除这篇纪要？",
-    content: "纪要的全部版本和本地导出文件都会删除，原始群消息会保留。",
-    positiveText: "删除纪要",
+    title: isDraft.value ? "删除这份讨论草稿？" : "删除这篇纪要？",
+    content: "该条目的全部版本和本地导出文件都会删除，原始群消息会保留。",
+    positiveText: "删除",
     negativeText: "取消",
     onPositiveClick: async () => {
-      const result = await run(
-        () => api(path, { method: "DELETE" }),
-        "纪要已删除",
-      );
+      const result = await run(() => api(path, { method: "DELETE" }), "已删除");
       if (result) {
-        await navigateTo(`/${groupId.value}/records`);
+        await navigateTo(listLink.value);
       }
 
       return result;
@@ -123,9 +125,9 @@ function download(): void {
 </script>
 
 <template>
-  <NuxtLink class="muted back-link" :to="`/${groupId}/records`">
+  <NuxtLink class="muted back-link" :to="listLink">
     <NIcon :component="ArrowLeft" />
-    返回纪要列表
+    {{ isDraft ? "返回讨论草稿" : "返回纪要列表" }}
   </NuxtLink>
   <PageHeading
     :description="group?.name ?? groupId"
@@ -139,12 +141,12 @@ function download(): void {
     >
       <template #icon><NIcon :component="Refresh" /></template>
     </NButton>
-    <NButton v-if="data?.note" @click="download">
+    <NButton v-if="data?.note && !isDraft" @click="download">
       <template #icon><NIcon :component="Download" /></template>
       导出
     </NButton>
     <NButton
-      v-if="data?.note"
+      v-if="data?.note && !isDraft"
       :disabled="!status?.running || !status.connected"
       :loading="busy"
       type="primary"
@@ -153,10 +155,14 @@ function download(): void {
       <template #icon><NIcon :component="Send" /></template>
       发送到群
     </NButton>
+    <NButton v-if="isDraft" type="primary" @click="showRegenerate = true">
+      生成纪要
+    </NButton>
     <template #toolbar>
       <ListToolbar v-if="data" class="reader-toolbar">
         <NSpace align="center">
           <NSelect
+            v-if="!isDraft"
             class="version-select"
             :disabled="editing"
             :options
@@ -168,6 +174,7 @@ function download(): void {
         </NSpace>
         <NSpace align="center" :wrap-item="false">
           <NButton
+            v-if="!isDraft"
             :disabled="!data.note || editing"
             text
             @click="
@@ -178,7 +185,9 @@ function download(): void {
             <template #icon><NIcon :component="Edit" /></template>
             编辑
           </NButton>
-          <NButton text @click="showRegenerate = true">重新整理</NButton>
+          <NButton v-if="!isDraft" text @click="showRegenerate = true">
+            重新整理
+          </NButton>
           <NTooltip>
             <template #trigger>
               <span class="delete-trigger">
@@ -193,7 +202,7 @@ function download(): void {
                 </NButton>
               </span>
             </template>
-            暂停 AI 后可删除纪要
+            暂停 AI 后可删除
           </NTooltip>
         </NSpace>
       </ListToolbar>
@@ -204,9 +213,10 @@ function download(): void {
       <NAlert
         v-for="task in data.tasks.filter(
           (item) =>
-            item.state === 'running' ||
-            item.state === 'pending' ||
-            item.state === 'failed',
+            !isDraft &&
+            (item.state === 'running' ||
+              item.state === 'pending' ||
+              item.state === 'failed'),
         )"
         :key="task.id"
         :bordered="false"
@@ -217,10 +227,34 @@ function download(): void {
         · {{ task.lastError || task.progress || "等待整理" }}
         <NuxtLink :to="`/${groupId}/tasks`">查看任务</NuxtLink>
       </NAlert>
+      <NAlert v-if="isDraft" :bordered="false" class="mb-15" type="info">
+        自动留存的讨论草稿，用于以后查阅和继续讨论。需要正式纪要时，点击“生成纪要”。
+      </NAlert>
       <PageTabs v-model:value="tab">
-        <NTabPane display-directive="show:lazy" name="note" tab="纪要正文">
+        <NTabPane
+          display-directive="show:lazy"
+          name="note"
+          :tab="isDraft ? '讨论概览' : '纪要正文'"
+        >
+          <template v-if="isDraft">
+            <RecordReader>
+              <p class="draft-description">
+                {{ data.topic.description || "暂无讨论简介，可查看关联原文。" }}
+              </p>
+            </RecordReader>
+            <details v-if="data.note" class="retained-draft">
+              <summary>查看以前自动生成的内容（保留为草稿）</summary>
+              <RecordReader>
+                <MarkdownContent
+                  :content="data.note.markdown"
+                  :group-id
+                  @transcript="tab = 'original'"
+                />
+              </RecordReader>
+            </details>
+          </template>
           <NoteEditor
-            v-if="editing && data.note"
+            v-else-if="editing && data.note"
             :note="data.note"
             @cancel="editing = false"
             @saved="saved"
@@ -243,16 +277,11 @@ function download(): void {
             </EmptyState>
           </AppPanel>
         </NTabPane>
-        <NTabPane
-          :disabled="!data.note"
-          display-directive="show:lazy"
-          name="original"
-          tab="完整原文"
-        >
+        <NTabPane display-directive="show:lazy" name="original" tab="完整原文">
           <TranscriptView
-            v-if="data.note"
-            :key="data.note.id"
-            :note="data.note"
+            :key="isDraft ? data.topic.id : data.note?.id"
+            :note="isDraft ? null : data.note"
+            :topic="data.topic"
           />
         </NTabPane>
       </PageTabs>
@@ -267,6 +296,19 @@ function download(): void {
 </template>
 
 <style scoped>
+.draft-description {
+  white-space: pre-wrap;
+}
+.retained-draft {
+  margin: 24px auto;
+  max-width: 1080px;
+}
+.retained-draft summary {
+  cursor: pointer;
+  color: #798899;
+  margin-bottom: 16px;
+}
+
 .muted {
   color: #798899;
 }

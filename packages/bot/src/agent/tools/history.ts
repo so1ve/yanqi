@@ -45,6 +45,7 @@ export interface HistoryMetadata {
   nextBeforeId?: string | null;
   title?: string;
   revision?: number;
+  mode?: "auto" | "manual";
 }
 
 type Page = { messages: ChatMessage[] } | { markdown: string };
@@ -192,10 +193,23 @@ export function noteHistoryTools(context: ReadContext, onMetadata: OnMetadata) {
     tool(
       context,
       "note",
-      "查询本群纪要指定版本的标题、版本号、字符数和正文句柄，省略 revision 选最新版。不加载正文；首次元数据立即转交小栖，后续元数据随 report 返回。需要正文时用 read_history 携带句柄读取。",
+      "查询本群纪要指定版本的标题、版本号、字符数和正文句柄，省略 revision 选最新版。讨论草稿只返回简介；需查原文时在简报中交给主对话，由 history 助手按 scope.topicIds 查阅。不加载正文；首次元数据立即转交小栖，后续元数据随 report 返回。需要正文时用 read_history 携带句柄读取。",
       noteParameters,
       async (args) => {
         const topic = await getTopic(context, args.topicId);
+
+        if (topic.mode === "auto") {
+          return history.register(
+            {
+              selection: { action: "note", ...args },
+              title: topic.title,
+              mode: topic.mode,
+              textChars: topic.description.length,
+            },
+            async () => [{ markdown: topic.description }],
+          );
+        }
+
         const note = await store.notes.metadata(topic.id, args.revision);
 
         if (!note) {
@@ -206,6 +220,7 @@ export function noteHistoryTools(context: ReadContext, onMetadata: OnMetadata) {
           {
             selection: { action: "note", ...args },
             title: topic.title,
+            mode: topic.mode,
             revision: note.revision,
             textChars: note.textChars,
           },

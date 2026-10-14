@@ -99,12 +99,15 @@ export class Groups {
         .executeTakeFirstOrThrow(),
       db
         .selectFrom("notes")
-        .where("groupId", "=", groupId)
+        .innerJoin("topics", "topics.id", "notes.topicId")
+        .where("topics.mode", "=", "manual")
+        .where("notes.groupId", "=", groupId)
         .select((eb) => eb.fn.countAll<number>().as("count"))
         .executeTakeFirstOrThrow(),
       db
         .selectFrom("topics")
         .where("groupId", "=", groupId)
+        .where("mode", "=", "manual")
         .where("revision", ">", 0)
         .select((eb) => eb.fn.countAll<number>().as("count"))
         .executeTakeFirstOrThrow(),

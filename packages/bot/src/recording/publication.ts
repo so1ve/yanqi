@@ -30,6 +30,11 @@ export async function publishNotes(
     }
 
     const topic = await store.topics.get(item.id);
+
+    if (topic.mode === "auto") {
+      continue;
+    }
+
     const note = await store.notes.find(topic.id);
     const [task] = await store.jobs.forTopic(topic.id);
 

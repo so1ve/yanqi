@@ -9,9 +9,9 @@ import {
 
 export default defineEventHandler(async (event) => {
   const { page, limit, offset } = pagination(event);
-  const view = queryParam(event, "view") ?? "ready";
+  const view = queryParam(event, "view") ?? "notes";
 
-  if (view !== "ready" && view !== "pending") {
+  if (view !== "notes" && view !== "drafts") {
     throw createError({ statusCode: 400, message: "纪要列表类型无效" });
   }
 

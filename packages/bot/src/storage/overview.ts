@@ -12,6 +12,7 @@ export async function overview(db: Database, day: string) {
         .executeTakeFirstOrThrow(),
       db
         .selectFrom("topics")
+        .where("mode", "=", "manual")
         .where("revision", ">", 0)
         .select((eb) => eb.fn.countAll<number>().as("count"))
         .executeTakeFirstOrThrow(),
@@ -35,6 +36,7 @@ export async function overview(db: Database, day: string) {
         .selectFrom("topics")
         .selectAll()
         .select(summaryTaskState)
+        .where("mode", "=", "manual")
         .orderBy("lastActiveAt", "desc")
         .limit(6)
         .execute(),

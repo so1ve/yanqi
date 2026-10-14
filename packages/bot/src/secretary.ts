@@ -105,17 +105,7 @@ export class Secretary {
       }
     }
 
-    for (const topic of await this.#store.topics.ready(
-      now,
-      this.#config.TOPIC_IDLE_MS,
-    )) {
-      if (
-        topic.mode === "auto" &&
-        (await this.#store.jobs.hasDetection(topic.groupId))
-      ) {
-        continue;
-      }
-
+    for (const topic of await this.#store.topics.ready()) {
       await this.#store.jobs.summarize(topic);
     }
   }

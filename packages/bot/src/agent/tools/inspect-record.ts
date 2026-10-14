@@ -9,7 +9,7 @@ export function inspectRecordTool(context: ToolContext) {
   return tool(
     context,
     "inspect_record",
-    "查看本群纪要的原文范围、保存版本、文件位置、整理进度和发送状态，不返回全文。理解正文或比较版本交给 subagent(kind=notes)。",
+    "查看本群纪要或讨论草稿的范围与状态，不返回全文。mode=auto 仅为草稿，不表示纪要已生成或需要自动更新。理解正文或比较版本交给 subagent(kind=notes)。",
     object({ topicId }),
     async (args) => {
       const topic = await getTopic(context, args.topicId);
@@ -24,26 +24,29 @@ export function inspectRecordTool(context: ToolContext) {
         description: topic.description,
         focus: topic.focus,
         state: topic.state,
+        mode: topic.mode,
         currentSourceCount: sources.length,
-        savedVersion: note
-          ? {
-              revision: note.revision,
-              path: note.path,
-              scannedSourceCount:
-                note.sections.length > 0
-                  ? new Set(
-                      note.sections.flatMap((section) => section.messageIds),
-                    ).size
-                  : null,
-              deliveries: (await store.deliveries.forNote(note.id)).map(
-                (delivery) => ({
-                  ...delivery,
-                  createdAt: beijingTime(delivery.createdAt),
-                }),
-              ),
-            }
-          : null,
-        needsUpdate: topic.generation !== topic.noteGeneration,
+        savedVersion:
+          topic.mode === "manual" && note
+            ? {
+                revision: note.revision,
+                path: note.path,
+                scannedSourceCount:
+                  note.sections.length > 0
+                    ? new Set(
+                        note.sections.flatMap((section) => section.messageIds),
+                      ).size
+                    : null,
+                deliveries: (await store.deliveries.forNote(note.id)).map(
+                  (delivery) => ({
+                    ...delivery,
+                    createdAt: beijingTime(delivery.createdAt),
+                  }),
+                ),
+              }
+            : null,
+        needsUpdate:
+          topic.mode === "manual" && topic.generation !== topic.noteGeneration,
         tasks: await Promise.all(
           (await store.jobs.forTopic(topic.id)).map((task) =>
             taskStatus(store, message.groupId, task.id),

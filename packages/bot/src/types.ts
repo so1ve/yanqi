@@ -32,6 +32,7 @@ export interface Topic {
   title: string;
   description: string;
   focus: string;
+  // auto 是自动留存的讨论草稿；manual 是用户明确要求生成或持续记录的纪要。
   mode: "auto" | "manual";
   ownerId: string | null;
   // active 仅表示用户要求持续收集后续消息，与纪要是否整理完成无关。

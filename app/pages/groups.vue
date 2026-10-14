@@ -58,7 +58,7 @@ const columns: DataTableColumns<Group> = [
       }),
   },
   {
-    title: "自动整理",
+    title: "自动留存草稿",
     key: "automatic",
     width: 110,
     render: (row) =>
@@ -148,7 +148,7 @@ const columns: DataTableColumns<Group> = [
       />
     </AppPanel>
     <p class="form-help">
-      关闭“保存消息”后，小栖不再处理该群的新消息。只关闭“自动整理”时，仍会保存消息并处理有权限成员的请求。
+      关闭“保存消息”后，小栖不再处理该群的新消息。只关闭“自动留存草稿”时，仍会保存消息并处理有权限成员的请求。
     </p>
   </LoadState>
   <AddGroupDialog v-if="showAdd" @close="showAdd = false" />

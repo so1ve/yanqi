@@ -19,6 +19,9 @@ const props = defineProps<{
 const status = computed<{ label: string; type: TagProps["type"] }>(() => {
   const topic = props.topic;
 
+  if (topic.mode === "auto") {
+    return { label: "讨论草稿", type: "default" };
+  }
   if (topic.summaryTaskState === "running") {
     return { label: "正在整理", type: "info" };
   }
@@ -35,7 +38,7 @@ const status = computed<{ label: string; type: TagProps["type"] }>(() => {
     return { label: "暂无原文", type: "default" };
   }
 
-  return { label: topic.revision > 0 ? "待更新" : "待整理", type: "default" };
+  return { label: topic.revision > 0 ? "待更新" : "待生成", type: "default" };
 });
 </script>
 

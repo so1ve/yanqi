@@ -100,7 +100,7 @@ export function recordTools(context: ToolContext) {
     tool(
       context,
       "edit_record",
-      "操作已有纪要。update 沿用 topicId 生成下一版并保留旧版；scope、focus 省略时按原要求重做，可在没有新消息时调用。send 直接发送全文，revision 省略用最新内容，尚未完成则整理后发送；无需先读取正文。hold 暂缓全文。成功安排整理或发送后，程序在本轮工具执行完毕时结束主对话，由后台统一交付；所需查询先完成，多篇修改或发送在同一轮调用。需要较多整理时可填 progress；直接发送已保存版本不会发接手提示。只有明确另存独立文档才用 record。",
+      "按当前用户要求操作已有纪要或讨论草稿。update 将草稿转为正式纪要，或沿用已有纪要的 topicId 生成下一版并保留旧版；scope、focus 省略时按原要求重做，可在没有新消息时调用。send 直接发送全文，revision 省略用最新内容，尚未完成则整理后发送；无需先读取正文。hold 暂缓全文。成功安排整理或发送后，程序在本轮工具执行完毕时结束主对话，由后台统一交付；所需查询先完成，多篇修改或发送在同一轮调用。需要较多整理时可填 progress；直接发送已保存版本不会发接手提示。只有明确另存独立文档才用 record。",
       editParameters,
       async (args, signal) => {
         let topic = await getTopic(context, args.topicId);
@@ -118,6 +118,7 @@ export function recordTools(context: ToolContext) {
             );
           }
 
+          await store.topics.promote(topic.id);
           await store.topics.setDirective(topic.id, "send", message.id);
           const delivery = await store.deliveries.enqueueNote(
             note,

@@ -47,6 +47,7 @@ export async function taskStatus(store: Store, groupId: string, id: number) {
     context: topic
       ? {
           title: topic.title,
+          mode: topic.mode,
           description: topic.description,
           focus: topic.focus,
         }
@@ -57,15 +58,16 @@ export async function taskStatus(store: Store, groupId: string, id: number) {
         ? beijingTime(job.runAfter)
         : null,
     source: payload,
-    savedVersion: note
-      ? {
-          noteId: note.id,
-          revision: note.revision,
-          path: note.path,
-          needsUpdate: note.generation !== topic!.generation,
-          deliveries: await store.deliveries.forNote(note.id),
-        }
-      : null,
+    savedVersion:
+      topic?.mode === "manual" && note
+        ? {
+            noteId: note.id,
+            revision: note.revision,
+            path: note.path,
+            needsUpdate: note.generation !== topic.generation,
+            deliveries: await store.deliveries.forNote(note.id),
+          }
+        : null,
     ...("messageId" in payload
       ? { deliveries: await store.deliveries.forRequest(payload.messageId) }
       : {}),

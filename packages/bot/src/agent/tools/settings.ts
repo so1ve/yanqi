@@ -18,12 +18,12 @@ export function settingsTools(context: ToolContext) {
     tool(
       context,
       "automatic",
-      "开启或暂停本群自动整理。暂停后继续保存原文和处理对话请求。",
+      "开启或暂停本群自动留存草稿。暂停后继续保存原文和处理对话请求。",
       object({ enabled: Type.Boolean() }),
       async ({ enabled }) => {
         await store.groups.setAutomatic(message.groupId, enabled);
 
-        return `已${enabled ? "开启" : "暂停"}本群自动整理。`;
+        return `已${enabled ? "开启" : "暂停"}本群自动留存草稿。`;
       },
     ),
   ];

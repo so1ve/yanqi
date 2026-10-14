@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Plus, Refresh, Search } from "@vicons/tabler";
 import type { DataTableColumns } from "naive-ui";
-import { h, ref, watch } from "vue";
+import { computed, h, ref, watch } from "vue";
 
 import { NuxtLink } from "#components";
 import CreateDialog from "~/components/records/CreateDialog.vue";
@@ -15,7 +15,7 @@ import { formatTime } from "~/utils/format";
 const { groupId, group } = useWorkspace();
 const view = useQueryValue(
   "view",
-  (value) => (value === "pending" ? "pending" : "ready"),
+  (value) => (value === "drafts" ? "drafts" : "notes"),
   { reset: ["page"] },
 );
 const searchQuery = useQueryValue("q", (value) => value ?? "", {
@@ -30,9 +30,9 @@ const { data, error, loading, refresh } = useApiData<Page<RecordItem>>(
   () =>
     `groups/${groupId.value}/records?view=${view.value}&page=${page.value}&q=${encodeURIComponent(searchQuery.value)}`,
 );
-const columns: DataTableColumns<RecordItem> = [
+const columns = computed<DataTableColumns<RecordItem>>(() => [
   {
-    title: "纪要",
+    title: view.value === "drafts" ? "讨论草稿" : "纪要",
     key: "title",
     minWidth: 270,
     render: (row) =>
@@ -59,7 +59,12 @@ const columns: DataTableColumns<RecordItem> = [
     title: "版本",
     key: "revision",
     width: 95,
-    render: (row) => (row.revision ? `第 ${row.revision} 版` : "待生成"),
+    render: (row) =>
+      row.mode === "auto"
+        ? "—"
+        : row.revision
+          ? `第 ${row.revision} 版`
+          : "待生成",
   },
   {
     title: "最近讨论",
@@ -67,13 +72,13 @@ const columns: DataTableColumns<RecordItem> = [
     width: 160,
     render: (row) => formatTime(row.lastActiveAt),
   },
-];
+]);
 const createGroupId = ref("");
 </script>
 
 <template>
   <PageHeading
-    :description="`${group?.name ?? groupId} · 每篇纪要都保留原文和历史版本`"
+    :description="`${group?.name ?? groupId} · ${view === 'drafts' ? '自动留存讨论线索，需要时再生成纪要' : '每篇纪要都保留原文和历史版本'}`"
     title="纪要"
   >
     <NButton :loading @click="refresh">
@@ -87,8 +92,8 @@ const createGroupId = ref("");
     <template #toolbar>
       <ListToolbar as="form" @submit.prevent="searchQuery = query">
         <NRadioGroup v-model:value="view" aria-label="纪要列表类型">
-          <NRadioButton value="ready">已整理</NRadioButton>
-          <NRadioButton value="pending">待整理</NRadioButton>
+          <NRadioButton value="notes">正式纪要</NRadioButton>
+          <NRadioButton value="drafts">讨论草稿</NRadioButton>
         </NRadioGroup>
         <NInput
           v-model:value="query"
@@ -105,8 +110,8 @@ const createGroupId = ref("");
   </PageHeading>
   <LoadState
     :description="
-      view === 'pending'
-        ? '尚未生成正文的纪要会显示在这里，整理完成后可在“已整理”中查看。'
+      view === 'drafts'
+        ? '小栖自动留存的讨论简介和原文会显示在这里，明确要求后才生成正式纪要。'
         : '可以在群里让小栖整理讨论，也可以点击“新建纪要”选择已保存的消息。'
     "
     :empty="!data?.items.length"
@@ -114,10 +119,10 @@ const createGroupId = ref("");
     :loading="loading && !data"
     :title="
       searchQuery
-        ? '没有找到匹配的纪要'
-        : view === 'pending'
-          ? '没有待整理的纪要'
-          : '还没有已整理的纪要'
+        ? '没有找到匹配的内容'
+        : view === 'drafts'
+          ? '还没有讨论草稿'
+          : '还没有正式纪要'
     "
     @retry="refresh"
   >

@@ -56,7 +56,6 @@ export const configSchema = Type.Object(
     DETECT_INTERVAL_MS: positive(30_000),
     AUTO_REPLY: Type.Boolean({ default: true }),
     DETECT_BATCH_SIZE: positive(20),
-    TOPIC_IDLE_MS: positive(600_000),
     TOPIC_REOPEN_MS: positive(86_400_000),
     WORK_INTERVAL_MS: positive(1000),
     MAX_ATTACHMENT_BYTES: positive(52_428_800),

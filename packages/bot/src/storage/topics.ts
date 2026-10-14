@@ -63,14 +63,14 @@ export class Topics {
       offset: number;
       limit: number;
       query?: string;
-      view: "ready" | "pending";
+      view: "notes" | "drafts";
     },
   ) {
-    // 按是否已有正文分开列表；已有版本在更新时仍可阅读。
+    // 自动留存始终属于草稿；只有明确要求生成的内容才进入纪要列表。
     let query = this.#db
       .selectFrom("topics")
       .where("groupId", "=", groupId)
-      .where("revision", options.view === "pending" ? "=" : ">", 0);
+      .where("mode", "=", options.view === "drafts" ? "auto" : "manual");
     const text = options.query;
 
     if (text) {
@@ -185,13 +185,18 @@ export class Topics {
         } else {
           const topic = await db
             .selectFrom("topics")
-            .select("groupId")
+            .select(["groupId", "mode"])
             .where("id", "=", id)
             .executeTakeFirst();
 
           assert.ok(topic);
           if (topic.groupId !== groupId) {
             throw new Error("话题属于其他群");
+          }
+
+          // 识别期间用户可能已将草稿转为纪要，不能再自动修改其范围。
+          if (topic.mode !== "auto") {
+            continue;
           }
         }
 
@@ -264,30 +269,38 @@ export class Topics {
       .execute();
   }
 
-  public ready(now: number, idle: number): Promise<Topic[]> {
+  public ready(): Promise<Topic[]> {
     return this.#db
       .selectFrom("topics")
       .selectAll()
+      .where("mode", "=", "manual")
+      .where("state", "=", "closed")
       .where("lastSourceId", ">", 0)
       .whereRef("generation", "!=", "noteGeneration")
-      .where((eb) =>
-        eb.or([
-          eb.and([
-            eb(
-              "groupId",
-              "in",
-              this.#db
-                .selectFrom("groups")
-                .select("id")
-                .where("aiEnabled", "=", 1),
-            ),
-            eb("mode", "=", "auto"),
-            eb("lastActiveAt", "<=", now - idle),
-          ]),
-          eb.and([eb("mode", "=", "manual"), eb("state", "=", "closed")]),
-        ]),
-      )
       .execute();
+  }
+
+  // 仅由当前用户要求生成或交付纪要的入口调用。
+  public promote(id: string): Promise<Topic> {
+    return this.#db
+      .updateTable("topics")
+      .set({ mode: "manual" })
+      .where("id", "=", id)
+      .returningAll()
+      .executeTakeFirstOrThrow();
+  }
+
+  public async sourceMessageIds(topicId: string): Promise<number[]> {
+    const rows = await this.#db
+      .selectFrom("topic_messages")
+      .innerJoin("messages", "messages.id", "topic_messages.messageId")
+      .select("messages.id")
+      .where("topic_messages.topicId", "=", topicId)
+      .orderBy("messages.sentAt")
+      .orderBy("messages.id")
+      .execute();
+
+    return rows.map((row) => row.id);
   }
 
   public search(groupId: string, query: string): Promise<Topic[]> {
@@ -350,7 +363,7 @@ export class Topics {
 
       await db
         .updateTable("topics")
-        .set({ generation, focus })
+        .set({ generation, focus, mode: "manual" })
         .where("id", "=", topicId)
         .execute();
       await db

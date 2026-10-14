@@ -5,6 +5,7 @@ import { getEventListeners, on } from "node:events";
 import { Logger } from "@koishijs/core";
 
 import type { Job, JobKind, JobPayloads, Topic } from "../types.ts";
+import { StoreError, required } from "./errors.ts";
 import type { Database, JobRow } from "./schema.ts";
 
 const logger = new Logger("yanqi:jobs");
@@ -25,6 +26,22 @@ export async function enqueueJob<K extends JobKind>(
   // 整理任务读取的是最新原文。同一话题正在排队或执行时，复用该任务。
   const summary =
     kind === "summarize" ? (payload as JobPayloads["summarize"]) : null;
+
+  if (summary) {
+    const topic = required(
+      await db
+        .selectFrom("topics")
+        .select("mode")
+        .where("id", "=", summary.topicId)
+        .where("groupId", "=", summary.groupId)
+        .executeTakeFirst(),
+    );
+
+    if (topic.mode === "auto") {
+      throw new StoreError("conflict", "这是讨论草稿，请先明确选择生成纪要");
+    }
+  }
+
   const active = summary
     ? await db
         .selectFrom("jobs")
@@ -398,7 +415,7 @@ export class JobQueue {
   public claim(kind: JobKind, now: number): Promise<Job | null> {
     return this.#db.transaction().execute(async (db) => {
       const pausedGroups =
-        kind === "detect" || kind === "summarize"
+        kind === "detect"
           ? (
               await db
                 .selectFrom("groups")
@@ -406,17 +423,6 @@ export class JobQueue {
                 .where("aiEnabled", "=", 0)
                 .execute()
             ).map((group) => group.id)
-          : [];
-      const pausedTopics =
-        kind === "summarize"
-          ? (
-              await db
-                .selectFrom("topics")
-                .select("id")
-                .where("groupId", "in", pausedGroups)
-                .where("mode", "=", "auto")
-                .execute()
-            ).map((topic) => topic.id)
           : [];
       const pending = (
         await db
@@ -479,19 +485,6 @@ export class JobQueue {
               .where("state", "in", ["pending", "running"])
               .execute()
           : [];
-      const detecting =
-        kind === "summarize"
-          ? await db
-              .selectFrom("jobs")
-              .select((eb) =>
-                eb
-                  .fn<string>("json_extract", ["payload", eb.val("$.groupId")])
-                  .as("groupId"),
-              )
-              .where("kind", "=", "detect")
-              .where("state", "in", ["pending", "running"])
-              .execute()
-          : [];
       const job = pending.find(({ id, payload }) => {
         if (kind === "publish") {
           return !busyPublications.some(
@@ -522,13 +515,7 @@ export class JobQueue {
           );
         }
 
-        return (
-          kind !== "summarize" ||
-          ("topicId" in payload &&
-            (payload.requested ||
-              (!pausedTopics.includes(payload.topicId) &&
-                !detecting.some((group) => group.groupId === payload.groupId))))
-        );
+        return true;
       });
 
       if (!job) {

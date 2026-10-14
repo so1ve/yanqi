@@ -1,21 +1,23 @@
 <script setup lang="ts">
 import { Download, Refresh } from "@vicons/tabler";
-import type { Note } from "@yanqi/bot";
+import type { Note, Topic } from "@yanqi/bot";
 import { computed, useTemplateRef } from "vue";
 
 import MessageHistory from "~/components/messages/MessageHistory.vue";
 
-const props = defineProps<{ note: Note }>();
+const props = defineProps<{ topic: Topic; note: Note | null }>();
 const history = useTemplateRef<InstanceType<typeof MessageHistory>>("history");
 const base = computed(
-  () => `groups/${props.note.groupId}/records/${props.note.topicId}`,
+  () => `groups/${props.topic.groupId}/records/${props.topic.id}`,
 );
 </script>
 
 <template>
   <div class="transcript">
     <header class="transcript-toolbar">
-      <span>第 {{ note.revision }} 版原文 · 按时间顺序排列</span>
+      <span>
+        {{ note ? `第 ${note.revision} 版原文` : "关联原文" }} · 按时间顺序排列
+      </span>
       <div class="transcript-actions">
         <NButton
           aria-label="刷新原文"
@@ -27,6 +29,7 @@ const base = computed(
           <template #icon><NIcon :component="Refresh" /></template>
         </NButton>
         <a
+          v-if="note"
           class="download-link"
           download="原始对话.md"
           :href="`/api/${base}/transcript?version=${note.id}`"
@@ -37,11 +40,11 @@ const base = computed(
       </div>
     </header>
     <MessageHistory
-      :key="note.id"
+      :key="note?.id ?? topic.id"
       ref="history"
-      empty-title="该版本暂无可展示的消息"
-      :group-id="note.groupId"
-      :source="`${base}/messages?version=${note.id}`"
+      empty-title="暂无可展示的原文"
+      :group-id="topic.groupId"
+      :source="`${base}/messages${note ? `?version=${note.id}` : ''}`"
     />
   </div>
 </template>
