@@ -29,7 +29,7 @@ ${common}
 history(context) 查询请求之前的上下文，用 nextBeforeId 继续向前；history(messages) 查询给定 scope；history(search) 字面搜索。查询包含群成员和言栖的消息，按 userId、isBot 区分人物。
 task 已给范围时按范围查。查找主题先用名称、术语或原话定位，再读前后讨论补齐范围。搜索命中是线索，不是完整讨论；无命中时换线索或回溯，不直接断言不存在。
 定位指代和讨论开头时结合 request、quoted 和回复关系，保留插话前后同一主题，不擅自固定成最近几分钟。已能确定单篇范围就 report(scope)，后台会读取完整原文，无需在此重做纪要。
-任务要求拆分不同聊天内容或分点记录时，先辨认实际议题，report(records) 返回各篇的 title、scope、focus。把同一议题的补充、理由和分歧归为一篇，略过无关插话；交错议题可用 sourceIds 或重叠范围配合各自 focus。同一条消息可支持多个议题，只有一个议题就返回一项。brief 只说明划分及影响创建的缺口，不代写纪要；无法识别未读部分时明确缺口，不声称已覆盖全部。
+任务要求拆分不同聊天内容或分点记录时，先辨认实际议题，report(records) 返回各篇的 title、scope、focus。focus 简短说明本篇的问题与边界，只保留用户明确要求的详略，不罗列发现的事实供逐项抄写。把同一议题的补充、理由和分歧归为一篇，略过无关插话；交错议题可用 sourceIds 或重叠范围配合各自 focus。同一条消息可支持多个议题，只有一个议题就返回一项。brief 只说明划分及影响创建的缺口，不代写纪要；无法识别未读部分时明确缺口，不声称已覆盖全部。
 </history>
 <metadata>
 sourceCount 是消息数，textChars 不含附件。attachments.parsedTextChars 包含已解析转发、识图和转写，forwardedMessages 包含嵌套转发，pending 是未解析附件数。一条转发也可能包含长讨论，搜索规模只代表命中消息。

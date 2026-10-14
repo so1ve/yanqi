@@ -32,6 +32,19 @@ function textParts(text: string, length: number): string[] {
   return result;
 }
 
+// NapCat 的默认预览只会把嵌套转发写成“卡片消息”，用纪要标题和版本作目录。
+const forwardPreview = (notes: { title: string; revision: number }[]) => ({
+  source: "小栖纪要",
+  news: notes.map(({ title, revision }) => ({
+    text: `${title} · 第 ${revision} 版`,
+  })),
+  summary: notes.length === 1 ? "查看纪要" : `查看 ${notes.length} 份纪要`,
+  prompt:
+    notes.length === 1
+      ? `[纪要] ${notes[0]!.title}`
+      : `[纪要] ${notes.length} 个话题`,
+});
+
 export function createMessenger(config: Config, store: Store, ctx: Context) {
   function getBot(): ProtocolBot {
     const bot = ctx.bots.find(
@@ -112,7 +125,11 @@ export function createMessenger(config: Config, store: Store, ctx: Context) {
       const groupId = notes[0]!.groupId;
 
       assert.ok(notes.every((note) => note.groupId === groupId));
-      const documents: Segment[][][] = [];
+      const documents: {
+        title: string;
+        revision: number;
+        contents: Segment[][];
+      }[] = [];
 
       for (const note of notes) {
         const contents: Segment[][] = [];
@@ -152,7 +169,13 @@ export function createMessenger(config: Config, store: Store, ctx: Context) {
           ]);
         }
 
-        documents.push(contents);
+        const topic = await store.topics.get(note.topicId);
+
+        documents.push({
+          title: topic.title,
+          revision: note.revision,
+          contents,
+        });
       }
 
       const announcement = renderQQ(notification);
@@ -160,7 +183,7 @@ export function createMessenger(config: Config, store: Store, ctx: Context) {
 
       // NapCat 的转发接口只接收 node；引用放在首条内容内，整批仍只发一张卡片。
       if (!announcement && quote.length > 0) {
-        documents[0]![0]!.unshift(...quote);
+        documents[0]!.contents[0]!.unshift(...quote);
       }
 
       const node = (content: Segment[]): Segment => ({
@@ -171,11 +194,20 @@ export function createMessenger(config: Config, store: Store, ctx: Context) {
           content,
         },
       });
-      const nodes = documents.flatMap((contents) => {
+      const nodes = documents.flatMap((document) => {
+        const { contents } = document;
         const children = contents.map(node);
 
         // NapCat 把 node 内的 node 列表生成嵌套转发，无需先向群里发送子卡片。
-        return notes.length === 1 ? children : [node(children)];
+        if (notes.length === 1) {
+          return children;
+        }
+
+        const card = node(children);
+
+        Object.assign(card.data, forwardPreview([document]));
+
+        return [card];
       });
 
       if (announcement) {
@@ -184,8 +216,15 @@ export function createMessenger(config: Config, store: Store, ctx: Context) {
         );
       }
 
-      // 使用原生接口保留代码空白，并把整批纪要作为一条群消息发送。
-      const id = await bot.internal.sendGroupForwardMsg(groupId, nodes);
+      // 通用适配器未暴露预览字段；原生接口仍把整批纪要作为一条群消息发送。
+      const { message_id: id } = await bot.internal._get(
+        "send_group_forward_msg",
+        {
+          group_id: groupId,
+          messages: nodes,
+          ...forwardPreview(documents),
+        },
+      );
 
       await saveOutgoing(
         groupId,
@@ -193,7 +232,7 @@ export function createMessenger(config: Config, store: Store, ctx: Context) {
         [
           ...(announcement ? [announcement] : []),
           ...documents
-            .flat(2)
+            .flatMap(({ contents }) => contents.flat())
             .filter((segment) => segment.type === "text")
             .map((segment) => String(segment.data.text)),
         ].join("\n"),

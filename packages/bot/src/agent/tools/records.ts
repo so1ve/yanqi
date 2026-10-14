@@ -1,6 +1,7 @@
 import { Type } from "typebox";
 
 import {
+  recordFocus,
   recordSelection,
   selectSources,
   sourceScope,
@@ -31,7 +32,7 @@ const editParameters = Type.Union([
     action: Type.Literal("update"),
     topicId,
     scope: Type.Optional(sourceScope),
-    focus: Type.Optional(Type.String()),
+    focus: recordFocus,
     directive,
     replyTo,
   }),

@@ -67,18 +67,20 @@ export const sourceScope = Type.Union([
   ),
 ]);
 
-// 主对话创建与查阅助手交接使用同一份选材结构；描述遵循 ../agent/prompts/README.md。
+// 主对话创建、修改与查阅助手交接共用选材要求；描述遵循 ../agent/prompts/README.md。
+export const recordFocus = Type.Optional(
+  Type.String({
+    description:
+      "本篇关注的问题、排除的相邻主题，以及用户明确提出的详略要求。用简短主题边界，不列发言、参数、图片内容或待抄录事实清单。普通概括可省略，空字符串恢复默认概括。",
+  }),
+);
+
+// 一项对应一份纪要。
 export const recordSelection = Type.Object(
   {
     title: Type.String({ minLength: 1, maxLength: 100, pattern: "\\S" }),
     scope: sourceScope,
-    focus: Type.Optional(
-      Type.String({
-        minLength: 1,
-        description:
-          "本篇的选材主题和详略要求。拆分时写清本篇关注什么；概括整个讨论时可省略。不要把查阅简报或识图描述当成整理要求。",
-      }),
-    ),
+    focus: recordFocus,
   },
   { additionalProperties: false },
 );
