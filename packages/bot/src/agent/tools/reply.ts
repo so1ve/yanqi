@@ -26,7 +26,7 @@ export function replyTool(context: ToolContext, subagents: Subagents) {
   return tool(
     context,
     "reply",
-    "发送非空 text 作为最终答复，并结束本次请求。先完成必要操作，再调用；纪要交给后台后程序直接结束，不再额外回复。篇幅按问题所需信息决定。进度提示用 notify，安静结束用 skip_reply，发送纪要全文用 edit_record(send)。",
+    "发送非空 text 作为最终答复，并结束本次请求。先完成必要操作，再调用；纪要交给后台后程序直接结束，不再额外回复。进度提示用 notify，安静结束用 skip_reply，发送纪要全文用 edit_record(send)。",
     parameters,
     async ({ text, replyTo }, signal) => {
       subagents.assertIdle();
