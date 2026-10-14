@@ -6,7 +6,7 @@ import { Type } from "typebox";
 import type { Config } from "../config.ts";
 import type { Conversation } from "../storage/conversations.ts";
 import type { ChatMessage } from "../types.ts";
-import { AiError } from "../utils/errors.ts";
+import { AiError, failureMessage } from "../utils/errors.ts";
 import { compactionPrompt } from "./prompts/compaction.ts";
 import {
   conversationPrompt,
@@ -50,11 +50,6 @@ export class DialogAI {
       quoted: state.quoted,
     });
 
-    conversation = await this.#compact(
-      conversation,
-      JSON.stringify(state).length,
-    );
-    await context.store.conversations.save(conversation);
     const subagents = new Subagents(this.#runtime, context);
     let corrections = 0;
 
@@ -136,22 +131,40 @@ export class DialogAI {
 
       assert.ok(request?.role === "user");
       messages[lastUser] = { ...request, content: input };
-      await context.store.conversations.save({ ...conversation, messages });
+      conversation = { ...conversation, messages };
+      await context.store.conversations.save(conversation);
     } finally {
       await subagents.close();
     }
+
+    // 答复已交付，完整交互也已保存。同群任务仍按队列顺序执行，压缩不能覆盖后来的请求。
+    let compacted: Conversation;
+
+    try {
+      compacted = await this.#compact(conversation);
+    } catch (error) {
+      this.#logger.warn(
+        "群 %s 会话压缩失败，保留完整交互供下次使用：%s",
+        conversation.groupId,
+        failureMessage(error),
+      );
+
+      return;
+    }
+
+    if (compacted !== conversation) {
+      await context.store.conversations.save(compacted);
+    }
   }
 
-  async #compact(
-    conversation: Conversation,
-    inputChars: number,
-  ): Promise<Conversation> {
+  async #compact(conversation: Conversation): Promise<Conversation> {
     const budget = this.#config.AI_INPUT_CHARS;
     const { messages, summary } = conversation;
 
     if (
       messages.length === 0 ||
-      JSON.stringify(messages).length + summary.length + inputChars <= budget
+      // 提前留出四分之一预算给下一次请求及其最新上下文。
+      JSON.stringify(messages).length + summary.length <= (budget * 3) / 4
     ) {
       return conversation;
     }
