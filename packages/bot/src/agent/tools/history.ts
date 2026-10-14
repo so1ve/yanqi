@@ -110,7 +110,7 @@ export function chatHistoryTools(context: ReadContext, onMetadata: OnMetadata) {
     tool(
       context,
       "history",
-      "查询本群聊天元数据和 handle，不加载正文。context 取 beforeId 之前最近 40 条，省略从请求前开始；messages 按 scope 选取；search 字面搜索。均包含群成员和言栖发言。返回范围、消息数、文字和附件规模，搜索统计仅覆盖命中消息。availableHistory 是本地可读历史边界，不是入群时间。元数据立即转交小栖，正文用 read_history(handle) 读取。",
+      "查询本群聊天元数据和 handle，不加载正文。context 取 beforeId 之前最近 40 条，省略从请求前开始；messages 按 scope 选取；search 字面搜索。均包含群成员和言栖发言。返回范围、消息数、文字和附件规模，搜索统计仅覆盖命中消息。availableHistory 是本地可读历史边界，不是入群时间。首次元数据立即转交小栖，后续元数据随 report 返回；正文用 read_history(handle) 读取。",
       chatParameters,
       async (args) => {
         const sources =
@@ -187,7 +187,7 @@ export function noteHistoryTools(context: ReadContext, onMetadata: OnMetadata) {
     tool(
       context,
       "note",
-      "查询本群纪要指定版本的标题、版本号、字符数和正文句柄，省略 revision 选最新版。不加载正文；元数据立即转交小栖。需要正文时用 read_history 携带句柄读取。",
+      "查询本群纪要指定版本的标题、版本号、字符数和正文句柄，省略 revision 选最新版。不加载正文；首次元数据立即转交小栖，后续元数据随 report 返回。需要正文时用 read_history 携带句柄读取。",
       noteParameters,
       async (args) => {
         const topic = await getTopic(context, args.topicId);

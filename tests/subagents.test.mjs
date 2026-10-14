@@ -15,7 +15,7 @@ async function call(tool, args, signal) {
   return JSON.parse(result.content[0].text);
 }
 
-test("查阅先返回元数据，再等待内容简报，不因等待时间自行唤醒", async (t) => {
+test("首次元数据、阶段简报和完成会唤醒等待，连续查询不会反复唤醒主对话", async (t) => {
   const { store } = await fixture(t);
   const source = await capture(store, "100", "1", {
     text: "",
@@ -44,7 +44,11 @@ test("查阅先返回元数据，再等待内容简报，不因等待时间自�
     text: "总结部署方案",
   });
   const readAllowed = Promise.withResolvers();
+  const queried = Promise.withResolvers();
+  const reportAllowed = Promise.withResolvers();
+  const finishAllowed = Promise.withResolvers();
   let readMessages;
+  let latestMetadata;
   // 只替换模型，查询和工具执行使用真实实现。
   const runtime = {
     async text(_purpose, _instructions, _input, { tools, signal }) {
@@ -72,6 +76,24 @@ test("查阅先返回元数据，再等待内容简报，不因等待时间自�
       );
 
       readMessages = page.messages;
+      for (let index = 0; index < 20; index++) {
+        latestMetadata = await call(
+          byName("history"),
+          { action: "context" },
+          signal,
+        );
+      }
+
+      queried.resolve();
+      await reportAllowed.promise;
+      signal.throwIfAborted();
+      await call(
+        byName("report"),
+        { brief: "已找到部署方案，还在核对后续讨论。", done: false },
+        signal,
+      );
+      await finishAllowed.promise;
+      signal.throwIfAborted();
       await call(
         byName("report"),
         { brief: "已确定使用 Docker。", done: true },
@@ -119,7 +141,29 @@ test("查阅先返回元数据，再等待内容简报，不因等待时间自�
     await setImmediate();
     assert.equal(returned, false);
     readAllowed.resolve();
-    const completed = await waiting;
+    await queried.promise;
+    await setImmediate();
+    assert.equal(returned, false, "后续查询不应消耗主对话的模型轮数");
+    reportAllowed.resolve();
+    const progress = await waiting;
+
+    assert.equal(progress.state, "running");
+    assert.equal(progress.brief, "已找到部署方案，还在核对后续讨论。");
+    assert.deepEqual(progress.metadata, latestMetadata);
+
+    returned = false;
+    const finishing = call(tool, { action: "wait", id: started.id }).then(
+      (result) => {
+        returned = true;
+
+        return result;
+      },
+    );
+
+    await setImmediate();
+    assert.equal(returned, false, "已交付的简报不应再次唤醒等待");
+    finishAllowed.resolve();
+    const completed = await finishing;
 
     assert.equal(completed.state, "done");
     assert.equal(completed.brief, "已确定使用 Docker。");
@@ -130,6 +174,8 @@ test("查阅先返回元数据，再等待内容简报，不因等待时间自�
     subagents.assertIdle();
   } finally {
     readAllowed.resolve();
+    reportAllowed.resolve();
+    finishAllowed.resolve();
     await subagents.close();
   }
 });
