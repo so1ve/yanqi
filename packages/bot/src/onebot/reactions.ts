@@ -19,12 +19,25 @@ declare module "@koishijs/core" {
 
 const numericId = Type.String({ pattern: "^\\d+$" });
 const groupIdSchema = Type.Union([Type.Integer(), numericId]);
+const messageIdSchema = Type.Union([
+  Type.Integer(),
+  Type.String({ pattern: "^-?\\d+$" }),
+]);
+const historySchema = Type.Object({
+  messages: Type.Array(
+    Type.Object({
+      group_id: groupIdSchema,
+      message_id: messageIdSchema,
+      time: Type.Number(),
+    }),
+  ),
+});
+
+class MissingMessageError extends Error {}
+
 const noticeSchema = Type.Object({
   group_id: groupIdSchema,
-  message_id: Type.Union([
-    Type.Integer(),
-    Type.String({ pattern: "^-?\\d+$" }),
-  ]),
+  message_id: messageIdSchema,
   likes: Type.Array(Type.Object({ emoji_id: numericId })),
   is_add: Type.Optional(Type.Boolean()),
 });
@@ -123,33 +136,130 @@ export class ReactionSync {
   }
 
   public async refresh(messages: Message[]): Promise<number> {
-    let failed = 0;
-    let firstError = "";
+    const failures = new Map<Message, unknown>();
 
+    await this.#readMessages(messages, failures);
+
+    const missing = Map.groupBy(
+      [...failures]
+        .filter(([, error]) => error instanceof MissingMessageError)
+        .map(([message]) => message),
+      (message) => message.groupId,
+    );
+
+    for (const [groupId, sources] of missing) {
+      try {
+        // NapCat 的短消息 ID 索引只在内存中；历史查询会重新建立索引。
+        const restored = await this.#restoreIndex(groupId, sources);
+        const available = sources.filter((message) =>
+          restored.has(message.messageId),
+        );
+
+        await this.#readMessages(available, failures);
+      } catch (error) {
+        for (const message of sources) {
+          failures.set(message, error);
+        }
+      }
+    }
+
+    const first = failures.entries().next().value;
+
+    if (first) {
+      this.#logger.warn(
+        "%s/%s 条消息的表情回应未能刷新，保留已保存状态：m%s: %s",
+        failures.size,
+        messages.length,
+        first[0].id,
+        failureMessage(first[1]),
+      );
+    }
+
+    return failures.size;
+  }
+
+  async #readMessages(
+    messages: Message[],
+    failures: Map<Message, unknown>,
+  ): Promise<void> {
     // 按需补读所查看的消息，不定时扫描群历史，也不为回应唤醒对话。
     for (let start = 0; start < messages.length; start += 4) {
       await Promise.all(
         messages.slice(start, start + 4).map(async (message) => {
           try {
             await this.#enqueue(message);
+            failures.delete(message);
           } catch (error) {
-            failed++;
-            firstError ||= `m${message.id}: ${failureMessage(error)}`;
+            failures.set(message, error);
           }
         }),
       );
     }
+  }
 
-    if (failed > 0) {
-      this.#logger.warn(
-        "%s/%s 条消息的表情回应未能刷新，保留已保存状态：%s",
-        failed,
-        messages.length,
-        firstError,
-      );
+  async #restoreIndex(
+    groupId: string,
+    messages: Message[],
+  ): Promise<Set<string>> {
+    const wanted = new Set(messages.map((message) => message.messageId));
+    const restored = new Set<string>();
+    const oldest = Math.min(...messages.map((message) => message.sentAt));
+    const api = this.#api();
+    const seen = new Set<string>();
+    let cursor = "0";
+
+    while (wanted.size > 0) {
+      const response = await api._request!("get_group_msg_history", {
+        group_id: groupId,
+        message_seq: cursor,
+        count: 100,
+        parse_mult_msg: false,
+        disable_get_url: true,
+        quick_reply: true,
+      });
+      const page: unknown = response.data;
+
+      if (response.retcode !== 0 || !Value.Check(historySchema, page)) {
+        throw new Error(`NapCat 无法恢复群 ${groupId} 的历史消息索引`);
+      }
+
+      if (
+        page.messages.some((message) => String(message.group_id) !== groupId)
+      ) {
+        throw new Error("NapCat 历史消息的群号不正确");
+      }
+
+      if (page.messages.length === 0) {
+        break;
+      }
+
+      for (const message of page.messages) {
+        const id = String(message.message_id);
+
+        if (wanted.delete(id)) {
+          restored.add(id);
+        }
+      }
+
+      const first = page.messages.reduce((a, b) => (a.time <= b.time ? a : b));
+      const next = String(first.message_id);
+
+      if (first.time * 1000 < oldest || next === cursor || seen.has(next)) {
+        break;
+      }
+
+      seen.add(next);
+      cursor = next;
     }
 
-    return failed;
+    this.#logger.info(
+      "群 %s 历史消息索引已恢复：%s/%s 条",
+      groupId,
+      restored.size,
+      messages.length,
+    );
+
+    return restored;
   }
 
   public async close(): Promise<void> {
@@ -190,7 +300,9 @@ export class ReactionSync {
     const detail: unknown = response.data;
 
     if (response.retcode !== 0) {
-      throw new Error(
+      const ErrorType = response.retcode === 1200 ? MissingMessageError : Error;
+
+      throw new ErrorType(
         `NapCat 无法读取消息 ${message.messageId}（${response.retcode}）`,
       );
     }

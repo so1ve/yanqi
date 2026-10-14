@@ -30,8 +30,6 @@ export default defineEventHandler(async (event) => {
         (reaction) => reaction.messageId === message.id,
       ),
     })),
-    error: failed
-      ? `${failed} 条消息的表情回应暂时无法更新，显示已保存的回应。`
-      : "",
+    error: failed ? "部分消息的表情回应暂时无法更新，显示已保存的回应。" : "",
   };
 });

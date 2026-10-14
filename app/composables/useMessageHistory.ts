@@ -94,7 +94,9 @@ export function useMessageHistory(
   }
 
   async function refreshReactions(messageIds: number[]): Promise<void> {
-    const missing = messageIds.filter((id) => !reactionsRead.has(id));
+    const missing = (fromLatest ? messageIds.toReversed() : messageIds).filter(
+      (id) => !reactionsRead.has(id),
+    );
 
     for (const id of missing) {
       reactionsRead.add(id);
