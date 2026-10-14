@@ -14,7 +14,7 @@ import type { Notes } from "../recording/notes.ts";
 import { publishNotes } from "../recording/publication.ts";
 import type { Store } from "../storage/store.ts";
 import type { Job, JobKind } from "../types.ts";
-import { AiError, failureMessage } from "../utils/errors.ts";
+import { AiError, AiProtocolError, failureMessage } from "../utils/errors.ts";
 import { logContext, logDetail } from "../utils/logging.ts";
 import { beijingTime } from "../utils/time.ts";
 
@@ -221,12 +221,12 @@ export class BackgroundTasks {
       }
 
       const message = logDetail(failureMessage(error), this.#config);
-      const retry = await this.#store.jobs.retry(
-        job,
-        message,
-        Date.now(),
-        error instanceof BudgetExceeded ? error.nextRunAt : undefined,
-      );
+      const retry = await this.#store.jobs.retry(job, message, Date.now(), {
+        ...(error instanceof BudgetExceeded ? { after: error.nextRunAt } : {}),
+        retryable:
+          !(error instanceof AiProtocolError) &&
+          !(error instanceof AiSizeError),
+      });
 
       this.#logger.warn(
         "任务 #%s 失败：kind=%s group=%s attempt=%s 耗时=%s ms %s；%s",

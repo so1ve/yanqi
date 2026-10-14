@@ -37,7 +37,10 @@ export class RecordingAI {
   ): Promise<Detection> {
     return this.#runtime.json(
       "detect",
-      detectionSchema,
+      detectionSchema(
+        [...new Set([...messages, ...context].map((message) => message.id))],
+        topics.map((topic) => topic.id),
+      ),
       `${prompts.detect}\n${this.#sourceRules}`,
       {
         messages,

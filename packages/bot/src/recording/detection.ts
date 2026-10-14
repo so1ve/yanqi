@@ -59,18 +59,9 @@ export async function detectTopics(
   for (const chunk of chunks) {
     const selectedContext = context.filter((message) => !message.isBot);
     const result = await ai.recording.detect(chunk, selectedContext, topics);
-    const known = new Set(
-      [...chunk, ...selectedContext].map((item) => item.id),
-    );
 
+    // AI 边界的 Schema 已约束消息和话题 ID，错误会在原会话中反馈并纠正。
     for (const proposed of result.topics) {
-      if (
-        !proposed.id.startsWith("new:") &&
-        !topics.some((topic) => topic.id === proposed.id)
-      ) {
-        throw new Error("AI 选择了不属于当前群的话题");
-      }
-
       const assignment = {
         ...proposed,
         messageIds:
@@ -78,10 +69,6 @@ export async function detectTopics(
       };
 
       for (const id of proposed.messageIds) {
-        if (!known.has(id)) {
-          throw new Error("AI 分类引用了未提供的消息");
-        }
-
         assignment.messageIds.add(Number(id.slice(1)));
       }
 

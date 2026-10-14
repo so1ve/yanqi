@@ -815,9 +815,10 @@ export class JobQueue {
     job: Job,
     error: string,
     now: number,
-    after?: number,
+    { after, retryable = true }: { after?: number; retryable?: boolean } = {},
   ): Promise<{ state: "failed" | "pending"; runAfter: number }> {
     const state =
+      !retryable ||
       job.kind === "intent" ||
       job.kind === "observe" ||
       (after === undefined && job.attempts >= 5)

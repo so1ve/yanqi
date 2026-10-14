@@ -10,6 +10,9 @@ export class AiError extends Error {
   }
 }
 
+// 模型已用尽纠正机会或调用轮数，后台不得丢掉反馈再原样重跑。
+export class AiProtocolError extends AiError {}
+
 export function failureMessage(error: unknown): string {
   if (error instanceof APIError) {
     return `AI 服务请求失败（HTTP ${error.status ?? "未知"}，${error.name}）`;

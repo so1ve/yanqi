@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+
 import type {
   AgentMessage,
   AgentOptions,
@@ -15,7 +17,7 @@ import * as Value from "typebox/value";
 import type { Config, ModelConfig } from "../config.ts";
 import type { Conversation } from "../storage/conversations.ts";
 import type { Store } from "../storage/store.ts";
-import { AiError } from "../utils/errors.ts";
+import { AiError, AiProtocolError, failureMessage } from "../utils/errors.ts";
 import { logContext, logDetail } from "../utils/logging.ts";
 import { createCompletion } from "./completions.ts";
 import { logAgentEvents } from "./logging.ts";
@@ -50,53 +52,107 @@ export class AgentRuntime {
     schema: S,
     instructions: string,
     input: unknown,
-    options: RequestOptions = {},
+    options: Omit<RequestOptions, "finishTurn" | "prepareNextTurn"> = {},
   ): Promise<Static<S>> {
-    const content = JSON.stringify(input);
     const model = options.model ?? this.#config.AI_MODEL;
+    let result: Static<S> | undefined;
+    let corrections = 0;
+    let feedback: string | undefined;
+    let invalid: AiProtocolError | undefined;
 
-    const { text } = await this.#run(
+    await this.#run(
       purpose,
       instructions,
-      { role: "user", content, timestamp: Date.now() },
-      options,
+      { role: "user", content: JSON.stringify(input), timestamp: Date.now() },
+      {
+        ...options,
+        finishTurn: ({ message }) => {
+          feedback = undefined;
+          if (["aborted", "error", "length"].includes(message.stopReason)) {
+            return { action: "end" };
+          }
+
+          // 工具结果仍留在同一会话中；只在提交最终正文时校验，不重跑已经完成的查阅。
+          if (message.content.some((part) => part.type === "toolCall")) {
+            return;
+          }
+
+          const text = message.content
+            .filter((part) => part.type === "text")
+            .map((part) => part.text)
+            .join("");
+          let json: unknown;
+          let issue: string | undefined;
+
+          try {
+            json = JSON.parse(text);
+          } catch {
+            try {
+              json = JSON.parse(jsonrepair(text));
+              this.#logger.info(
+                "%s %s JSON 语法已修复（model=%s）",
+                logContext.getStore()?.task ?? "AI",
+                purpose,
+                model.model,
+              );
+            } catch (error) {
+              issue = `JSON 无法解析：${failureMessage(error)}`;
+            }
+          }
+
+          if (issue === undefined) {
+            if (Value.Check(schema, json)) {
+              result = json;
+
+              return { action: "end" };
+            }
+
+            issue = Value.Errors(schema, json)
+              .map((error) => `${error.instancePath || "/"}: ${error.message}`)
+              .join("；");
+          }
+
+          if (corrections === 2) {
+            invalid = new AiProtocolError(
+              "校验 AI 输出",
+              `${purpose} 经过两次纠正仍不符合要求（model=${model.model}）：${issue}；已停止自动重试`,
+            );
+
+            return { action: "end" };
+          }
+
+          corrections++;
+          this.#logger.warn(
+            "%s %s 输出校验失败，反馈模型纠正（%s/2）：%s",
+            logContext.getStore()?.task ?? "AI",
+            purpose,
+            corrections,
+            issue,
+          );
+          // 这是校验结果，不是新的用户请求。修改反馈措辞时遵循 prompts/README.md。
+          feedback = `上一份 JSON 未通过校验，本次结果尚未采用。这是第 ${corrections}/2 次纠正。\n具体错误：${issue}\n请基于原始输入、上一份输出和已有工具结果修正，返回完整且符合原 JSON Schema 的对象，不只返回补丁。不省略必填字段，也不编造输入中没有的消息或话题 ID；不为通过校验而丢弃有效内容。已完成的操作无需重做。`;
+
+          return { action: "continue" };
+        },
+        prepareNextTurn: () =>
+          feedback === undefined
+            ? undefined
+            : {
+                messages: [
+                  { role: "system", content: feedback, timestamp: Date.now() },
+                ],
+              },
+      },
       schema,
     );
-    let json: unknown;
 
-    try {
-      json = JSON.parse(text);
-    } catch {
-      try {
-        json = JSON.parse(jsonrepair(text));
-      } catch (error) {
-        throw new AiError(
-          "解析 AI 返回的 JSON",
-          `${purpose} 返回的 JSON 无法修复（model=${model.model}，${text.length} 字符）`,
-          { cause: error },
-        );
-      }
-
-      this.#logger.info(
-        "%s %s JSON 语法已修复（model=%s）",
-        logContext.getStore()?.task ?? "AI",
-        purpose,
-        model.model,
-      );
+    if (invalid) {
+      throw invalid;
     }
 
-    const parsed = Value.Clean(schema, json);
+    assert.ok(result !== undefined, "JSON 会话结束但未产生有效结果");
 
-    if (!Value.Check(schema, parsed)) {
-      throw new AiError(
-        "校验 AI 返回的字段",
-        `${purpose} JSON 字段不符合约定：${Value.Errors(schema, parsed)
-          .map((error) => `${error.instancePath}: ${error.message}`)
-          .join("；")}`,
-      );
-    }
-
-    return parsed;
+    return result;
   }
 
   public async text(
@@ -210,14 +266,15 @@ export class AgentRuntime {
         : {}),
       streamFn: async (_model, context, streamOptions) => {
         try {
-          if (++turns > (options.maxTurns ?? 8)) {
-            throw new AiError(
+          if (turns >= (options.maxTurns ?? 8)) {
+            throw new AiProtocolError(
               "处理对话",
               `${purpose} 已达到单次请求的 ${options.maxTurns ?? 8} 轮模型调用上限`,
             );
           }
 
           calls.push(await reserveCall(config, this.#store, endpoint, purpose));
+          turns++;
           timeout = setTimeout(() => agent.abort(), timeoutMs);
           timeout.unref();
 
@@ -314,7 +371,7 @@ export class AgentRuntime {
       .join("");
 
     // 工具调用的结果已经交付，不要求额外的文字答复。
-    if (!text.trim() && tools.length === 0) {
+    if (!schema && !text.trim() && tools.length === 0) {
       throw new AiError("读取 AI 正文", `${purpose} 未返回文字`);
     }
 
