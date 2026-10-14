@@ -18,7 +18,7 @@ export async function selectRequests(
     ),
     `${instructions}\n只判断 candidateIds 中的消息，其他消息仅作上下文。返回 {"requestIds":["需要小栖回应或处理的消息 ID"]}；没有此类消息时返回空数组。`,
     { ...input, candidateIds },
-    { thinking: true },
+    { thinking: "high" },
   );
 
   return result.requestIds;

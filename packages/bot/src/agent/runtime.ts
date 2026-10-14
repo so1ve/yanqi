@@ -2,6 +2,7 @@ import type {
   AgentMessage,
   AgentState,
   FinishTurn,
+  ThinkingLevel,
 } from "@earendil-works/pi-agent-core";
 import { Agent } from "@earendil-works/pi-agent-core";
 import type { ImageContent, UserMessage } from "@earendil-works/pi-ai";
@@ -22,7 +23,7 @@ import { AiSizeError, recordCalls, reserveCall } from "./usage.ts";
 interface RequestOptions {
   model?: ModelConfig;
   tools?: AgentState["tools"];
-  thinking?: boolean;
+  thinking?: ThinkingLevel;
   finishTurn?: FinishTurn;
   signal?: AbortSignal;
   maxTurns?: number;

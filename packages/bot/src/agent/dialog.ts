@@ -64,6 +64,7 @@ export class DialogAI {
         conversation,
         {
           model: this.#config.AI_MODEL,
+          thinking: "low",
           maxTurns: 16,
           tools: [
             replyTool(context, subagents),
@@ -153,7 +154,7 @@ export class DialogAI {
         summary,
         messages: messages.slice(0, split),
       },
-      { thinking: true },
+      { thinking: "high" },
     );
 
     this.#logger.info(

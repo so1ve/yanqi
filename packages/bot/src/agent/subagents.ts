@@ -161,7 +161,7 @@ export class Subagents {
       },
       {
         signal,
-        thinking: true,
+        thinking: "high",
         maxTurns: 16,
         tools: [...tools, report],
         finishTurn: ({ message }) => ({

@@ -17,11 +17,11 @@ export function createCompletion(
   config: Config,
   endpoint: ModelConfig,
   purpose: string,
-  thinking = false,
+  thinking: ThinkingLevel = "off",
   schema?: TSchema,
 ) {
   const isDeepSeek = new URL(endpoint.baseURL).hostname === "api.deepseek.com";
-  const thinkingLevel: ThinkingLevel = thinking && isDeepSeek ? "high" : "off";
+  const thinkingLevel = isDeepSeek ? thinking : "off";
   const maxTokens =
     thinkingLevel === "off"
       ? config.AI_MAX_OUTPUT_TOKENS
@@ -71,7 +71,9 @@ export function createCompletion(
           const params = payload as ChatCompletionCreateParamsStreaming;
 
           if (params.tools?.length) {
-            params.tool_choice = "required";
+            // DeepSeek 思考模式不接受 required；是否完成由 Agent 的工具结果决定。
+            params.tool_choice =
+              isDeepSeek && thinkingLevel !== "off" ? "auto" : "required";
           }
 
           if (schema) {

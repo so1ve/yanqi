@@ -66,7 +66,7 @@ export class RecordingAI {
           topic.ownerId,
         ),
       },
-      { thinking: true },
+      { thinking: "high" },
     );
 
     return result.markdown.trim();
@@ -85,7 +85,7 @@ export class RecordingAI {
           topic.ownerId,
         ),
       },
-      { thinking: true },
+      { thinking: "high" },
     );
   }
 

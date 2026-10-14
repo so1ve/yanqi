@@ -14,7 +14,7 @@ export function replyTool(context: ToolContext, subagents: Subagents) {
   return tool(
     context,
     "reply",
-    "向 QQ 群发送一次最终答复，等待发送结果后结束本次对话。text 必须是非空文字。先完成必要的查询、记忆更新和操作，按问题所需详略回答，不发内部分析或无关状态。不需要发言时用 skip_reply。发纪要用 edit_record(action=send)，不在这里重复输出全文。",
+    "向 QQ 群发送最终答复并结束本次对话，之后不会继续执行任务。用户要求整理、修改或发送时，先调用相应操作工具，不能用本工具答应稍后处理。进度提示用 notify。text 必须是非空文字，按问题所需详略回答。不需要发言时用 skip_reply；发纪要用 edit_record(action=send)，不在这里重复输出全文。",
     parameters,
     async ({ text }, signal) => {
       subagents.assertIdle();

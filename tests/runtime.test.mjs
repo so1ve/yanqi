@@ -1,96 +1,15 @@
 import assert from "node:assert/strict";
-import { once } from "node:events";
-import { createServer } from "node:http";
 import { test } from "node:test";
 
 import { Type } from "typebox";
 
-import { AgentRuntime } from "../packages/bot/src/agent/runtime.ts";
 import { AiSizeError } from "../packages/bot/src/agent/usage.ts";
-import { parseConfig } from "../packages/bot/src/config.ts";
 import { logContext } from "../packages/bot/src/utils/logging.ts";
 import { beijingDate } from "../packages/bot/src/utils/time.ts";
-import { fixture } from "./fixtures.mjs";
-
-async function runtimeFixture(t, responses, configOverrides = {}) {
-  const { store } = await fixture(t);
-  const requests = [];
-  const server = createServer(async (request, response) => {
-    const chunks = [];
-
-    for await (const chunk of request) {
-      chunks.push(chunk);
-    }
-
-    requests.push(JSON.parse(Buffer.concat(chunks).toString()));
-    const result = responses.shift();
-
-    if (!result) {
-      response.writeHead(500).end("Unexpected request");
-
-      return;
-    }
-
-    response.writeHead(200, { "Content-Type": "text/event-stream" });
-    const send = (chunk) =>
-      response.write(
-        `data: ${JSON.stringify({
-          id: "test-response",
-          object: "chat.completion.chunk",
-          created: 1,
-          model: "test-model",
-          ...chunk,
-        })}\n\n`,
-      );
-
-    send({
-      choices: [
-        {
-          index: 0,
-          delta: { role: "assistant", ...result.delta },
-          finish_reason: null,
-        },
-      ],
-    });
-    send({
-      choices: [
-        { index: 0, delta: {}, finish_reason: result.finish ?? "stop" },
-      ],
-    });
-    send({
-      choices: [],
-      usage: { prompt_tokens: 12, completion_tokens: 5, total_tokens: 17 },
-    });
-    response.end("data: [DONE]\n\n");
-  });
-
-  t.after(() => {
-    server.closeAllConnections();
-
-    return new Promise((resolve, reject) =>
-      server.close((error) => (error ? reject(error) : resolve())),
-    );
-  });
-  server.listen(0, "127.0.0.1");
-  await once(server, "listening");
-  const config = parseConfig({
-    AI_MODEL: {
-      baseURL: `http://127.0.0.1:${server.address().port}/v1`,
-      apiKey: "test",
-      model: "test-model",
-    },
-    ...configOverrides,
-  });
-
-  return {
-    runtime: new AgentRuntime(config, store, new AbortController().signal),
-    store,
-    requests,
-  };
-}
+import { modelFixture } from "./fixtures.mjs";
 
 test("结构化输出经过真实流式客户端解析、修复和用量保存，系统提示词由调用者决定", async (t) => {
-  const { runtime, store, requests } = await runtimeFixture(
+  const { runtime, store, requests } = await modelFixture(
     t,
     [{ delta: { content: "{answer: '使用 Docker',}" } }],
     { AI_RESPONSE_FORMAT: "json_schema" },
@@ -139,7 +58,7 @@ const toolReply = {
 };
 
 test("工具交付后可以没有正文，调用次数上限会停止下一轮请求", async (t) => {
-  const { runtime, requests } = await runtimeFixture(t, [toolReply, toolReply]);
+  const { runtime, requests } = await modelFixture(t, [toolReply, toolReply]);
   const sent = [];
   const tool = {
     name: "reply",
@@ -179,11 +98,69 @@ test("工具交付后可以没有正文，调用次数上限会停止下一轮�
 });
 
 test("截断和空白模型输出都不能作为成功结果返回", async (t) => {
-  const { runtime } = await runtimeFixture(t, [
+  const { runtime } = await modelFixture(t, [
     { delta: { content: "尚未生成完" }, finish: "length" },
     { delta: { content: "" } },
   ]);
 
   await assert.rejects(runtime.text("summary", "整理讨论。", {}), AiSizeError);
   await assert.rejects(runtime.text("summary", "整理讨论。", {}), /未返回文字/);
+});
+
+test("DeepSeek 请求明确区分关闭、low 与 high 思考", async (t) => {
+  const { runtime, config, requests } = await modelFixture(t, [
+    { delta: { content: "在呢！" } },
+    { delta: { content: "在呢！" } },
+    { delta: { content: "在呢！" } },
+  ]);
+  const localURL = `${config.AI_MODEL.baseURL}/chat/completions`;
+  const fetch = globalThis.fetch;
+
+  config.AI_MODEL.baseURL = "https://api.deepseek.com/v1";
+  config.AI_MODEL.model = "deepseek-flash";
+  t.mock.method(globalThis, "fetch", (url, options) => {
+    assert.equal(String(url), "https://api.deepseek.com/v1/chat/completions");
+
+    return fetch(localURL, options);
+  });
+
+  for (const level of ["off", "low", "high"]) {
+    assert.equal(
+      await runtime.text(
+        "test",
+        "测试",
+        { text: "在吗" },
+        {
+          thinking: level,
+          tools: [
+            {
+              name: "reply",
+              label: "回复",
+              description: "回复",
+              parameters: Type.Object({ text: Type.String() }),
+              async execute() {
+                throw new Error("本用例只检查请求参数");
+              },
+            },
+          ],
+          finishTurn: () => ({ action: "end" }),
+        },
+      ),
+      "在呢！",
+    );
+    const payload = requests.at(-1);
+
+    assert.equal(
+      payload.thinking.type,
+      level === "off" ? "disabled" : "enabled",
+    );
+    assert.equal(payload.reasoning_effort, level === "off" ? undefined : level);
+    assert.equal(payload.tool_choice, level === "off" ? "required" : "auto");
+    assert.equal(
+      payload.max_tokens,
+      level === "off"
+        ? config.AI_MAX_OUTPUT_TOKENS
+        : config.AI_THINKING_MAX_OUTPUT_TOKENS,
+    );
+  }
 });

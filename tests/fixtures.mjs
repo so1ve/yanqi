@@ -1,7 +1,10 @@
+import { once } from "node:events";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { AgentRuntime } from "../packages/bot/src/agent/runtime.ts";
 import { parseConfig } from "../packages/bot/src/config.ts";
 import { Store } from "../packages/bot/src/storage/store.ts";
 import { Accounts } from "../server/storage/accounts.ts";
@@ -28,6 +31,87 @@ export async function fixture(t) {
   await store.groups.ensure(["100", "200"]);
 
   return { store, directory, accounts: new Accounts(databases.management) };
+}
+
+export async function modelFixture(t, responses, configOverrides = {}) {
+  const { store } = await fixture(t);
+  const requests = [];
+  const server = createServer(async (request, response) => {
+    const chunks = [];
+
+    for await (const chunk of request) {
+      chunks.push(chunk);
+    }
+
+    requests.push(JSON.parse(Buffer.concat(chunks).toString()));
+    const result = responses.shift();
+
+    if (!result) {
+      response.writeHead(500).end("Unexpected request");
+
+      return;
+    }
+
+    if (result.json) {
+      response.writeHead(200, { "Content-Type": "application/json" });
+      response.end(JSON.stringify(result.json));
+
+      return;
+    }
+
+    response.writeHead(200, { "Content-Type": "text/event-stream" });
+    response.end(completionEvents(result));
+  });
+
+  t.after(() => {
+    server.closeAllConnections();
+
+    return new Promise((resolve, reject) =>
+      server.close((error) => (error ? reject(error) : resolve())),
+    );
+  });
+  server.listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const config = parseConfig({
+    AI_MODEL: {
+      baseURL: `http://127.0.0.1:${server.address().port}/v1`,
+      apiKey: "test",
+      model: "test-model",
+    },
+    ...configOverrides,
+  });
+
+  return {
+    runtime: new AgentRuntime(config, store, new AbortController().signal),
+    store,
+    requests,
+    config,
+  };
+}
+
+function completionEvents(result) {
+  const chunks = [
+    {
+      choices: [
+        {
+          index: 0,
+          delta: { role: "assistant", ...result.delta },
+          finish_reason: null,
+        },
+      ],
+    },
+    {
+      choices: [
+        { index: 0, delta: {}, finish_reason: result.finish ?? "stop" },
+      ],
+    },
+    {
+      choices: [],
+      usage: { prompt_tokens: 12, completion_tokens: 5, total_tokens: 17 },
+    },
+  ];
+
+  return `${chunks.map((chunk) => `data: ${JSON.stringify({ id: "test-response", object: "chat.completion.chunk", created: 1, model: "test-model", ...chunk })}\n\n`).join("")}data: [DONE]\n\n`;
 }
 
 export const capture = (store, groupId, messageId, fields = {}) =>
