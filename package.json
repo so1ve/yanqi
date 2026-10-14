@@ -12,8 +12,7 @@
     "dev": "nuxt dev --host 127.0.0.1",
     "lint": "eslint . && prettier --check . '!data/**'",
     "lint:fix": "eslint --fix . && prettier --write . '!data/**'",
-    "postinstall": "nuxt prepare",
-    "test": "node --experimental-transform-types --test tests/*.test.mjs"
+    "postinstall": "nuxt prepare"
   },
   "dependencies": {
     "@koishijs/core": "catalog:",
