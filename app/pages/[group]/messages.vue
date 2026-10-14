@@ -34,7 +34,7 @@ const source = computed(
           v-model:value="query"
           class="search"
           clearable
-          placeholder="搜索消息正文"
+          placeholder="搜索正文或消息 ID（如 m983）"
         >
           <template #prefix><NIcon :component="Search" /></template>
         </NInput>

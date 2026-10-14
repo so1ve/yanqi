@@ -264,9 +264,21 @@ export class Messages {
     let query = this.#db.selectFrom("messages").where("groupId", "=", groupId);
 
     if (text) {
-      query = query.where((eb) =>
-        eb(eb.fn<number>("contains_text", ["text", eb.val(text)]), ">", 0),
-      );
+      const reference = /^m([1-9]\d*)$/i.exec(text);
+
+      if (reference) {
+        const id = Number(reference[1]);
+
+        if (!Number.isSafeInteger(id)) {
+          return [];
+        }
+
+        query = query.where("id", "=", id);
+      } else {
+        query = query.where((eb) =>
+          eb(eb.fn<number>("contains_text", ["text", eb.val(text)]), ">", 0),
+        );
+      }
     }
 
     const rows = await query
