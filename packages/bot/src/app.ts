@@ -6,6 +6,7 @@ import { OneBotBot } from "koishi-plugin-adapter-onebot";
 import type { Config } from "./config.ts";
 import { configurationError } from "./config.ts";
 import { recallMessage, saveMessage } from "./onebot/message.ts";
+import { ReactionSync } from "./onebot/reactions.ts";
 import { Secretary } from "./secretary.ts";
 import type { Database } from "./storage/schema.ts";
 import { Store } from "./storage/store.ts";
@@ -44,7 +45,14 @@ export class Yanqi {
           this.#config.GROUP_IDS.includes(session.guildId),
       );
 
+    const reactions = new ReactionSync(this.store, () => this.napcat);
+
     this.#listeners = [
+      groups.on("notice", (session: Session) => {
+        if (session.subtype === "group-msg-emoji-like") {
+          return this.#track(() => reactions.receive(session));
+        }
+      }),
       groups.on("message", (session: Session) =>
         this.#track(async () => {
           const secretary = this.#secretary;

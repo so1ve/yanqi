@@ -10,6 +10,7 @@ import { Messages } from "./messages.ts";
 import { SavedNotes } from "./notes.ts";
 import { overview } from "./overview.ts";
 import { purgeHistory } from "./purge.ts";
+import { Reactions } from "./reactions.ts";
 import { Recordings } from "./recordings.ts";
 import type { Database } from "./schema.ts";
 import { Topics } from "./topics.ts";
@@ -19,6 +20,7 @@ export class Store {
   #db: Database;
   public readonly directory: string;
   public readonly messages: Messages;
+  public readonly reactions: Reactions;
   public readonly inbox: Inbox;
   public readonly conversations: Conversations;
   public readonly topics: Topics;
@@ -35,6 +37,7 @@ export class Store {
     this.directory = directory;
     this.#db = db;
     this.messages = new Messages(db);
+    this.reactions = new Reactions(db);
     this.inbox = new Inbox(db, config, this.messages);
     this.conversations = new Conversations(db);
     this.topics = new Topics(db, directory);

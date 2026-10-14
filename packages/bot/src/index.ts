@@ -2,6 +2,7 @@ export { Yanqi } from "./app.ts";
 export type { Config, ModelConfig } from "./config.ts";
 export { configSchema, configurationError, parseConfig } from "./config.ts";
 export { attachmentReference, forwardMessages } from "./onebot/content.ts";
+export { reactionMeaning } from "./reactions/catalog.ts";
 export { assetFileName } from "./storage/asset-files.ts";
 export { StoreError } from "./storage/errors.ts";
 export { readDataFile } from "./storage/files.ts";

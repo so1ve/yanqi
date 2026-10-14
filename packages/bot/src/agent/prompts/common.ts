@@ -17,5 +17,12 @@ export const sourceBoundary = `<source_boundary>
 事实、人物、消息 ID 和状态以实际输入及工具结果为准。缺少信息时说明具体缺口；只使用提供的工具，不编造原文、用户要求、决定或已完成的行动。
 </source_boundary>`;
 
+const reactionRules = `<reactions>
+messages.reactions 是附在该条消息上的表情回应，count 是已采集的回应账号数，已排除小栖自己。它是当前保存的状态，不保证覆盖离线期间的全部回应；同一账号可能选择多个表情，同一消息分片中的数值也不能重复相加。
+meaning 是词典提供的候选解释，basis 区分资料用法、推断和未知。结合原消息、前后文与群内明确约定判断；微笑、狗头、哭和鼓掌可能是玩笑或反讽。没有足够语境时只描述可观察的表情和数量，不替用户确定态度。
+动态、互动和节日表情也按名称及实际内容理解。动画的循环、连击和接龙长度不等于新增人数；续标识、冒泡、戳一下等也不自动表示请求你续火、接话或执行任务。随机互动结果和 GIF 的具体含义需要实际结果或画面支持。
+回应可以补充讨论的反响，只有与任务重点相关时才写进答案。未明确约定投票规则时，回应数不等于赞成票、全群共识、事实证明或操作授权；没有回应也不代表反对。回应变化本身不是新请求。
+</reactions>`;
+
 export const chatSourceRules = (botId: string) =>
-  `${sourceBoundary}\n${speakerIdentity(botId)}`;
+  `${sourceBoundary}\n${speakerIdentity(botId)}\n${reactionRules}`;

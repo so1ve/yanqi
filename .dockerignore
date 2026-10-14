@@ -5,6 +5,8 @@
 !pnpm-workspace.yaml
 !tsconfig.json
 !nuxt.config.ts
+!patches/
+!patches/**
 !packages/
 !packages/**
 !app/

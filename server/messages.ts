@@ -1,6 +1,10 @@
 import { Logger } from "@koishijs/core";
 import type { Asset, Message, Segment, Yanqi } from "@yanqi/bot";
-import { attachmentReference, forwardMessages } from "@yanqi/bot";
+import {
+  attachmentReference,
+  forwardMessages,
+  reactionMeaning,
+} from "@yanqi/bot";
 
 import { imageMimeType } from "./files";
 
@@ -62,6 +66,15 @@ const displayContent = (
       }
 
       data = { id: segment.data.id };
+    } else if (segment.type === "face") {
+      const face = reactionMeaning("1", String(segment.data.id));
+
+      data = {
+        ...data,
+        name: face.name,
+        meaning: face.meaning,
+        basis: face.basis,
+      };
     } else if (segment.type === "at") {
       const qq = String(segment.data.qq);
 
@@ -124,13 +137,14 @@ export async function messageDetails(
       ),
     ),
   ];
-  const [assets, quotes, names] = await Promise.all([
+  const [assets, quotes, names, reactions] = await Promise.all([
     bot.store.assets.forMessages(messages.map((message) => message.id)),
     bot.store.messages.quotes(
       groupId,
       messages.flatMap((message) => (message.replyTo ? [message.replyTo] : [])),
     ),
     mentionNames(bot, groupId, userIds),
+    bot.store.reactions.forMessages(messages.map((message) => message.id)),
   ]);
 
   return messages.map((message) => {
@@ -147,6 +161,9 @@ export async function messageDetails(
       sentAt: message.sentAt,
       text: message.text,
       content: displayContent(message.content, messageAssets, names),
+      reactions: reactions.filter(
+        (reaction) => reaction.messageId === message.id,
+      ),
       isBot: message.isBot,
       addressed: message.addressed,
       recalledAt: message.recalledAt,

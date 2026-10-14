@@ -33,8 +33,16 @@ const parts = computed(() =>
     >
       @{{ segment.data.name }}
     </span>
-    <span v-else-if="segment.type === 'face'" class="marker">
-      [表情 {{ segment.data.id }}]
+    <span
+      v-else-if="segment.type === 'face'"
+      class="marker"
+      :title="
+        segment.data.meaning
+          ? `${segment.data.basis}：${segment.data.meaning}`
+          : undefined
+      "
+    >
+      [{{ segment.data.name || `表情 ${segment.data.id}` }}]
     </span>
     <section v-else-if="segment.type === 'forward'" class="forward-content">
       <MessageAttachment

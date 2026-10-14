@@ -71,6 +71,21 @@ defineProps<{ message: Message; continued: boolean }>();
           无文字内容
         </p>
       </div>
+      <ul
+        v-if="message.reactions?.length"
+        aria-label="表情回应"
+        class="reactions"
+      >
+        <li
+          v-for="reaction in message.reactions"
+          :key="`${reaction.emojiType}:${reaction.emojiId}`"
+          :title="`${reaction.basis}：${reaction.meaning}`"
+        >
+          {{ reaction.name }}
+          <span v-if="reaction.count">{{ reaction.count }}</span>
+          <span v-if="reaction.botCount" class="bot-reaction">小栖</span>
+        </li>
+      </ul>
       <footer class="message-footer">
         <time :datetime="new Date(message.sentAt).toISOString()">
           {{ formatMessageTime(message.sentAt) }}
@@ -189,6 +204,30 @@ defineProps<{ message: Message; continued: boolean }>();
   overflow: hidden;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+}
+
+.reactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  list-style: none;
+  padding: 0;
+  margin: 6px 0 0;
+}
+.reactions li {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+  padding: 2px 7px;
+  border: 1px solid #d4e4e3;
+  border-radius: 8px;
+  background: #eaf3f1;
+  color: #386463;
+  font-size: 11px;
+}
+.bot-reaction {
+  color: #6a7c88;
+  font-size: 10px;
 }
 
 .message-footer {

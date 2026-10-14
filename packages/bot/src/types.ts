@@ -100,6 +100,14 @@ export interface ChatMessage {
   time: string;
   text: string;
   replyTo: string | null;
+  reactions?: {
+    emojiId: string;
+    emojiType: string;
+    name: string;
+    count: number;
+    meaning: string;
+    basis: string;
+  }[];
   attachmentTasks: {
     assetId: number;
     kind: Asset["kind"];

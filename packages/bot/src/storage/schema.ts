@@ -36,6 +36,13 @@ export interface Tables {
     },
     "id" | "isBot" | "addressed" | "command"
   >;
+  message_reactions: {
+    messageId: number;
+    emojiType: string;
+    emojiId: string;
+    userId: string;
+    isBot: number;
+  };
   topics: Defaults<
     Topic,
     | "description"
@@ -148,6 +155,24 @@ export async function createTables(db: Database): Promise<void> {
     .addColumn("recalledAt", "integer")
     .addColumn("noteId", "integer")
     .addUniqueConstraint("messages_group_message", ["groupId", "messageId"])
+    .execute();
+
+  await db.schema
+    .createTable("message_reactions")
+    .ifNotExists()
+    .addColumn("messageId", "integer", (column) =>
+      column.notNull().references("messages.id").onDelete("cascade"),
+    )
+    .addColumn("emojiType", "text", (column) => column.notNull())
+    .addColumn("emojiId", "text", (column) => column.notNull())
+    .addColumn("userId", "text", (column) => column.notNull())
+    .addColumn("isBot", "integer", (column) => column.notNull())
+    .addPrimaryKeyConstraint("message_reactions_primary", [
+      "messageId",
+      "emojiType",
+      "emojiId",
+      "userId",
+    ])
     .execute();
 
   await db.schema

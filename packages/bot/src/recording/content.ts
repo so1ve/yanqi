@@ -1,4 +1,5 @@
 import { attachmentReference, forwardMessages } from "../onebot/content.ts";
+import { reactionMeaning } from "../reactions/catalog.ts";
 import type { Asset, Segment } from "../types.ts";
 import { beijingTime } from "../utils/time.ts";
 
@@ -30,7 +31,10 @@ export const contentText = (
       }
 
       if (segment.type === "face") {
-        return `[表情 ${String(segment.data.id)}]`;
+        const id = String(segment.data.id);
+        const face = reactionMeaning("1", id);
+
+        return `[QQ表情 ${id} ${face.name}]`;
       }
 
       const ref = attachmentReference(segment);

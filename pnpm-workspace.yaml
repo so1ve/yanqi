@@ -7,6 +7,9 @@ packages:
 overrides:
   typescript: "catalog:"
 
+patchedDependencies:
+  koishi-plugin-adapter-onebot@6.9.5: patches/koishi-plugin-adapter-onebot@6.9.5.patch
+
 allowBuilds:
   "@google/genai": false
   esbuild: true

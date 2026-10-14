@@ -187,6 +187,10 @@ export async function purgeHistory(
           .deleteFrom("assets")
           .where("messageId", "in", expired)
           .execute();
+        await db
+          .deleteFrom("message_reactions")
+          .where("messageId", "in", expired)
+          .execute();
         await db.deleteFrom("messages").where("id", "in", expired).execute();
         result.messages += expired.length;
         result.assets += assets.length;

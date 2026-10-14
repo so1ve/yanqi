@@ -7,6 +7,7 @@ WORKDIR /app
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/bot/package.json ./packages/bot/package.json
+COPY patches ./patches
 
 RUN ENV=/root/.shrc SHELL=/bin/sh npx --yes get-pnpm
 

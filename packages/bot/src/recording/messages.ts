@@ -24,6 +24,9 @@ export async function messageChunks(
   messages: Message[],
   budget: number,
 ): Promise<ChatMessage[][]> {
+  const reactions = await store.reactions.forMessages(
+    messages.map((message) => message.id),
+  );
   const chunks: ChatMessage[][] = [];
   let chunk: ChatMessage[] = [];
   let size = 2;
@@ -67,6 +70,8 @@ export async function messageChunks(
     );
     const length = Math.ceil(text.length / parts);
 
+    const items: ChatMessage[] = [];
+
     for (let index = 0; index < parts; index++) {
       const item: ChatMessage = {
         id: `m${message.id}`,
@@ -85,9 +90,33 @@ export async function messageChunks(
             ? `qq:${message.replyTo}`
             : null,
       };
+
+      items.push(item);
+    }
+
+    // 回应只附一次；数量多时沿用原消息 ID 分片，不能挤掉原文或撑爆输入。
+    let last = items.at(-1)!;
+
+    for (const reaction of reactions.filter(
+      (reaction) => reaction.messageId === message.id && reaction.count > 0,
+    )) {
+      const { emojiId, emojiType, name, count, meaning, basis } = reaction;
+      const entry = { emojiId, emojiType, name, count, meaning, basis };
+      const next = [...(last.reactions ?? []), entry];
+
+      if (JSON.stringify({ ...last, reactions: next }).length + 2 > budget) {
+        last = { ...last, text: "", reactions: [entry] };
+        // 最近上下文从尾部截取，正文仍放在回应分片之后。
+        items.splice(-1, 0, last);
+      } else {
+        last.reactions = next;
+      }
+    }
+
+    for (const item of items) {
       const lengthInJson = JSON.stringify(item).length + 1;
 
-      if (lengthInJson > budget) {
+      if (lengthInJson + 1 > budget) {
         throw new Error(`消息 m${message.id} 的元数据超过单次 AI 输入字符上限`);
       }
 
