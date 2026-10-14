@@ -59,9 +59,18 @@ export class Topics {
 
   public async page(
     groupId: string,
-    options: { offset: number; limit: number; query?: string },
+    options: {
+      offset: number;
+      limit: number;
+      query?: string;
+      view: "ready" | "pending";
+    },
   ) {
-    let query = this.#db.selectFrom("topics").where("groupId", "=", groupId);
+    // 按是否已有正文分开列表；已有版本在更新时仍可阅读。
+    let query = this.#db
+      .selectFrom("topics")
+      .where("groupId", "=", groupId)
+      .where("revision", options.view === "pending" ? "=" : ">", 0);
     const text = options.query;
 
     if (text) {

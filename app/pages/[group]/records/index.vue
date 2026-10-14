@@ -13,6 +13,11 @@ import type { Page, RecordItem } from "~/types/api";
 import { formatTime } from "~/utils/format";
 
 const { groupId, group } = useWorkspace();
+const view = useQueryValue(
+  "view",
+  (value) => (value === "pending" ? "pending" : "ready"),
+  { reset: ["page"] },
+);
 const searchQuery = useQueryValue("q", (value) => value ?? "", {
   reset: ["page"],
 });
@@ -23,7 +28,7 @@ watch(searchQuery, (value) => {
 });
 const { data, error, loading, refresh } = useApiData<Page<RecordItem>>(
   () =>
-    `groups/${groupId.value}/records?page=${page.value}&q=${encodeURIComponent(searchQuery.value)}`,
+    `groups/${groupId.value}/records?view=${view.value}&page=${page.value}&q=${encodeURIComponent(searchQuery.value)}`,
 );
 const columns: DataTableColumns<RecordItem> = [
   {
@@ -81,6 +86,10 @@ const createGroupId = ref("");
     </NButton>
     <template #toolbar>
       <ListToolbar as="form" @submit.prevent="searchQuery = query">
+        <NRadioGroup v-model:value="view" aria-label="纪要列表类型">
+          <NRadioButton value="ready">已整理</NRadioButton>
+          <NRadioButton value="pending">待整理</NRadioButton>
+        </NRadioGroup>
         <NInput
           v-model:value="query"
           class="search"
@@ -95,11 +104,21 @@ const createGroupId = ref("");
     </template>
   </PageHeading>
   <LoadState
-    description="可以在群里让小栖整理讨论，也可以点击“新建纪要”选择已保存的消息。"
+    :description="
+      view === 'pending'
+        ? '尚未生成正文的纪要会显示在这里，整理完成后可在“已整理”中查看。'
+        : '可以在群里让小栖整理讨论，也可以点击“新建纪要”选择已保存的消息。'
+    "
     :empty="!data?.items.length"
     :error
     :loading="loading && !data"
-    :title="searchQuery ? '没有找到匹配的纪要' : '还没有纪要'"
+    :title="
+      searchQuery
+        ? '没有找到匹配的纪要'
+        : view === 'pending'
+          ? '没有待整理的纪要'
+          : '还没有已整理的纪要'
+    "
     @retry="refresh"
   >
     <AppPanel>
