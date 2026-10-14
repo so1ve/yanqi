@@ -34,6 +34,7 @@ export const configSchema = Type.Object(
     LOG_DETAIL_CHARS: positive(4000),
     BOT_PERSONA: Type.String({ default: defaultPersona }),
     AI_MODEL: modelSchema,
+    AI_CONTEXT_TOKENS: positive(272_000),
     DECISION_PROVIDER: Type.Enum(["llm", "openai", "vercel", "jev", "clef"], {
       default: "llm",
     }),
@@ -84,6 +85,18 @@ function readURL(value: string, protocols: string[], field: string): string {
 export type ModelConfig = Static<typeof modelSchema>;
 export type Config = Static<typeof configSchema>;
 
+export function contextInputBudget(config: Config): number {
+  // SDK 还会预留 4,096 token；会话需提前给完整输出额度留出空间。
+  return (
+    config.AI_CONTEXT_TOKENS -
+    Math.max(
+      config.AI_MAX_OUTPUT_TOKENS,
+      config.AI_THINKING_MAX_OUTPUT_TOKENS,
+    ) -
+    4096
+  );
+}
+
 export function parseConfig(input: unknown): Config {
   const config = Value.Default(configSchema, structuredClone(input));
 
@@ -92,6 +105,12 @@ export function parseConfig(input: unknown): Config {
       `配置错误：${Value.Errors(configSchema, config)
         .map((error) => `${error.instancePath} ${error.message}`)
         .join("；")}`,
+    );
+  }
+
+  if (contextInputBudget(config) <= 0) {
+    throw new Error(
+      "配置错误：主模型上下文窗口须大于普通和思考请求的输出上限，并额外留出 4,096 token 输入余量",
     );
   }
 

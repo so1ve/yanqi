@@ -3,6 +3,12 @@ import type { Config } from "@yanqi/bot";
 
 const draft = defineModel<Config>({ required: true });
 
+function updateContextWindow(value: number | null): void {
+  if (value !== null) {
+    draft.value.AI_CONTEXT_TOKENS = value;
+  }
+}
+
 function enable(
   kind: "AI_VISION_MODEL" | "AI_AUDIO_MODEL",
   value: boolean,
@@ -17,7 +23,22 @@ function enable(
       v-model="draft.AI_MODEL"
       description="理解请求、整理纪要和回复群消息。"
       title="主模型"
-    />
+    >
+      <NFormItem class="full-width" label="上下文窗口（token）">
+        <div class="w-full">
+          <NInputNumber
+            class="w-full"
+            :min="1"
+            :precision="0"
+            :value="draft.AI_CONTEXT_TOKENS"
+            @update:value="updateContextWindow"
+          />
+          <p class="form-help">
+            按服务商提供的容量填写，包含输入和输出。调大后可保留更长的群会话；接近容量时自动压缩，并预留回复空间。
+          </p>
+        </div>
+      </NFormItem>
+    </ModelEditor>
     <div class="model-card-head">
       <div>
         <h3>图片理解</h3>
@@ -56,6 +77,10 @@ function enable(
 </template>
 
 <style scoped>
+.w-full {
+  width: 100%;
+}
+
 .form-help {
   font-size: 12px;
   color: #8a97a7;

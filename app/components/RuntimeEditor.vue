@@ -10,7 +10,7 @@ const fields: { key: NumericKey; label: string; min?: number }[] = [
   { key: "AI_MAX_OUTPUT_TOKENS", label: "普通请求输出上限（token）" },
   { key: "AI_THINKING_TIMEOUT_MS", label: "思考请求超时（毫秒）" },
   { key: "AI_THINKING_MAX_OUTPUT_TOKENS", label: "思考请求输出上限（token）" },
-  { key: "AI_INPUT_CHARS", label: "AI 输入预算（字符）", min: 4000 },
+  { key: "AI_INPUT_CHARS", label: "原文分段与检索预算（字符）", min: 4000 },
   { key: "AI_DAILY_CALL_LIMIT", label: "每日模型调用上限" },
   { key: "DETECT_INTERVAL_MS", label: "每批消息最长收集时间（毫秒）" },
   { key: "DETECT_BATCH_SIZE", label: "每批识别的消息数" },
@@ -32,8 +32,9 @@ function update(key: NumericKey, value: number | null): void {
     <div class="section-title">
       <h2>运行参数</h2>
       <p>
-        使用 DeepSeek
-        官方服务时，请求识别、整理和合并纪要会启用思考，普通回复关闭思考。输出上限包含思考内容、正文和工具参数。
+        使用 DeepSeek 官方服务时，主对话使用 low
+        思考，请求识别、资料查阅和纪要整理使用 high
+        思考。输出上限包含思考内容、正文和工具参数。上下文窗口在“模型服务”中设置。
       </p>
     </div>
     <FormGrid>

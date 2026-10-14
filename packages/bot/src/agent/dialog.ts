@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
 
+import {
+  estimateContextTokens,
+  estimateMessageTokens,
+  estimateTextTokens,
+} from "@earendil-works/pi-ai/utils/estimate";
 import { Logger } from "@koishijs/core";
 import { Type } from "typebox";
 
 import type { Config } from "../config.ts";
+import { contextInputBudget } from "../config.ts";
 import type { Conversation } from "../storage/conversations.ts";
 import type { ChatMessage } from "../types.ts";
 import { AiError, failureMessage } from "../utils/errors.ts";
@@ -158,13 +164,18 @@ export class DialogAI {
   }
 
   async #compact(conversation: Conversation): Promise<Conversation> {
-    const budget = this.#config.AI_INPUT_CHARS;
+    const budget = contextInputBudget(this.#config);
     const { messages, summary } = conversation;
+    // 优先使用服务返回的 token 用量，包含系统提示词、工具、缓存和本轮输出。
+    const estimate = estimateContextTokens(messages);
+    const usedTokens =
+      estimate.tokens +
+      (estimate.lastUsageIndex === null ? estimateTextTokens(summary) : 0);
 
     if (
       messages.length === 0 ||
       // 提前留出四分之一预算给下一次请求及其最新上下文。
-      JSON.stringify(messages).length + summary.length <= (budget * 3) / 4
+      usedTokens <= (budget * 3) / 4
     ) {
       return conversation;
     }
@@ -174,23 +185,31 @@ export class DialogAI {
 
     if (
       split <= 0 ||
-      JSON.stringify(messages.slice(split)).length > budget / 3
+      messages
+        .slice(split)
+        .reduce(
+          (tokens, message) => tokens + estimateMessageTokens(message),
+          0,
+        ) >
+        budget / 3
     ) {
       split = messages.length;
     }
 
+    // 调大上下文用于保留更多原始轮次，压缩摘要仍保持紧凑。
+    const maxChars = Math.floor(this.#config.AI_INPUT_CHARS / 4);
     const result = await this.#runtime.json(
       "context_compaction",
       Type.Object(
         {
           summary: Type.String({
             minLength: 1,
-            maxLength: Math.floor(budget / 4),
+            maxLength: maxChars,
           }),
         },
         { additionalProperties: false },
       ),
-      compactionPrompt(Math.floor(budget / 4)),
+      compactionPrompt(maxChars),
       {
         groupId: conversation.groupId,
         summary,
@@ -200,9 +219,11 @@ export class DialogAI {
     );
 
     this.#logger.info(
-      "群 %s 会话 %s 已压缩：%s 条交互 -> %s 字符摘要，保留 %s 条交互",
+      "群 %s 会话 %s 已压缩：上下文约 %s/%s token，%s 条交互 -> %s 字符摘要，保留 %s 条交互",
       conversation.groupId,
       conversation.id,
+      usedTokens,
+      this.#config.AI_CONTEXT_TOKENS,
       split,
       result.summary.length,
       messages.length - split,

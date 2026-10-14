@@ -34,6 +34,7 @@ const model = defineModel<ModelConfig>({ required: true });
           <p class="form-help">每个模型都可以使用不同的服务和密钥。</p>
         </div>
       </NFormItem>
+      <slot />
     </FormGrid>
   </section>
 </template>

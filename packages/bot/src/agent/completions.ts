@@ -40,8 +40,8 @@ export function createCompletion(
     // reasoning 声明模型能力；thinkingLevel 控制本次是否启用思考。
     reasoning: isDeepSeek,
     cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    // 输入字符预算不是模型上下文容量。0 让 SDK 保留配置的输出额度。
-    contextWindow: 0,
+    // 视觉模型使用独立服务，不套用主模型的容量。
+    contextWindow: endpoint === config.AI_MODEL ? config.AI_CONTEXT_TOKENS : 0,
     maxTokens,
     compat: {
       supportsStore: false,
@@ -92,11 +92,12 @@ export function createCompletion(
 
           // 记录 SDK 转换后的实际请求，不记录密钥。
           logger.info(
-            "%s provider=%s model=%s thinking=%s messages=%s chars=%s tools=%s tool_choice=%s max_tokens=%s timeout=%s ms",
+            "%s provider=%s model=%s thinking=%s context_window=%s messages=%s chars=%s tools=%s tool_choice=%s max_tokens=%s timeout=%s ms",
             label,
             new URL(endpoint.baseURL).origin,
             params.model,
             isDeepSeek ? thinkingLevel : "provider-default",
+            model.contextWindow || "provider-default",
             params.messages.length,
             JSON.stringify(params.messages).length,
             params.tools?.length ?? 0,
