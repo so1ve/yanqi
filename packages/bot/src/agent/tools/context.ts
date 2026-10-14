@@ -42,6 +42,7 @@ export const revision = Type.Optional(
   }),
 );
 
+// description 和参数描述会直接发送给模型；不要随意改写，遵循 ../prompts/README.md。
 export const tool = <P extends TSchema>(
   context: RequestContext,
   name: string,

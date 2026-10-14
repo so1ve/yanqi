@@ -16,7 +16,8 @@ export async function selectRequests(
       },
       { additionalProperties: false },
     ),
-    `${instructions}\n只判断 candidateIds 中的消息，其他消息仅作上下文。返回 {"requestIds":["需要小栖回应或处理的消息 ID"]}；没有此类消息时返回空数组。`,
+    // 与独立决策共用分类含义，仅输出协议不同；修改遵循 prompts/README.md。
+    `${instructions}\n<output>逐条分类 candidateIds 中的消息。返回 {"requestIds":["选为 process 的消息 ID"]}，没有时返回 {"requestIds":[]}；其他消息只作上下文。</output>`,
     { ...input, candidateIds },
     { thinking: "high" },
   );

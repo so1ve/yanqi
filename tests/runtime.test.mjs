@@ -31,10 +31,10 @@ test("结构化输出经过真实流式客户端解析、修复和用量保存�
     requests[0].response_format.json_schema.schema,
     JSON.parse(JSON.stringify(schema)),
   );
-  assert.equal(
-    requests[0].messages[0].content,
-    `只整理部署讨论。\n最终回复必须是符合以下 JSON Schema 的 JSON 对象：\n${JSON.stringify(schema)}`,
-  );
+  const systemPrompt = requests[0].messages[0].content;
+
+  assert.ok(systemPrompt.startsWith("只整理部署讨论。\n"));
+  assert.ok(systemPrompt.includes(JSON.stringify(schema)));
   const usage = await store.usage.summary("100", beijingDate(Date.now()));
 
   assert.equal(usage.calls, 1);

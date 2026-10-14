@@ -110,7 +110,7 @@ export function chatHistoryTools(context: ReadContext, onMetadata: OnMetadata) {
     tool(
       context,
       "history",
-      "先查询本群聊天的元数据，不返回正文。context 查询 beforeId 之前最近 40 条对话，省略时从请求前开始；messages 按 scope 查询；search 字面搜索聊天，均包含成员和言栖的发言。返回句柄、消息数、文本字符数、附件规模和时间范围。availableHistory 是本群请求前全部可读历史的数量和时间边界，不代表入群时间；textChars 不含附件，attachments.parsedTextChars 包括已解析的转发正文、识图和转写，forwardedMessages 包括嵌套转发中的消息，pending 是尚未解析的附件数。搜索统计只覆盖命中消息。元数据会立即转交小栖，需要正文时用 read_history 携带句柄读取。",
+      "查询本群聊天元数据和 handle，不加载正文。context 取 beforeId 之前最近 40 条，省略从请求前开始；messages 按 scope 选取；search 字面搜索。均包含群成员和言栖发言。返回范围、消息数、文字和附件规模，搜索统计仅覆盖命中消息。availableHistory 是本地可读历史边界，不是入群时间。元数据立即转交小栖，正文用 read_history(handle) 读取。",
       chatParameters,
       async (args) => {
         const sources =

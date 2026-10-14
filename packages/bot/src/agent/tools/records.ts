@@ -44,7 +44,7 @@ export function recordTools(context: ToolContext) {
     tool(
       context,
       "record",
-      "按用户当前的记录要求新建独立文档，从第 1 版开始；谈论记录功能不调用本工具。修改、补全或重做已有文档用 edit_record(action=update)，保留同一 topicId。先依据请求和上下文确定范围；指代或讨论开头不清时，委派 subagent(kind=history) 查找。scope 可指定消息起止 ID、全部历史、多个话题或时间范围，focus 指定整理要求。后台读取完整范围，不只整理你看到的片段。可自行拟定标题；directive 省略为自行判断，send 为完成后发送，hold 为只保存。立即返回任务 ID 和 workload 元数据；先评估工作量，需要较多整理就 notify 一次，再 skip_reply 让后台交付。只有下一步操作依赖结果时才用 task 等待。",
+      "按当前请求新建独立纪要，第 1 版。scope 指定完整范围，focus 仅写用户选材要求，标题可自拟。已知范围直接调用，范围不明再委派 history 助手。后台读取全部原文及附件，返回任务 ID、状态和 workload；有较多剩余工作时 notify 一次，再 skip_reply 让后台交付，仅后续操作依赖结果时等待。directive 省略为 auto，send 为完成后发送，hold 为暂缓全文。修改已有文档用 edit_record(update)；谈论记录功能不调用。",
       createParameters,
       async (args) => {
         const sources = await selectSources(store, message, args.scope);
@@ -69,7 +69,7 @@ export function recordTools(context: ToolContext) {
     tool(
       context,
       "edit_record",
-      "操作本群已有纪要：update 在同一 topicId 下创建下一版，保留旧版；scope 或 focus 可修改范围和整理要求，省略则按原范围和要求重新整理，无需新消息。send 直接发送数据库全文，可用 revision 指定第几版；省略时发送最新内容，尚未整理完成则等整理后发送。hold 暂缓全文发送。无需重新输出或读取已有全文。只有另建独立文档才用 record。",
+      "操作已有纪要。update 沿用 topicId 生成下一版并保留旧版；scope、focus 省略时按原要求重做，可在没有新消息时调用。send 直接发送全文，revision 省略用最新内容，尚未完成则整理后发送；无需先读取正文。hold 暂缓全文。整理时返回 workload，按剩余工作判断是否 notify，之后让后台交付；只有明确另存独立文档才用 record。",
       editParameters,
       async (args) => {
         let topic = await getTopic(context, args.topicId);

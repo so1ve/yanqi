@@ -7,7 +7,7 @@ import type { Store } from "../../storage/store.ts";
 import type { ChatMessage } from "../../types.ts";
 import { logContext, logDetail } from "../../utils/logging.ts";
 import { chatSourceRules } from "../prompts/common.ts";
-import { prompts as conversationPrompts } from "../prompts/conversation.ts";
+import { decisionCriteria, decisionPrompt } from "../prompts/requests.ts";
 import type { AgentRuntime } from "../runtime.ts";
 import { reserveCall } from "../usage.ts";
 import { createClefDecision } from "./clef.ts";
@@ -108,7 +108,7 @@ export class Decisions {
     state: Record<string, unknown>,
     candidates: string[],
   ): Promise<string[]> {
-    const rules = `${chatSourceRules(this.#config.BOT_QQ)}\n${conversationPrompts.requests}`;
+    const rules = `${decisionPrompt}\n${chatSourceRules(this.#config.BOT_QQ)}`;
 
     if (!this.#evaluate) {
       return selectRequests(this.#runtime, rules, state, candidates);
@@ -118,13 +118,9 @@ export class Decisions {
       candidates.map((id) => [
         id,
         {
-          instructions: `${rules}\n只判断 messages 中 ID 为 ${id} 的消息，其他消息仅供理解上下文。memory.user 属于 requestUserId。`,
-          criteria: {
-            process:
-              "当前有让小栖执行、回答或更新偏好的意图，包括未 @ 的明确整理要求、对刚才请求的补充或催办。少闲聊不妨碍处理具体任务。",
-            ignore:
-              "当前没有向小栖提出任务、问题或偏好变更：群友闲聊、分享表情、讨论功能、转述指令，或按群约定无需回应的普通招呼。",
-          },
+          // 分类规则必须放在服务实际读取的 instructions 中，修改遵循 prompts/README.md。
+          instructions: `${rules}\n<target>只分类 messages 中 ID 为 ${id} 的消息，返回 process 或 ignore 对应的选择。</target>`,
+          criteria: decisionCriteria,
         },
       ]),
     );

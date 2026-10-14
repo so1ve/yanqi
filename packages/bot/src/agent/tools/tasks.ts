@@ -27,7 +27,7 @@ export function taskTool(context: ToolContext) {
   return tool(
     context,
     "task",
-    "inspect 查看指定任务；status 查看本群后台任务和近期纪要结果。催办或问进度时查看当前状态即可，不调用 wait。只有回答或下一步操作依赖最终结果时才用 wait，它等到完成、失败、取消或延后重试才返回，不定时唤醒。询问附件内容时先等对应任务。retry 重试指定失败任务并等待；retry_failed 重试本群失败的后台任务和发送。对话请求不能重试或等待，其失败不代表后台整理失败。不要循环 inspect 或 status；已安排延后重试时说明原因和时间后结束。",
+    "查询或等待本群后台任务。inspect 查指定 ID，status 查总体状态和近期纪要，适合催办。wait 仅用于后续答复或操作依赖结果时，等到完成、失败、取消或延后重试才返回，不定时唤醒。retry 重试指定失败任务并等待，retry_failed 重试本群失败后台任务和发送。对话请求不可重试或等待；其失败不代表纪要失败。延后重试时说明原因和时间后结束，不循环查询。",
     parameters,
     async (args, signal) => {
       if (args.action === "status") {

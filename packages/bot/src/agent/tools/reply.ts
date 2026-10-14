@@ -14,7 +14,7 @@ export function replyTool(context: ToolContext, subagents: Subagents) {
   return tool(
     context,
     "reply",
-    "向 QQ 群发送最终答复并结束本次对话，之后不会继续执行任务。用户要求整理、修改或发送时，先调用相应操作工具，不能用本工具答应稍后处理。进度提示用 notify。text 必须是非空文字，按问题所需详略回答。不需要发言时用 skip_reply；发纪要用 edit_record(action=send)，不在这里重复输出全文。",
+    "发送非空 text 作为最终答复，并结束本次请求。先完成必要操作或启动后台任务，再调用；不能用承诺代替执行。篇幅按问题所需信息决定。进度提示用 notify，安静结束用 skip_reply，发送纪要全文用 edit_record(send)。",
     parameters,
     async ({ text }, signal) => {
       subagents.assertIdle();
@@ -47,7 +47,7 @@ export const skipReplyTool = (context: ToolContext, subagents: Subagents) =>
   tool(
     context,
     "skip_reply",
-    "不向 QQ 群发送消息，结束本次对话。按当前请求和记忆决定保持安静时使用，例如群友之间的讨论、安静保存记忆、约定减少接话，或其他工具已交付结果且无需补充答复。先完成必要的操作，并完成或取消查阅任务。",
+    "结束本次请求，不发群消息。用于无需回应、安静保存偏好，或其他工具已负责交付结果的情况。先落实必要操作并处理耗时提示，完成或取消查阅任务，再调用。",
     object({}),
     async () => {
       subagents.assertIdle();
@@ -62,7 +62,7 @@ export function notifyTool(context: ToolContext) {
   return tool(
     context,
     "notify",
-    "根据子 agent 返回的元数据、内容简报或整理结果中的资料规模和复杂程度，自主判断有较多工作仍需处理时，向群里发一次简短提示。元数据已足够判断时无需等正文读完。不能仅因等待超时、响应慢或任务未完成而调用。只说实际正在整理的内容，不说已完成，不播报内部任务 ID 或子 agent。发完继续处理，不结束对话；同一次请求最多发一次。最终答复用 reply，无需再发言时用 skip_reply。",
+    "发送一次简短进度提示，随后继续处理。助手 metadata/brief 或记录工具 workload 已表明剩余整理较多时调用，无需等正文读完。只说明实际处理的内容，不估计未知时间；响应慢或任务未完成本身不是依据。每次请求最多一次，明确静默要求时不发。最终答复用 reply，无需补充时用 skip_reply。",
     object({ text: Type.String({ minLength: 1, pattern: "\\S" }) }),
     async ({ text }, signal) => {
       const key = `progress:${message.id}`;

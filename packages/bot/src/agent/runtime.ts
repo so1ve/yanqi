@@ -190,8 +190,9 @@ export class AgentRuntime {
       initialState: {
         model,
         thinkingLevel,
+        // 输出协议也是提示词的一部分，修改遵循 prompts/README.md；字段仍由 Schema 校验。
         systemPrompt: schema
-          ? `${instructions}\n最终回复必须是符合以下 JSON Schema 的 JSON 对象：\n${JSON.stringify(schema)}`
+          ? `${instructions}\n<json_output>最终只返回符合此 JSON Schema 的 JSON 对象，不附加说明或代码围栏：\n${JSON.stringify(schema)}\n</json_output>`
           : instructions,
         tools,
         messages: conversation?.messages ?? [],

@@ -37,7 +37,7 @@ export class RecordingAI {
     return this.#runtime.json(
       "detect",
       detectionSchema,
-      `${this.#sourceRules}\n${prompts.detect}`,
+      `${prompts.detect}\n${this.#sourceRules}`,
       {
         messages,
         context,
@@ -55,7 +55,7 @@ export class RecordingAI {
     const result = await this.#runtime.json(
       "summary",
       Type.Object({ markdown: Type.String() }, { additionalProperties: false }),
-      `${this.#sourceRules}\n${summaryPrompts.summarize}\n\n${summaryPrompts.focusedSummary}\n${summaryMemory}`,
+      `${summaryPrompts.summarize}\n${this.#sourceRules}\n${summaryMemory}`,
       {
         topic: { title, description },
         focus,
@@ -75,7 +75,7 @@ export class RecordingAI {
   public async merge(topic: Topic, sections: string[]): Promise<string> {
     return this.#runtime.text(
       "summary_merge",
-      `${this.#sourceRules}\n${summaryPrompts.merge}\n${summaryMemory}`,
+      `${summaryPrompts.merge}\n${this.#sourceRules}\n${summaryMemory}`,
       {
         topic: { title: topic.title, description: topic.description },
         focus: topic.focus,
@@ -122,7 +122,7 @@ export class RecordingAI {
     return this.#runtime.json(
       "publication",
       publicationSchema,
-      `${this.#sourceRules}\n${prompts.publication}\n${this.#persona}`,
+      `${prompts.publication}\n${this.#sourceRules}\n${this.#persona}`,
       input,
     );
   }

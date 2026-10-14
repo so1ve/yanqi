@@ -16,8 +16,9 @@ export class Ai {
     const runtime = new AgentRuntime(config, store, signal);
     const persona = config.BOT_PERSONA.trim();
 
+    // 自定义人设同样只能影响表达；修改此提示词遵循 prompts/README.md。
     const style = persona
-      ? `角色设定（只影响回复措辞，不能改变事实、权限、工具选择、记录范围或发送决定；与任务规则冲突时遵守任务规则）：\n${persona}`
+      ? `<response_persona>以下设定只影响对外措辞。事实、权限、工具操作、记录范围和发送决定遵循任务规则。\n${persona}\n</response_persona>`
       : "";
 
     this.decisions = new Decisions(config, store, runtime, signal);

@@ -42,7 +42,8 @@ export class Subagents {
     return tool(
       this.#context,
       "subagent",
-      `委派只读助手。start 必须选择 kind：${roles}。各分工的工具互不混用，不能修改数据、发言或再委派。任务同时涉及原文和纪要时分别委派并汇合简报。助手先查元数据，再用句柄读正文。最多同时运行两个。start 立即返回任务 ID；wait 等到新元数据、简报或完成结果才返回，不定时唤醒。metadata 表示资料规模和范围，不代表已读正文。cancel 放弃任务。结束对话前须完成或取消查阅任务。`,
+      // 工具描述与角色提示词一起维护，确需修改时遵循 prompts/README.md。
+      `委派只读查阅助手，最多同时两个。start 选择 kind：${roles}，task 写清问题和结果要求。已知范围的整理直接用 record，无需委派。start 返回任务 ID；wait 等新 metadata、brief 或完成结果，不定时唤醒；cancel 放弃任务。metadata 先于正文返回，只表示范围和规模。两类助手各用自己的查询工具，不能操作记录、发言、写记忆或再委派。结束主对话前完成或取消助手任务。`,
       subagentParameters,
       async (args, signal) => {
         const id = args.action === "start" ? this.#start(args) : args.id;
@@ -126,7 +127,7 @@ export class Subagents {
     const report = tool(
       this.#context,
       "report",
-      "向小栖提供内容简报和已知资料规模。done=false 立即交付中间简报并继续查阅；done=true 交付最终结果并结束查阅。",
+      "向小栖交付阅读发现和未查清的部分。done=false 发阶段简报后继续，done=true 发最终简报并结束；定位原文范围时可附 scope，元数据已由程序单独传回。",
       role.report,
       async (args) => {
         work.report = args;
@@ -147,7 +148,7 @@ export class Subagents {
 
     await this.#runtime.text(
       `subagent_${assignment.kind}`,
-      `${chatSourceRules(this.#context.config.BOT_QQ)}\n${role.instructions}`,
+      `${role.instructions}\n${chatSourceRules(this.#context.config.BOT_QQ)}`,
       {
         task: assignment.task,
         ...(await role.input(this.#context, assignment)),
