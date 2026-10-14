@@ -102,7 +102,7 @@ export class DialogAI {
           tools: [
             replyTool(context, subagents),
             skipReplyTool(context, subagents),
-            notifyTool(context),
+            notifyTool(context, subagents),
             subagents.tool(),
             readTool(context),
             inspectRecordTool(context),
@@ -132,7 +132,7 @@ export class DialogAI {
               return {
                 block: true,
                 reason:
-                  "本轮先执行纪要操作，结果由后台统一交付。操作失败时再根据错误处理。",
+                  "先执行实际操作。耗时操作的接手提示放在该工具的 progress 参数中，成功安排后再发送；最终结果由后台统一交付。操作失败时按错误处理。",
               };
             }
 

@@ -17,6 +17,7 @@ import {
   tool,
   topicId,
 } from "./context.ts";
+import { progress, sendProgress } from "./reply.ts";
 
 const createParameters = object({
   records: Type.Array(recordSelection, {
@@ -26,6 +27,7 @@ const createParameters = object({
   }),
   directive,
   replyTo,
+  progress,
 });
 const editParameters = Type.Union([
   object({
@@ -35,8 +37,15 @@ const editParameters = Type.Union([
     focus: recordFocus,
     directive,
     replyTo,
+    progress,
   }),
-  object({ action: Type.Literal("send"), topicId, revision, replyTo }),
+  object({
+    action: Type.Literal("send"),
+    topicId,
+    revision,
+    replyTo,
+    progress,
+  }),
   object({ action: Type.Literal("hold"), topicId }),
 ]);
 
@@ -47,9 +56,9 @@ export function recordTools(context: ToolContext) {
     tool(
       context,
       "record",
-      "一次新建 records 中的全部独立纪要，各从第 1 版开始。每项给出 title、scope，拆分时用 focus 限定本篇主题；范围可重叠。同一请求的多份纪要一起提交，范围或主题划分不清时先委派 history 助手。先校验全部范围再创建；范围为空或无效时整批不创建，修正后重试。后台逐篇读取原文和附件，全部结束后统一交付。成功安排后程序直接结束主对话，不再调用模型；先完成所需查询和其他操作，再把全部纪要一起提交。范围无效或操作报错时继续修正。directive 对整批生效，省略为 auto，send 完成后发送，hold 暂缓全文。修改已有纪要用 edit_record(update)。",
+      "一次新建 records 中的全部独立纪要，各从第 1 版开始。每项给出 title、scope，拆分时用 focus 限定本篇主题；范围可重叠。同一请求的多份纪要一起提交，范围或主题划分不清时先委派 history 助手。先校验全部范围再创建；范围为空或无效时整批不创建，修正后重试。后台逐篇读取原文和附件，全部结束后统一交付。工作量较大时在 progress 填一句接手提示，整批成功安排后发送，不逐篇提示。成功安排后程序直接结束主对话，不再调用模型；先完成所需查询和其他操作，再把全部纪要一起提交。范围无效或操作报错时继续修正。directive 对整批生效，省略为 auto，send 完成后发送，hold 暂缓全文。修改已有纪要用 edit_record(update)。",
       createParameters,
-      async (args) => {
+      async (args, signal) => {
         const quote = await resolveReply(context, args.replyTo);
         const selections = [];
 
@@ -80,15 +89,20 @@ export function recordTools(context: ToolContext) {
 
         wake();
 
-        return { records };
+        return {
+          records,
+          progress: records.some((record) => record.state === "processing")
+            ? await sendProgress(context, args.progress, signal)
+            : undefined,
+        };
       },
     ),
     tool(
       context,
       "edit_record",
-      "操作已有纪要。update 沿用 topicId 生成下一版并保留旧版；scope、focus 省略时按原要求重做，可在没有新消息时调用。send 直接发送全文，revision 省略用最新内容，尚未完成则整理后发送；无需先读取正文。hold 暂缓全文。成功安排整理或发送后，程序在本轮工具执行完毕时结束主对话，由后台统一交付；所需查询先完成，多篇修改或发送在同一轮调用。只有明确另存独立文档才用 record。",
+      "操作已有纪要。update 沿用 topicId 生成下一版并保留旧版；scope、focus 省略时按原要求重做，可在没有新消息时调用。send 直接发送全文，revision 省略用最新内容，尚未完成则整理后发送；无需先读取正文。hold 暂缓全文。成功安排整理或发送后，程序在本轮工具执行完毕时结束主对话，由后台统一交付；所需查询先完成，多篇修改或发送在同一轮调用。需要较多整理时可填 progress；直接发送已保存版本不会发接手提示。只有明确另存独立文档才用 record。",
       editParameters,
-      async (args) => {
+      async (args, signal) => {
         let topic = await getTopic(context, args.topicId);
         const quote = await resolveReply(
           context,
@@ -155,7 +169,13 @@ export function recordTools(context: ToolContext) {
 
         wake();
 
-        return result;
+        return {
+          ...result,
+          progress:
+            result.state === "processing"
+              ? await sendProgress(context, args.progress, signal)
+              : undefined,
+        };
       },
     ),
   ];

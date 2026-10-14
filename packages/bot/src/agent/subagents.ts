@@ -190,6 +190,15 @@ export class Subagents {
     assert.ok(work.report?.done, "资料助手未交付最终简报");
   }
 
+  public hasPendingRead(): boolean {
+    return [...this.#runs.values()].some(
+      ({ work }) =>
+        work.state === "running" &&
+        work.metadata !== undefined &&
+        !work.report?.done,
+    );
+  }
+
   public assertIdle(): void {
     if ([...this.#runs.values()].some(({ work }) => work.state === "running")) {
       throw new Error(
