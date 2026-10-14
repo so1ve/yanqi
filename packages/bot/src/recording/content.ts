@@ -1,5 +1,6 @@
 import { attachmentReference, forwardMessages } from "../onebot/content.ts";
 import { reactionMeaning } from "../reactions/catalog.ts";
+import { imageMimeType } from "../storage/asset-files.ts";
 import type { Asset, Segment } from "../types.ts";
 import { beijingTime } from "../utils/time.ts";
 
@@ -85,7 +86,9 @@ export const contentText = (
 
 function describeAttachment(asset: Asset): string {
   const imageRef =
-    asset.kind === "image" && asset.path ? `，imageRef=asset:${asset.id}` : "";
+    asset.path && imageMimeType(asset.path)
+      ? `，imageRef=asset:${asset.id}`
+      : "";
   const state =
     asset.error ||
     (asset.state === "pending"

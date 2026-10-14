@@ -10,6 +10,7 @@ import {
 import type { Asset, Segment } from "../types.ts";
 import {
   assetPath,
+  imageMimeType,
   interpretationPath,
   readInterpretation,
 } from "./asset-files.ts";
@@ -230,13 +231,14 @@ export class Assets {
       return [];
     }
 
-    return this.#db
+    const assets = await this.#db
       .selectFrom("assets")
       .selectAll()
       .where("messageId", "in", messageIds)
-      .where("kind", "=", "image")
       .where("path", "is not", null)
       .execute();
+
+    return assets.filter((asset) => imageMimeType(asset.path!));
   }
 
   public async save(

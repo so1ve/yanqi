@@ -3,10 +3,9 @@ import type { Asset, Message, Segment, Yanqi } from "@yanqi/bot";
 import {
   attachmentReference,
   forwardMessages,
+  imageMimeType,
   reactionMeaning,
 } from "@yanqi/bot";
-
-import { imageMimeType } from "./files";
 
 const logger = new Logger("yanqi:web");
 

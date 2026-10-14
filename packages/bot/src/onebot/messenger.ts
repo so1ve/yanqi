@@ -6,6 +6,7 @@ import { h } from "@koishijs/core";
 import type { OneBot } from "koishi-plugin-adapter-onebot";
 
 import type { Config } from "../config.ts";
+import { imageMimeType } from "../storage/asset-files.ts";
 import type { Store } from "../storage/store.ts";
 import type { Asset, Note, Segment } from "../types.ts";
 import { renderQQ, renderQQParts } from "./render.ts";
@@ -153,7 +154,7 @@ export function createMessenger(config: Config, store: Store, ctx: Context) {
             ? await store.assets.file(note.groupId, match[1]!)
             : undefined;
 
-          if (!asset?.path || asset.kind !== "image") {
+          if (!asset?.path || !imageMimeType(asset.path)) {
             throw new Error(`纪要图片不属于当前群或尚未保存：${part.href}`);
           }
 

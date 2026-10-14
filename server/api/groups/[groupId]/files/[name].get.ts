@@ -1,4 +1,4 @@
-import { assetFileName } from "@yanqi/bot";
+import { assetFileName, imageMimeType } from "@yanqi/bot";
 import {
   createError,
   defineEventHandler,
@@ -6,7 +6,7 @@ import {
   setResponseHeader,
 } from "h3";
 
-import { imageMimeType, readDataFile } from "~~/server/files";
+import { readDataFile } from "~~/server/files";
 import { groupParam, queryParam, requireItem } from "~~/server/utils/http";
 
 export default defineEventHandler(async (event) => {

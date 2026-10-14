@@ -1,5 +1,6 @@
 import { Type } from "typebox";
 
+import { imageMimeType } from "../../storage/asset-files.ts";
 import { waitForAsset } from "../../tasks/assets.ts";
 import { taskStatus } from "../../tasks/status.ts";
 import type { ToolContext } from "./context.ts";
@@ -98,7 +99,9 @@ export function taskTool(context: ToolContext) {
         if (job.kind === "asset" && "assetId" in job.payload) {
           const asset = await store.assets.get(job.payload.assetId);
           const canParse =
-            (asset.kind === "image" && Boolean(config.AI_VISION_MODEL)) ||
+            ((asset.kind === "image" ||
+              (asset.path && imageMimeType(asset.path))) &&
+              Boolean(config.AI_VISION_MODEL)) ||
             (asset.kind === "audio" && Boolean(config.AI_AUDIO_MODEL));
 
           // 之前未配置模型时，附件任务可能只保存了文件。

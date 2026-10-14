@@ -1,5 +1,6 @@
 import { extname } from "node:path";
 
+import { imageMimeType } from "@yanqi/bot";
 import {
   createError,
   defineEventHandler,
@@ -7,7 +8,7 @@ import {
   setResponseHeader,
 } from "h3";
 
-import { imageMimeType, readDataFile } from "~~/server/files";
+import { readDataFile } from "~~/server/files";
 import {
   groupParam,
   integer,

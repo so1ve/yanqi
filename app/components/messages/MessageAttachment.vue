@@ -22,7 +22,9 @@ const kinds = {
   file: { label: "文件", icon: FileText },
   forward: { label: "合并转发", icon: Messages },
 };
-const kind = computed(() => kinds[props.asset.kind]);
+const kind = computed(
+  () => kinds[props.asset.previewable ? "image" : props.asset.kind],
+);
 
 async function retry(): Promise<void> {
   if (
@@ -61,7 +63,11 @@ async function retry(): Promise<void> {
     </div>
     <p v-if="asset.error" class="error-text">{{ asset.error }}</p>
     <NButton
-      v-if="asset.error || asset.state === 'failed'"
+      v-if="
+        asset.error ||
+        asset.state === 'failed' ||
+        (asset.previewable && !asset.interpretation)
+      "
       class="retry"
       :loading="busy"
       size="small"

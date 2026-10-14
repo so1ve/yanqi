@@ -1,5 +1,6 @@
 import { relative, sep } from "node:path";
 
+import { imageMimeType } from "../storage/asset-files.ts";
 import type { Store } from "../storage/store.ts";
 import type { Asset, Message } from "../types.ts";
 import { contentText } from "./content.ts";
@@ -44,7 +45,7 @@ export async function transcript(
       contentText(message.content, assets, (asset) => {
         const name = assetNames[asset.kind];
         const link = asset.path
-          ? `${asset.kind === "image" ? "!" : ""}[${name}](<${relative(directory, asset.path).split(sep).join("/")}>)`
+          ? `${imageMimeType(asset.path) ? "!" : ""}[${name}](<${relative(directory, asset.path).split(sep).join("/")}>)`
           : name;
         const state =
           asset.error ??

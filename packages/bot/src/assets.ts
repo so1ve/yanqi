@@ -158,11 +158,11 @@ export async function collectAsset(
           createWriteStream(temporary, { flags: "wx", mode: 0o600 }),
           { signal },
         );
-        const format =
-          asset.kind === "image" ? await imageFormat(temporary) : null;
+        // QQ 的 file 表示发送方式；图片格式以文件内容为准。
+        const format = await imageFormat(temporary);
         const target = assetPath(
           store.directory,
-          `${hash.digest("hex")}${format?.extension ?? suffix}`,
+          `${hash.digest("hex")}${format?.extension ?? (mime.startsWith("image/") ? ".bin" : suffix)}`,
         );
 
         await mkdir(dirname(target), { recursive: true });
@@ -178,8 +178,9 @@ export async function collectAsset(
     }
 
     const savedPath = path;
+    const format = await imageFormat(savedPath);
 
-    if (asset.kind === "image" && config.AI_VISION_MODEL) {
+    if ((format || asset.kind === "image") && config.AI_VISION_MODEL) {
       await reportProgress(
         `正在识别图片，模型 ${config.AI_VISION_MODEL.model}`,
       );
@@ -188,8 +189,6 @@ export async function collectAsset(
         "saved",
         path,
         await store.assets.interpret(savedPath, async () => {
-          const format = await imageFormat(savedPath);
-
           if (!format) {
             throw new Error("暂不支持这种图片格式。原图已保存");
           }
@@ -213,7 +212,7 @@ export async function collectAsset(
       await reportProgress("语音转写完成，结果已保存");
     } else {
       await reportProgress(
-        asset.kind === "image" || asset.kind === "audio"
+        format || asset.kind === "image" || asset.kind === "audio"
           ? "文件已保存。请配置对应模型后解析内容"
           : "文件已保存。暂不支持解析此类文件",
       );

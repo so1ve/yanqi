@@ -21,6 +21,18 @@ export async function readInterpretation(path: string): Promise<string | null> {
   }
 }
 
+export function imageMimeType(path: string): string | undefined {
+  const types: Record<string, string> = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+  };
+
+  return types[extname(path).toLowerCase()];
+}
+
 export async function imageFormat(path: string) {
   const file = await open(path, "r");
 

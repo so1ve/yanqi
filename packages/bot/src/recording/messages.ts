@@ -1,4 +1,5 @@
 import { attachmentReference } from "../onebot/content.ts";
+import { imageMimeType } from "../storage/asset-files.ts";
 import type { Store } from "../storage/store.ts";
 import type { Asset, ChatMessage, Message } from "../types.ts";
 import { beijingTime } from "../utils/time.ts";
@@ -54,7 +55,9 @@ export async function messageChunks(
             assetId: asset.id,
             kind: asset.kind,
             imageRef:
-              asset.kind === "image" && asset.path ? `asset:${asset.id}` : null,
+              asset.path && imageMimeType(asset.path)
+                ? `asset:${asset.id}`
+                : null,
             taskId: job.id,
             state: job.state,
           };
