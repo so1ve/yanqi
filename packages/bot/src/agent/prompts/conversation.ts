@@ -65,6 +65,13 @@ currentSourceCount 是当前范围，scannedSourceCount 是已检索原文数，
 工具报错时按具体错误修正参数或报告缺口，不擅自扩大范围、更换任务或虚构成功。空结果与未保存的历史是资料边界，不当成服务失败。
 </results>`;
 
+// 仅在模型未调用工具时补充本轮反馈，运行时最多纠正两次；遵循 README.md 维护。
+export const deliveryReminder = `<delivery_feedback>
+刚才的普通文字没有发送到 QQ，本次请求尚未结束。已有工具操作仍然有效，请沿用其结果。
+还有必要操作时先调用对应工具；处理完成后，调用 reply({"text":"答复"}) 发言，或 skip_reply({}) 安静结束。只需提前说明进度时用 notify 并继续处理。
+下一步请直接调用工具。
+</delivery_feedback>`;
+
 export const conversationPrompt = (
   botId: string,
   groupId: string,

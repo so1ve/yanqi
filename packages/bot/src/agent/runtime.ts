@@ -1,5 +1,6 @@
 import type {
   AgentMessage,
+  AgentOptions,
   AgentState,
   FinishTurn,
   ThinkingLevel,
@@ -25,6 +26,7 @@ interface RequestOptions {
   tools?: AgentState["tools"];
   thinking?: ThinkingLevel;
   finishTurn?: FinishTurn;
+  prepareNextTurn?: AgentOptions["prepareNextTurnWithContext"];
   signal?: AbortSignal;
   maxTurns?: number;
 }
@@ -199,6 +201,9 @@ export class AgentRuntime {
       },
       toolExecution: "sequential",
       ...(options.finishTurn ? { finishTurn: options.finishTurn } : {}),
+      ...(options.prepareNextTurn
+        ? { prepareNextTurnWithContext: options.prepareNextTurn }
+        : {}),
       streamFn: async (_model, context, streamOptions) => {
         try {
           if (++turns > (options.maxTurns ?? 8)) {

@@ -6,8 +6,12 @@ import { Type } from "typebox";
 import type { Config } from "../config.ts";
 import type { Conversation } from "../storage/conversations.ts";
 import type { ChatMessage } from "../types.ts";
+import { AiError } from "../utils/errors.ts";
 import { compactionPrompt } from "./prompts/compaction.ts";
-import { conversationPrompt } from "./prompts/conversation.ts";
+import {
+  conversationPrompt,
+  deliveryReminder,
+} from "./prompts/conversation.ts";
 import type { AgentRuntime } from "./runtime.ts";
 import { Subagents } from "./subagents.ts";
 import type { ToolContext } from "./tools/context.ts";
@@ -52,6 +56,7 @@ export class DialogAI {
     );
     await context.store.conversations.save(conversation);
     const subagents = new Subagents(this.#runtime, context);
+    let corrections = 0;
 
     try {
       const messages = await this.#runtime.converse(
@@ -95,6 +100,30 @@ export class DialogAI {
             }
 
             return { action: "continue" };
+          },
+          prepareNextTurn: ({ message }) => {
+            if (message.content.some((part) => part.type === "toolCall")) {
+              return;
+            }
+
+            if (corrections === 2) {
+              throw new AiError(
+                "交付对话",
+                "模型在两次提醒后仍未调用工具，已停止无效续轮",
+              );
+            }
+
+            corrections++;
+
+            return {
+              messages: [
+                {
+                  role: "system",
+                  content: deliveryReminder,
+                  timestamp: Date.now(),
+                },
+              ],
+            };
           },
         },
       );
