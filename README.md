@@ -16,8 +16,6 @@ docker compose logs yanqi napcat
 3. 在 NapCat 启用正向 WebSocket 服务端：监听 `0.0.0.0:3001`，设置 Token，消息格式选 `array`，开启“上报自身消息”。
 4. 在言栖设置中填写机器人 QQ 号、相同的 OneBot Token 和主模型配置。连接地址默认为 `ws://napcat:3001`。同步群列表，开启需要保存消息的群。
 
-其余配置和操作见管理台，无需 `.env`。NapCat 页面的登录 Token 与 OneBot Token 是两项独立配置。
-
 端口默认只监听本机，远程访问需配置端口转发或反向代理。反向代理需保留 `Host` 并设置 `X-Forwarded-Proto`。
 
 数据保存在 `data/`，包含消息、附件、纪要、配置和 QQ 登录状态。备份时先停止服务，再复制整个目录。
@@ -27,14 +25,3 @@ docker compose logs yanqi napcat
 ```sh
 docker compose logs -f yanqi
 ```
-
-## 开发
-
-Node.js 和 pnpm 版本见 [package.json](package.json) 的 `engines` 和 `packageManager`。
-
-```sh
-pnpm install
-pnpm dev
-```
-
-提交前运行 `pnpm lint:fix` 和 `pnpm check`。`pnpm build` 生成生产服务。
