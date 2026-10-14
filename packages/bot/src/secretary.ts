@@ -4,6 +4,7 @@ import { Ai } from "./agent/ai.ts";
 import type { Config } from "./config.ts";
 import type { Messenger } from "./onebot/messenger.ts";
 import { createMessenger } from "./onebot/messenger.ts";
+import type { ReactionSync } from "./onebot/reactions.ts";
 import { Notes } from "./recording/notes.ts";
 import type { Store } from "./storage/store.ts";
 import { BackgroundTasks } from "./tasks/worker.ts";
@@ -19,12 +20,23 @@ export class Secretary {
   #logger: Logger;
   #controller = new AbortController();
 
-  constructor(ctx: Context, config: Config, store: Store) {
+  constructor(
+    ctx: Context,
+    config: Config,
+    store: Store,
+    reactions: ReactionSync,
+  ) {
     this.#config = config;
     this.#store = store;
     this.#messenger = createMessenger(config, store, ctx);
     const ai = new Ai(config, store, this.#controller.signal);
-    const notes = new Notes(config, store, ai, this.#controller.signal);
+    const notes = new Notes(
+      config,
+      store,
+      ai,
+      this.#controller.signal,
+      reactions,
+    );
 
     this.#tasks = new BackgroundTasks(
       config,
@@ -33,6 +45,7 @@ export class Secretary {
       notes,
       this.#messenger,
       this.#controller.signal,
+      reactions,
     );
     this.#logger = ctx.logger("yanqi");
   }

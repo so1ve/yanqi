@@ -3,6 +3,7 @@ import type { Static, TSchema } from "typebox";
 import { Type } from "typebox";
 
 import type { Config } from "../../config.ts";
+import type { ReactionSync } from "../../onebot/reactions.ts";
 import type { Notes } from "../../recording/notes.ts";
 import type { Store } from "../../storage/store.ts";
 import type { Message } from "../../types.ts";
@@ -14,6 +15,7 @@ export interface RequestContext {
 
 export interface ReadContext extends RequestContext {
   config: Config;
+  reactions: ReactionSync;
 }
 
 export interface ToolContext extends ReadContext {

@@ -1,4 +1,5 @@
 import type { Config } from "../config.ts";
+import type { ReactionSync } from "../onebot/reactions.ts";
 import {
   contextWithin,
   conversationBefore,
@@ -16,6 +17,7 @@ export async function handleRequest(
   ai: Ai,
   notes: Notes,
   processPending: () => void,
+  reactions: ReactionSync,
 ): Promise<void> {
   const message = await store.inbox.getRequest(messageId);
 
@@ -67,6 +69,7 @@ export async function handleRequest(
     message,
     config,
     notes,
+    reactions,
     wake: processPending,
   };
 

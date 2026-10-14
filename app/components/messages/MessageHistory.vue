@@ -19,6 +19,7 @@ const {
   loading,
   error,
   cacheError,
+  reactionError,
   bookmark,
   finished,
   loadMore,
@@ -80,6 +81,7 @@ defineExpose({ loading, refresh });
       </span>
     </footer>
     <p v-if="cacheError" class="load-error">{{ cacheError }}</p>
+    <p v-if="reactionError" class="load-error">{{ reactionError }}</p>
     <div v-if="bookmark" class="resume-reading">
       <button
         class="resume-button"

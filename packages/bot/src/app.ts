@@ -22,6 +22,7 @@ export class Yanqi {
   #events = new Set<Promise<void>>();
   #operation: Promise<void> = Promise.resolve();
   public readonly store: Store;
+  public readonly reactions: ReactionSync;
   #logger = new Logger("yanqi");
 
   private constructor(
@@ -45,12 +46,20 @@ export class Yanqi {
           this.#config.GROUP_IDS.includes(session.guildId),
       );
 
-    const reactions = new ReactionSync(this.store, () => this.napcat);
+    this.reactions = new ReactionSync(
+      this.store,
+      this.#config,
+      () => this.napcat,
+    );
 
     this.#listeners = [
       groups.on("notice", (session: Session) => {
         if (session.subtype === "group-msg-emoji-like") {
-          return this.#track(() => reactions.receive(session));
+          return this.#track(() => this.reactions.receive(session)).catch(
+            (error) => {
+              this.#logger.warn("保存表情回应失败：%s", String(error));
+            },
+          );
         }
       }),
       groups.on("message", (session: Session) =>
@@ -223,6 +232,7 @@ export class Yanqi {
 
       await this.#stop();
       await Promise.all(this.#events);
+      await this.reactions.close();
       // OneBot 关闭时仍需要 Koishi 的共享服务。
       await Promise.all(this.#app.bots.map((bot) => bot.stop()));
       this.#connection?.dispose();
@@ -258,7 +268,12 @@ export class Yanqi {
       return;
     }
 
-    const secretary = new Secretary(this.#app, this.#config, this.store);
+    const secretary = new Secretary(
+      this.#app,
+      this.#config,
+      this.store,
+      this.reactions,
+    );
 
     this.#secretary = secretary;
     this.#poll = this.#app.setInterval(() => {

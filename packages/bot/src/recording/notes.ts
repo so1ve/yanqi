@@ -5,6 +5,7 @@ import { Logger } from "@koishijs/core";
 
 import type { Ai } from "../agent/ai.ts";
 import type { Config } from "../config.ts";
+import type { ReactionSync } from "../onebot/reactions.ts";
 import { topicDirectory, writeMarkdown } from "../storage/files.ts";
 import type { Store } from "../storage/store.ts";
 import { waitForAsset } from "../tasks/assets.ts";
@@ -21,13 +22,21 @@ export class Notes {
   #summary: Summarizer;
   #logger = new Logger("yanqi:notes");
   #signal: AbortSignal;
+  #reactions: ReactionSync;
 
-  constructor(config: Config, store: Store, ai: Ai, signal: AbortSignal) {
+  constructor(
+    config: Config,
+    store: Store,
+    ai: Ai,
+    signal: AbortSignal,
+    reactions: ReactionSync,
+  ) {
     this.#config = config;
     this.#store = store;
     this.#ai = ai;
     this.#summary = new Summarizer(config, store, ai);
     this.#signal = signal;
+    this.#reactions = reactions;
   }
 
   public async arrange(topic: Topic, requestId: number) {
@@ -105,6 +114,7 @@ export class Notes {
         );
       }),
     );
+    await this.#reactions.refresh(pendingSources);
     // 附件解析会更新原文版本，完成后再读取本次整理的范围与版本。
     const topic = await this.#store.topics.get(topicId);
     const generation = topic.generation;

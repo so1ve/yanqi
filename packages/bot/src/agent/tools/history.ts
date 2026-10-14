@@ -162,16 +162,21 @@ export function chatHistoryTools(context: ReadContext, onMetadata: OnMetadata) {
               ? { nextBeforeId: earlier.length > 0 ? `m${first!.id}` : null }
               : {}),
           },
-          async () =>
-            (
+          async () => {
+            const messages = await store.messages.getMany(
+              sources.map((source) => source.id),
+            );
+
+            await context.reactions.refresh(messages);
+
+            return (
               await messageChunks(
                 store,
-                await store.messages.getMany(
-                  sources.map((source) => source.id),
-                ),
+                messages,
                 Math.floor(config.AI_INPUT_CHARS / 4),
               )
-            ).map((messages) => ({ messages })),
+            ).map((messages) => ({ messages }));
+          },
         );
       },
     ),

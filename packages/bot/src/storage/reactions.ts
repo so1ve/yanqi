@@ -10,14 +10,20 @@ export class Reactions {
 
   public async replace(
     messageId: number,
-    emojiType: string,
-    emojiId: string,
-    users: string[],
+    reactions: { emojiType: string; emojiId: string; users: string[] }[],
     botId: string,
-  ) {
-    const userIds = [...new Set(users)].sort();
+  ): Promise<boolean> {
+    const rows = reactions.flatMap(({ emojiType, emojiId, users }) =>
+      [...new Set(users)].map((userId) => ({
+        messageId,
+        emojiType,
+        emojiId,
+        userId,
+        isBot: Number(userId === botId),
+      })),
+    );
 
-    await this.#db.transaction().execute(async (db) => {
+    return this.#db.transaction().execute(async (db) => {
       // 读取期间原文可能已被 purge 清理，不能留下孤立回应。
       if (
         !(await db
@@ -26,50 +32,35 @@ export class Reactions {
           .where("id", "=", messageId)
           .executeTakeFirst())
       ) {
-        return;
+        return false;
       }
 
       const previous = await db
         .selectFrom("message_reactions")
-        .select(["userId", "isBot"])
+        .selectAll()
         .where("messageId", "=", messageId)
-        .where("emojiType", "=", emojiType)
-        .where("emojiId", "=", emojiId)
-        .orderBy("userId")
         .execute();
+      const key = (row: (typeof rows)[number]) =>
+        `${row.emojiType}:${row.emojiId}:${row.userId}:${row.isBot}`;
+      const saved = new Set(previous.map(key));
 
       if (
-        previous.length === userIds.length &&
-        previous.every(
-          (row, index) =>
-            row.userId === userIds[index] &&
-            row.isBot === Number(row.userId === botId),
-        )
+        previous.length === rows.length &&
+        rows.every((row) => saved.has(key(row)))
       ) {
-        return;
+        return false;
       }
 
       await db
         .deleteFrom("message_reactions")
         .where("messageId", "=", messageId)
-        .where("emojiType", "=", emojiType)
-        .where("emojiId", "=", emojiId)
         .execute();
-      if (userIds.length > 0) {
-        await db
-          .insertInto("message_reactions")
-          .values(
-            userIds.map((userId) => ({
-              messageId,
-              emojiType,
-              emojiId,
-              userId,
-              isBot: Number(userId === botId),
-            })),
-          )
-          .execute();
+      if (rows.length > 0) {
+        await db.insertInto("message_reactions").values(rows).execute();
       }
+
       // 回应不改变原文版本；显式重新整理会重新提取当前状态。
+      return true;
     });
   }
 

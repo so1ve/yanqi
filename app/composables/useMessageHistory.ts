@@ -24,6 +24,9 @@ export function useMessageHistory(
   const loading = ref(true);
   const error = ref("");
   const cacheError = ref("");
+  const reactionError = ref("");
+  const reactionsRead = new Set<number>();
+  let events: EventSource | undefined;
   const bookmark = shallowRef<ReadingBookmark>();
   const rows = new Map<number, Message>();
   const controller = new AbortController();
@@ -64,6 +67,82 @@ export function useMessageHistory(
       timeout: 15_000,
     });
 
+  async function applyReactions(
+    items: { messageId: number; reactions: Message["reactions"] }[],
+  ): Promise<void> {
+    const changed: Message[] = [];
+
+    for (const item of items) {
+      const current = rows.get(item.messageId);
+
+      if (
+        current &&
+        JSON.stringify(current.reactions ?? []) !==
+          JSON.stringify(item.reactions)
+      ) {
+        const message = { ...current, reactions: item.reactions };
+
+        rows.set(message.id, message);
+        changed.push(message);
+      }
+    }
+
+    if (changed.length > 0 && !controller.signal.aborted) {
+      display(loaded.value);
+      await cached(() => cacheMessages(changed));
+    }
+  }
+
+  async function refreshReactions(messageIds: number[]): Promise<void> {
+    const missing = messageIds.filter((id) => !reactionsRead.has(id));
+
+    for (const id of missing) {
+      reactionsRead.add(id);
+    }
+
+    for (let start = 0; start < missing.length; start += batchSize) {
+      const batch = missing.slice(start, start + batchSize);
+      const previous = new Map(
+        batch.map((id) => [id, rows.get(id)?.reactions]),
+      );
+
+      try {
+        const result = await api<{
+          items: { messageId: number; reactions: Message["reactions"] }[];
+          error: string;
+        }>(`groups/${groupId}/messages/reactions/read`, {
+          method: "POST",
+          body: { ids: batch },
+          signal: controller.signal,
+          timeout: 60_000,
+        });
+
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        if (result.error) {
+          reactionError.value = result.error;
+        }
+
+        // 此次读取期间若收到新事件，保留事件里的最新状态。
+        await applyReactions(
+          result.items.filter(
+            (item) =>
+              rows.get(item.messageId)?.reactions ===
+              previous.get(item.messageId),
+          ),
+        );
+      } catch (cause) {
+        if (controller.signal.aborted) {
+          return;
+        }
+
+        reactionError.value = `表情回应未能更新：${errorText(cause)}`;
+      }
+    }
+  }
+
   async function fill(count: number, refresh = false): Promise<void> {
     const requested = range(count);
     const stored = await cached(() =>
@@ -102,6 +181,11 @@ export function useMessageHistory(
 
     if (!controller.signal.aborted) {
       display(count);
+      if (refresh) {
+        reactionsRead.clear();
+      }
+
+      void refreshReactions(requested);
       await cached(() =>
         cacheHistory(source, { ids: ids.value, loaded: loaded.value }),
       );
@@ -129,6 +213,7 @@ export function useMessageHistory(
   async function refresh(reloadMessages = true): Promise<void> {
     loading.value = true;
     error.value = "";
+    reactionError.value = "";
 
     try {
       const currentIds = await api<number[]>(source, {
@@ -262,10 +347,21 @@ export function useMessageHistory(
 
   onMounted(() => {
     window.addEventListener("pagehide", savePosition);
+    events = new EventSource(
+      `/api/groups/${groupId}/messages/reactions/events`,
+    );
+    events.addEventListener("reactions", (event) => {
+      void applyReactions([JSON.parse(event.data)]);
+    });
+    events.addEventListener("ready", () => {
+      reactionsRead.clear();
+      void refreshReactions(range(loaded.value));
+    });
     void initialize();
   });
   onScopeDispose(() => {
     controller.abort();
+    events?.close();
     window.removeEventListener("pagehide", savePosition);
     savePosition();
   });
@@ -275,6 +371,7 @@ export function useMessageHistory(
     loading,
     error,
     cacheError,
+    reactionError,
     bookmark,
     total: computed(() => ids.value.length),
     finished: computed(() => loaded.value >= ids.value.length),

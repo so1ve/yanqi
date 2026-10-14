@@ -8,6 +8,7 @@ import { collectAsset } from "../assets.ts";
 import type { Config } from "../config.ts";
 import type { Messenger } from "../onebot/messenger.ts";
 import { Outbox } from "../onebot/outbox.ts";
+import type { ReactionSync } from "../onebot/reactions.ts";
 import { detectTopics } from "../recording/detection.ts";
 import type { Notes } from "../recording/notes.ts";
 import type { Store } from "../storage/store.ts";
@@ -27,6 +28,7 @@ export class BackgroundTasks {
   #running = new Map<JobKind, number>();
   #pending = new Set<Promise<void>>();
   #signal: AbortSignal;
+  #reactions: ReactionSync;
 
   constructor(
     config: Config,
@@ -35,6 +37,7 @@ export class BackgroundTasks {
     notes: Notes,
     messenger: Messenger,
     signal: AbortSignal,
+    reactions: ReactionSync,
   ) {
     this.#config = config;
     this.#store = store;
@@ -43,6 +46,7 @@ export class BackgroundTasks {
     this.#messenger = messenger;
     this.#outbox = new Outbox(config, store, messenger);
     this.#signal = signal;
+    this.#reactions = reactions;
   }
 
   public run(): void {
@@ -140,6 +144,7 @@ export class BackgroundTasks {
             this.#ai,
             this.#notes,
             () => this.run(),
+            this.#reactions,
           );
 
           break;

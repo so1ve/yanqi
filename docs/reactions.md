@@ -4,6 +4,16 @@
 
 “资料”表示资料讨论过这种候选用法，不表示所有年轻人都这样使用。来源跨 QQ、微信等中文社交平台；大哭表示笑到哭的资料还涉及海外平台，不能直接当成 QQ 群共识。“推断”是根据名称、图形和语境作的解释，没有找到对应的可靠用法资料。群内明确约定和当前原文优先于通用词典。
 
+## 接收与同步
+
+- 保存配置群内所有已存消息的回应，不限制原文作者，也不检查回应者的交互权限。
+- NapCat 的 `group_msg_emoji_like` 通知触发同步，日志会分别显示收到通知和保存后的变化。当前使用的 NapCat 4.18.37 开启 Packet Hook 后可通知群成员消息的回应；旧事件文档只描述了自身消息通知。
+- 浏览原文、查阅历史或生成纪要时，用 `get_msg` 的 `emoji_likes_list` 发现表情，再用 `fetch_emoji_like` 读取完整成员分页。成功后替换快照，包括已取消的回应。读取失败保留已有数据。
+- 浏览器保留 IndexedDB 中的正文，单独补读回应；页面打开时通过事件流接收变化，不定时扫描群历史。
+- NapCat 无法读取的旧消息无法补全回应。例如重启后其短消息 ID 映射丢失，`get_msg` 可能返回“消息不存在”。WebUI 会显示更新失败提示，不能把读取失败解释为无人回应。
+
+接口依据：[NapCat 群事件实现](https://github.com/NapNeko/NapCatQQ/blob/main/packages/napcat-onebot/api/group.ts)、[消息详情接口](https://github.com/NapNeko/NapCatQQ/blob/main/packages/napcat-onebot/action/msg/GetMsg.ts)。
+
 ## 怎么读回应
 
 - 先看回应贴在哪条消息上，再看前后文。它可能回应内容、语气或一个梗，并不一定认可整条消息。
