@@ -9,6 +9,21 @@ const { processing, retry } = useAssetRecognition(
   () => props.asset.id,
   () => emit("updated"),
 );
+
+function onDescriptionWheel(event: WheelEvent) {
+  const description = event.currentTarget as HTMLElement;
+  const canScroll =
+    (event.deltaY < 0 && description.scrollTop > 0) ||
+    (event.deltaY > 0 &&
+      description.scrollTop + description.clientHeight <
+        description.scrollHeight - 1);
+
+  // The virtual list consumes wheel events. Let the description scroll natively
+  // until it reaches an edge, and leave pinch-to-zoom to the browser.
+  if (canScroll || event.ctrlKey) {
+    event.stopPropagation();
+  }
+}
 </script>
 
 <template>
@@ -31,7 +46,9 @@ const { processing, retry } = useAssetRecognition(
         </NuxtLink>
       </div>
       <p v-if="asset.error" class="error-text">{{ asset.error }}</p>
-      <p class="recognition">{{ asset.interpretation || "暂无识图结果" }}</p>
+      <p class="recognition" @wheel.passive="onDescriptionWheel">
+        {{ asset.interpretation || "暂无识图结果" }}
+      </p>
       <div class="actions">
         <NButton :loading="processing" size="small" @click="retry">
           {{ asset.state === "missing" ? "重新获取并识别" : "重新识别" }}
