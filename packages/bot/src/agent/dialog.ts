@@ -12,6 +12,7 @@ import { Type } from "typebox";
 import type { Config } from "../config.ts";
 import { contextInputBudget } from "../config.ts";
 import type { Conversation } from "../storage/conversations.ts";
+import type { Store } from "../storage/store.ts";
 import type { ChatMessage } from "../types.ts";
 import { AiError, failureMessage } from "../utils/errors.ts";
 import { compactionPrompt } from "./prompts/compaction.ts";
@@ -59,6 +60,7 @@ export class DialogAI {
   #runtime: AgentRuntime;
   #persona: string;
   #logger = new Logger("yanqi:ai");
+  #compacting = new Set<string>();
 
   constructor(config: Config, runtime: AgentRuntime, persona: string) {
     this.#config = config;
@@ -207,50 +209,54 @@ export class DialogAI {
 
       assert.ok(request?.role === "user");
       messages[lastUser] = { ...request, content: input };
-      conversation = {
-        ...conversation,
-        messages: withoutMemoryDetails(messages),
-      };
-      await context.store.conversations.save(conversation);
+      conversation = await context.store.conversations.append(
+        conversation,
+        withoutMemoryDetails(messages.slice(lastUser)),
+      );
     } finally {
       await subagents.close();
     }
 
-    // 答复已交付，完整交互也已保存。同群任务仍按队列顺序执行，压缩不能覆盖后来的请求。
-    let compacted: Conversation;
+    // 回复已交付后再压缩，同群其他请求继续执行；每群只运行一次压缩。
+    if (this.#compacting.has(conversation.groupId)) {
+      return;
+    }
 
+    this.#compacting.add(conversation.groupId);
     try {
-      compacted = await this.#compact(conversation);
+      await this.#compact(conversation, context.store);
     } catch (error) {
       this.#logger.warn(
         "群 %s 会话压缩失败，保留完整交互供下次使用：%s",
         conversation.groupId,
         failureMessage(error),
       );
-
-      return;
-    }
-
-    if (compacted !== conversation) {
-      await context.store.conversations.save(compacted);
+    } finally {
+      this.#compacting.delete(conversation.groupId);
     }
   }
 
-  async #compact(conversation: Conversation): Promise<Conversation> {
+  async #compact(conversation: Conversation, store: Store): Promise<void> {
     const budget = contextInputBudget(this.#config);
     const { messages, summary } = conversation;
-    // 优先使用服务返回的 token 用量，包含系统提示词、工具、缓存和本轮输出。
     const estimate = estimateContextTokens(messages);
-    const usedTokens =
+    // 服务用量包含提示词和工具；并行完成的其他轮次还需按合并后的内容估算。
+    const usedTokens = Math.max(
       estimate.tokens +
-      (estimate.lastUsageIndex === null ? estimateTextTokens(summary) : 0);
+        (estimate.lastUsageIndex === null ? estimateTextTokens(summary) : 0),
+      estimateTextTokens(summary) +
+        messages.reduce(
+          (tokens, message) => tokens + estimateMessageTokens(message),
+          0,
+        ),
+    );
 
     if (
       messages.length === 0 ||
       // 提前留出四分之一预算给下一次请求及其最新上下文。
       usedTokens <= (budget * 3) / 4
     ) {
-      return conversation;
+      return;
     }
 
     // 按完整对话轮次截取，保留最近一轮，避免拆开工具调用与对应结果。
@@ -291,6 +297,16 @@ export class DialogAI {
       { thinking: "high" },
     );
 
+    const saved = await store.conversations.compact(
+      conversation,
+      result.summary,
+      messages.slice(split),
+    );
+
+    if (!saved) {
+      return;
+    }
+
     this.#logger.info(
       "群 %s 会话 %s 已压缩：上下文约 %s/%s token，%s 条交互 -> %s 字符摘要，保留 %s 条交互",
       conversation.groupId,
@@ -301,11 +317,5 @@ export class DialogAI {
       result.summary.length,
       messages.length - split,
     );
-
-    return {
-      ...conversation,
-      summary: result.summary,
-      messages: messages.slice(split),
-    };
   }
 }

@@ -435,19 +435,37 @@ export class JobQueue {
           Number(getEventListeners(this.#changes, String(b.id)).length > 0) -
           Number(getEventListeners(this.#changes, String(a.id)).length > 0),
       );
-      const busyGroups =
+      const requests =
         kind === "intent"
           ? await db
               .selectFrom("jobs")
-              .select((eb) =>
-                eb
-                  .fn<string>("json_extract", ["payload", eb.val("$.groupId")])
-                  .as("groupId"),
+              .innerJoin("messages", (join) =>
+                join.on((eb) =>
+                  eb(
+                    "messages.id",
+                    "=",
+                    eb.fn<number>("json_extract", [
+                      "jobs.payload",
+                      eb.val("$.messageId"),
+                    ]),
+                  ),
+                ),
               )
-              .where("kind", "=", "intent")
-              .where("state", "=", "running")
+              .select([
+                "jobs.id",
+                "jobs.state",
+                "messages.groupId",
+                "messages.addressed",
+                "messages.text",
+              ])
+              .where("jobs.kind", "=", "intent")
+              .where("jobs.state", "in", ["pending", "running"])
+              .orderBy("jobs.id")
               .execute()
           : [];
+      const resets = requests.filter(
+        (request) => request.addressed === 1 && request.text.trim() === "#NEW#",
+      );
       const busyPublications =
         kind === "publish"
           ? await db
@@ -474,7 +492,7 @@ export class JobQueue {
               .where("state", "in", ["pending", "running"])
               .execute()
           : [];
-      const job = pending.find(({ payload }) => {
+      const job = pending.find(({ id, payload }) => {
         if (kind === "publish") {
           return !busyPublications.some(
             (group) => group.groupId === payload.groupId,
@@ -486,7 +504,22 @@ export class JobQueue {
         }
 
         if (kind === "intent") {
-          return !busyGroups.some((group) => group.groupId === payload.groupId);
+          // 普通请求可同群并行；#NEW# 是会话边界，前后请求不能越过它。
+          const reset = resets.find(
+            (request) => request.groupId === payload.groupId,
+          );
+
+          return (
+            !reset ||
+            (reset.state === "pending" &&
+              (id < reset.id ||
+                (id === reset.id &&
+                  !requests.some(
+                    (request) =>
+                      request.groupId === payload.groupId &&
+                      request.state === "running",
+                  ))))
+          );
         }
 
         return (
