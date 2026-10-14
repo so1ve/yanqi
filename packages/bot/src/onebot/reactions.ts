@@ -212,6 +212,7 @@ export class ReactionSync {
       const response = await api._request!("get_group_msg_history", {
         group_id: groupId,
         message_seq: cursor,
+        reverse_order: true,
         count: 100,
         parse_mult_msg: false,
         disable_get_url: true,
