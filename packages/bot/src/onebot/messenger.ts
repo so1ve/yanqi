@@ -147,7 +147,7 @@ export function createMessenger(config: Config, store: Store, ctx: Context) {
           }
 
           const match =
-            /^(?:\.\.\/)+assets\/[a-f0-9]{2}\/[a-f0-9]{2}\/([a-f0-9]{64}\.[a-z0-9]+)$/.exec(
+            /^(?:\.\.\/)+assets\/images\/[a-f0-9]{2}\/[a-f0-9]{2}\/([a-f0-9]{64}\.[a-z0-9]+)$/.exec(
               part.href,
             );
           const asset = match

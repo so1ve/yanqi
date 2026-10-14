@@ -27,9 +27,6 @@ export async function collectAsset(
 ): Promise<void> {
   const asset = await store.assets.get(id);
   const message = await store.messages.get(asset.messageId);
-  const directory = join(store.directory, "assets");
-
-  await mkdir(directory, { recursive: true });
   let path = asset.path;
   let interpretation = asset.interpretation;
 
@@ -50,7 +47,7 @@ export async function collectAsset(
       );
       const content = JSON.stringify(forwarded.messages);
       const hash = createHash("sha256").update(content).digest("hex");
-      const target = assetPath(store.directory, `${hash}.json`);
+      const target = assetPath(store.directory, "forward", `${hash}.json`);
       const temporary = `${target}.${randomUUID()}.part`;
 
       try {
@@ -137,6 +134,9 @@ export async function collectAsset(
           } as Record<string, string>
         )[mime] ?? ".bin";
       const hash = createHash("sha256");
+      const directory = join(store.directory, "assets", ".downloads");
+
+      await mkdir(directory, { recursive: true });
       const temporary = join(directory, `${randomUUID()}.part`);
 
       try {
@@ -162,6 +162,7 @@ export async function collectAsset(
         const format = await imageFormat(temporary);
         const target = assetPath(
           store.directory,
+          format ? "image" : asset.kind,
           `${hash.digest("hex")}${format?.extension ?? (mime.startsWith("image/") ? ".bin" : suffix)}`,
         );
 

@@ -168,7 +168,13 @@ export class Assets {
       .innerJoin("messages", "messages.id", "assets.messageId")
       .selectAll("assets")
       .where("messages.groupId", "=", groupId)
-      .where("assets.path", "=", assetPath(this.#directory, name))
+      .where(
+        "assets.path",
+        "in",
+        (["image", "audio", "video", "file", "forward"] as const).map((kind) =>
+          assetPath(this.#directory, kind, name),
+        ),
+      )
       .limit(1)
       .executeTakeFirst();
   }

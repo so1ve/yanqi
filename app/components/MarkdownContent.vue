@@ -9,7 +9,7 @@ const html = computed(() => {
   let rendered = marked.parse(props.content, { async: false });
   if (props.groupId) {
     rendered = rendered.replace(
-      /(href|src)="(?:\.\.\/)+assets\/[a-f0-9]{2}\/[a-f0-9]{2}\/([a-f0-9]{64}\.[a-z0-9]+)"/g,
+      /(href|src)="(?:\.\.\/)+assets\/(?:images|audio|video|files|forwards)\/[a-f0-9]{2}\/[a-f0-9]{2}\/([a-f0-9]{64}\.[a-z0-9]+)"/g,
       (_match, attribute: string, name: string) =>
         `${attribute}="/api/groups/${props.groupId}/files/${name}${attribute === "src" ? "?preview=1" : ""}"`,
     );

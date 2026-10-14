@@ -1,10 +1,31 @@
 import { open, readFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 
+import type { Asset } from "../types.ts";
+
 export const assetFileName = /^[a-f0-9]{64}\.[a-z0-9]+$/;
 
-export const assetPath = (directory: string, name: string): string =>
-  join(directory, "assets", name.slice(0, 2), name.slice(2, 4), name);
+const assetDirectories: Record<Asset["kind"], string> = {
+  image: "images",
+  audio: "audio",
+  video: "video",
+  file: "files",
+  forward: "forwards",
+};
+
+export const assetPath = (
+  directory: string,
+  kind: Asset["kind"],
+  name: string,
+): string =>
+  join(
+    directory,
+    "assets",
+    assetDirectories[kind],
+    name.slice(0, 2),
+    name.slice(2, 4),
+    name,
+  );
 
 export const interpretationPath = (path: string): string =>
   `${path.slice(0, -extname(path).length)}.md`;
