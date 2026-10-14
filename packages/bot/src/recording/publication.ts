@@ -24,6 +24,11 @@ export async function publishNotes(
   let changed = false;
 
   for (const item of job.payload.topics) {
+    // 已经排队的自动任务也保持静默，不能混入当前请求的交付。
+    if (!item.requested) {
+      continue;
+    }
+
     const topic = await store.topics.get(item.id);
     const note = await store.notes.find(topic.id);
     const [task] = await store.jobs.forTopic(topic.id);
@@ -56,7 +61,7 @@ export async function publishNotes(
   }
 
   if (records.length === 0) {
-    await store.jobs.reportProgress(job.id, "本批纪要已取消或没有可整理内容");
+    await store.jobs.reportProgress(job.id, "本批无需发送群消息");
 
     return;
   }

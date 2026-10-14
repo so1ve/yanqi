@@ -27,7 +27,7 @@ export function taskTool(context: ToolContext) {
   return tool(
     context,
     "task",
-    "查询或等待本群后台任务。inspect 查指定 ID，status 查总体状态和近期纪要，适合催办。wait 仅用于后续答复或操作依赖结果时，等到完成、失败、取消或延后重试才返回，不定时唤醒。retry 重试指定失败任务，retry_failed 重试本群失败后台任务和发送。纪要重试交给后台统一交付，用 skip_reply 结束，不另发开工或完成通知。对话请求不可重试或等待；其失败不代表纪要失败。延后重试时说明原因和时间后结束，不循环查询。",
+    "查询或等待本群后台任务。inspect 查指定 ID，status 查总体状态和近期纪要，适合催办。wait 仅用于后续答复或操作依赖结果时，等到完成、失败、取消或延后重试才返回，不定时唤醒。retry 重试指定失败任务，retry_failed 重试本群失败后台任务和发送。纪要重试成功交给后台后程序直接结束主对话，全部处理完再统一交付。对话请求不可重试或等待；其失败不代表纪要失败。延后重试时说明原因和时间后结束，不循环查询。",
     parameters,
     async (args, signal) => {
       if (args.action === "status") {
@@ -61,9 +61,7 @@ export function taskTool(context: ToolContext) {
         }
 
         if (job.kind === "publish" && action === "wait") {
-          throw new Error(
-            "批量交付在本次对话结束后执行，请用 skip_reply 结束，不等待发布任务",
-          );
+          throw new Error("批量交付由后台执行，无需等待；查询进度用 inspect");
         }
 
         if (action === "retry" && job.state === "failed") {
@@ -79,7 +77,7 @@ export function taskTool(context: ToolContext) {
             return {
               taskId,
               state: "queued",
-              delivery: "本批整理全部完成后统一交付，请用 skip_reply 结束。",
+              delivery: "已交给后台，全部整理完成后统一交付。",
             };
           }
         }

@@ -111,7 +111,13 @@ async function enqueuePublication(
   groupId: string,
   topics: JobPayloads["publish"]["topics"],
   requestIds: number[] = [],
-): Promise<number> {
+): Promise<number | null> {
+  // 只有当前请求交给后台的结果需要交付。旧发送指令不授权自动更新再次发群。
+  topics = topics.filter((item) => item.requested);
+  if (topics.length === 0) {
+    return null;
+  }
+
   const existing = await db
     .selectFrom("jobs")
     .selectAll()
@@ -571,7 +577,7 @@ export class JobQueue {
         const payload: JobPayloads["summarize"] = JSON.parse(row.payload);
         const target = await enqueueJob(db, "summarize", row.key, {
           ...payload,
-          requested: true,
+          requested: payload.requested || requestId !== undefined,
         });
 
         if (payload.publish !== false && requestId !== undefined) {
@@ -600,17 +606,26 @@ export class JobQueue {
 
       if (row.kind === "publish") {
         const payload: JobPayloads["publish"] = JSON.parse(row.payload);
-        const target = await enqueuePublication(db, groupId, payload.topics, [
-          ...payload.requestIds,
-          ...(requestId === undefined ? [] : [requestId]),
-        ]);
+        const target = await enqueuePublication(
+          db,
+          groupId,
+          payload.topics.map((topic) => ({
+            ...topic,
+            requested: topic.requested || requestId !== undefined,
+          })),
+          [
+            ...payload.requestIds,
+            ...(requestId === undefined ? [] : [requestId]),
+          ],
+        );
 
         await db
           .updateTable("jobs")
           .set({
             state: "done",
             lastError: null,
-            progress: `已合并到任务 #${target}`,
+            progress:
+              target === null ? "无需发送群消息" : `已合并到任务 #${target}`,
           })
           .where("id", "=", id)
           .execute();

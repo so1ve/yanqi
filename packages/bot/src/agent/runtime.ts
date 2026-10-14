@@ -26,6 +26,7 @@ interface RequestOptions {
   tools?: AgentState["tools"];
   thinking?: ThinkingLevel;
   finishTurn?: FinishTurn;
+  beforeToolCall?: AgentOptions["beforeToolCall"];
   prepareNextTurn?: AgentOptions["prepareNextTurnWithContext"];
   signal?: AbortSignal;
   maxTurns?: number;
@@ -200,6 +201,9 @@ export class AgentRuntime {
         messages: conversation?.messages ?? [],
       },
       toolExecution: "sequential",
+      ...(options.beforeToolCall
+        ? { beforeToolCall: options.beforeToolCall }
+        : {}),
       ...(options.finishTurn ? { finishTurn: options.finishTurn } : {}),
       ...(options.prepareNextTurn
         ? { prepareNextTurnWithContext: options.prepareNextTurn }

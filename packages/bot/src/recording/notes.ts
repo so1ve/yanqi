@@ -11,7 +11,7 @@ import type { Store } from "../storage/store.ts";
 import { waitForAsset } from "../tasks/assets.ts";
 import type { Job, Note, Topic } from "../types.ts";
 import { noteImages } from "./images.ts";
-import { Summarizer, reusableSections } from "./summary.ts";
+import { Summarizer } from "./summary.ts";
 import { transcript } from "./transcript.ts";
 
 export class Notes {
@@ -61,21 +61,8 @@ export class Notes {
       };
     }
 
-    const sources = await this.#store.messages.listMetadata(
-      topic.groupId,
-      topic.lastSourceId,
-      { topicIds: [topic.id], includeBot: true },
-    );
-    const changed = await this.#store.topics.changedMessages(
-      topic.id,
-      note?.generation ?? -1,
-    );
-    const sections = reusableSections(sources, note, changed);
-    const recorded = new Set(sections.flatMap((section) => section.messageIds));
-    const remaining = sources.filter((source) => !recorded.has(source.id));
-    const attachments = await this.#store.assets.metadata(
-      remaining.map((source) => source.id),
-    );
+    // 重做和结束连续记录也属于当前请求，交付与收尾不能仍关联旧指令。
+    await this.#store.topics.setDirective(topic.id, topic.directive, requestId);
     const taskId = await this.#store.jobs.summarize(topic, true);
 
     return {
@@ -83,14 +70,6 @@ export class Notes {
       taskId,
       state: taskId === null ? "empty" : "processing",
       pendingRevision: taskId === null ? null : topic.revision + 1,
-      sourceCount: sources.length,
-      workload: {
-        sourcesToRead: remaining.length,
-        textChars: remaining.reduce((sum, source) => sum + source.textChars, 0),
-        attachments,
-        reusedSections: sections.length,
-        charsPerBatch: Math.floor(this.#config.AI_INPUT_CHARS / 4),
-      },
     };
   }
 

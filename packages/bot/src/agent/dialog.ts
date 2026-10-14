@@ -27,7 +27,12 @@ import { inspectRecordTool } from "./tools/inspect-record.ts";
 import { memoryTool } from "./tools/memory.ts";
 import { readTool } from "./tools/read.ts";
 import { recordTools } from "./tools/records.ts";
-import { notifyTool, replyTool, skipReplyTool } from "./tools/reply.ts";
+import {
+  hasBackgroundDelivery,
+  notifyTool,
+  replyTool,
+  skipReplyTool,
+} from "./tools/reply.ts";
 import { settingsTools } from "./tools/settings.ts";
 import { taskTool } from "./tools/tasks.ts";
 
@@ -107,11 +112,54 @@ export class DialogAI {
             memoryTool(context),
             ...settingsTools(context),
           ],
-          finishTurn: ({ message, toolResults }) => {
+          beforeToolCall: async ({ assistantMessage, toolCall }) => {
+            // 同轮工具按顺序执行；即使模型把回复排在整理之前，也不提前播报。
+            if (
+              (toolCall.name === "reply" || toolCall.name === "notify") &&
+              assistantMessage.content.some(
+                (part) =>
+                  part.type === "toolCall" &&
+                  (part.name === "record" ||
+                    (part.name === "edit_record" &&
+                      part.arguments.action !== "hold") ||
+                    (part.name === "follow" &&
+                      part.arguments.action === "stop") ||
+                    (part.name === "task" &&
+                      (part.arguments.action === "retry" ||
+                        part.arguments.action === "retry_failed"))),
+              )
+            ) {
+              return {
+                block: true,
+                reason:
+                  "本轮先执行纪要操作，结果由后台统一交付。操作失败时再根据错误处理。",
+              };
+            }
+
+            return undefined;
+          },
+          finishTurn: async ({ message, toolResults }) => {
             if (
               message.stopReason === "error" ||
               message.stopReason === "aborted" ||
-              message.stopReason === "length" ||
+              message.stopReason === "length"
+            ) {
+              return { action: "end" };
+            }
+
+            // 真正的操作错误仍交回模型修正，不能被同轮的结束工具掩盖。
+            if (
+              toolResults.some(
+                (result) =>
+                  result.isError &&
+                  !["notify", "reply", "skip_reply"].includes(result.toolName),
+              )
+            ) {
+              return { action: "continue" };
+            }
+
+            if (
+              (await hasBackgroundDelivery(context)) ||
               toolResults.some(
                 (result) =>
                   (result.toolName === "reply" ||
