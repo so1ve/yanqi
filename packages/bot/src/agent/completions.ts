@@ -71,9 +71,8 @@ export function createCompletion(
           const params = payload as ChatCompletionCreateParamsStreaming;
 
           if (params.tools?.length) {
-            // DeepSeek 思考模式不接受 required；是否完成由 Agent 的工具结果决定。
-            params.tool_choice =
-              isDeepSeek && thinkingLevel !== "off" ? "auto" : "required";
+            // 记忆查阅等工具是可选步骤，须允许返回最终正文；工具交付由 finishTurn 约束。
+            params.tool_choice = "auto";
           }
 
           if (schema) {
