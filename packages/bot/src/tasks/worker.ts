@@ -159,13 +159,7 @@ export class BackgroundTasks {
         }
 
         case "observe": {
-          await observeRequests(
-            job,
-            this.#config,
-            this.#store,
-            this.#ai,
-            this.#messenger,
-          );
+          await observeRequests(job, this.#config, this.#store, this.#ai);
 
           break;
         }

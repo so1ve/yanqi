@@ -13,6 +13,7 @@ import { computed, ref } from "vue";
 import { navigateTo, useRoute } from "#imports";
 import NoteEditor from "~/components/records/NoteEditor.vue";
 import RecordReader from "~/components/records/RecordReader.vue";
+import RecordStatus from "~/components/records/RecordStatus.vue";
 import RegenerateDialog from "~/components/records/RegenerateDialog.vue";
 import TranscriptView from "~/components/records/TranscriptView.vue";
 import { useAction } from "~/composables/useAction";
@@ -163,7 +164,7 @@ function download(): void {
             :value="version ?? data.note?.id ?? null"
             @update:value="version = $event"
           />
-          <StateTag :state="data.topic.state" />
+          <RecordStatus :topic="data.topic" />
         </NSpace>
         <NSpace align="center" :wrap-item="false">
           <NButton

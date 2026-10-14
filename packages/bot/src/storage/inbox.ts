@@ -44,6 +44,19 @@ export class Inbox {
         .executeTakeFirst();
 
       if (existing) {
+        // 自发消息事件可能先于发送接口返回；补上发送时选定的引用关系。
+        if (
+          input.isBot &&
+          input.replyTo !== null &&
+          existing.replyTo === null
+        ) {
+          await db
+            .updateTable("messages")
+            .set({ replyTo: input.replyTo })
+            .where("id", "=", existing.id)
+            .execute();
+        }
+
         if (input.noteId !== undefined) {
           await db
             .updateTable("messages")
@@ -190,12 +203,12 @@ export class Inbox {
   public async scheduleRequests(
     groupId: string,
     messageIds: number[],
-  ): Promise<Message[]> {
+  ): Promise<void> {
     if (messageIds.length === 0) {
-      return [];
+      return;
     }
 
-    return this.#db.transaction().execute(async (db) => {
+    await this.#db.transaction().execute(async (db) => {
       const rows = await db
         .selectFrom("messages")
         .selectAll()
@@ -220,8 +233,6 @@ export class Inbox {
           messageId: message.id,
         });
       }
-
-      return requests.map((message) => ({ ...message, command: true }));
     });
   }
 }

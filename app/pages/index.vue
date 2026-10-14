@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ArrowRight, Refresh } from "@vicons/tabler";
 
+import RecordStatus from "~/components/records/RecordStatus.vue";
 import { useApiData } from "~/composables/useApiData";
 import { usePoll } from "~/composables/usePoll";
 import { useWorkspace } from "~/composables/useWorkspace";
@@ -72,7 +73,7 @@ usePoll(refresh, 10_000);
               </span>
               <h3>{{ record.title }}</h3>
               <p>
-                <StateTag :state="record.state" />
+                <RecordStatus :topic="record" />
                 <span>
                   {{
                     record.revision

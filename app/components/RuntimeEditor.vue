@@ -68,12 +68,6 @@ function update(key: NumericKey, value: number | null): void {
           ]"
         />
       </NFormItem>
-      <NFormItem label="收到请求后的回应表情 ID">
-        <NInput
-          v-model:value="model.ACK_EMOJI_ID"
-          placeholder="128051 为鲸鱼，留空关闭"
-        />
-      </NFormItem>
     </FormGrid>
   </section>
 </template>

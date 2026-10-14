@@ -34,6 +34,7 @@ export interface Topic {
   focus: string;
   mode: "auto" | "manual";
   ownerId: string | null;
+  // active 仅表示用户要求持续收集后续消息，与纪要是否整理完成无关。
   state: "active" | "closed";
   lastActiveAt: number;
   lastSourceId: number;
@@ -66,11 +67,13 @@ export interface JobPayloads {
     topicId: string;
     requested: boolean;
     publish?: boolean;
+    replyTo?: string | null;
   };
   publish: {
     groupId: string;
     topics: { id: string; requested: boolean }[];
     requestIds: number[];
+    replyTo?: string | null;
   };
   asset: { groupId: string; assetId: number };
 }
@@ -106,6 +109,7 @@ export interface ChatMessage {
   time: string;
   text: string;
   replyTo: string | null;
+  replyToUserId: string | null;
   reactions?: {
     emojiId: string;
     emojiType: string;
@@ -150,4 +154,5 @@ export interface Delivery {
   noteId: number | null;
   kind: "text" | "note";
   content: string;
+  replyTo: string | null;
 }

@@ -16,6 +16,4 @@ export const stateNames: Record<string, string> = {
   done: "已完成",
   failed: "失败",
   cancelled: "已取消",
-  active: "记录中",
-  closed: "已结束",
 };

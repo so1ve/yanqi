@@ -1,16 +1,15 @@
 <script setup lang="ts">
 import { Plus, Refresh, Search } from "@vicons/tabler";
-import type { Topic } from "@yanqi/bot";
 import type { DataTableColumns } from "naive-ui";
 import { h, ref, watch } from "vue";
 
 import { NuxtLink } from "#components";
-import StateTag from "~/components/StateTag.vue";
 import CreateDialog from "~/components/records/CreateDialog.vue";
+import RecordStatus from "~/components/records/RecordStatus.vue";
 import { useApiData } from "~/composables/useApiData";
 import { positiveInteger, useQueryValue } from "~/composables/useQueryValue";
 import { useWorkspace } from "~/composables/useWorkspace";
-import type { Page } from "~/types/api";
+import type { Page, RecordItem } from "~/types/api";
 import { formatTime } from "~/utils/format";
 
 const { groupId, group } = useWorkspace();
@@ -22,11 +21,11 @@ const page = useQueryValue("page", (value) => positiveInteger(value) ?? 1);
 watch(searchQuery, (value) => {
   query.value = value;
 });
-const { data, error, loading, refresh } = useApiData<Page<Topic>>(
+const { data, error, loading, refresh } = useApiData<Page<RecordItem>>(
   () =>
     `groups/${groupId.value}/records?page=${page.value}&q=${encodeURIComponent(searchQuery.value)}`,
 );
-const columns: DataTableColumns<Topic> = [
+const columns: DataTableColumns<RecordItem> = [
   {
     title: "纪要",
     key: "title",
@@ -46,10 +45,10 @@ const columns: DataTableColumns<Topic> = [
       ]),
   },
   {
-    title: "状态",
-    key: "state",
-    width: 110,
-    render: (row) => h(StateTag, { state: row.state }),
+    title: "整理状态",
+    key: "summaryTaskState",
+    width: 120,
+    render: (row) => h(RecordStatus, { topic: row }),
   },
   {
     title: "版本",
@@ -108,7 +107,7 @@ const createGroupId = ref("");
         :bordered="false"
         :columns
         :data="data?.items ?? []"
-        :row-key="(row: Topic) => row.id"
+        :row-key="(row: RecordItem) => row.id"
         :scroll-x="700"
       />
     </AppPanel>

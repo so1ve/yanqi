@@ -2,14 +2,12 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 import type { Bot, Context } from "@koishijs/core";
-import { Logger, h } from "@koishijs/core";
+import { h } from "@koishijs/core";
 import type { OneBot } from "koishi-plugin-adapter-onebot";
 
 import type { Config } from "../config.ts";
 import type { Store } from "../storage/store.ts";
-import type { Asset, Message, Note, Segment } from "../types.ts";
-import { failureMessage } from "../utils/errors.ts";
-import { logDetail } from "../utils/logging.ts";
+import type { Asset, Note, Segment } from "../types.ts";
 import { renderQQ, renderQQParts } from "./render.ts";
 
 type ProtocolBot = Bot & { internal: OneBot.Internal };
@@ -35,8 +33,6 @@ function textParts(text: string, length: number): string[] {
 }
 
 export function createMessenger(config: Config, store: Store, ctx: Context) {
-  const logger = new Logger("yanqi:qq");
-
   function getBot(): ProtocolBot {
     const bot = ctx.bots.find(
       (candidate) => candidate.selfId === config.BOT_QQ,
@@ -56,6 +52,7 @@ export function createMessenger(config: Config, store: Store, ctx: Context) {
     text: string,
     segments: Segment[],
     noteId?: number,
+    replyTo: string | null = null,
   ) {
     const now = Date.now();
 
@@ -68,7 +65,7 @@ export function createMessenger(config: Config, store: Store, ctx: Context) {
       receivedAt: now,
       text,
       content: segments,
-      replyTo: null,
+      replyTo,
       isBot: true,
       addressed: false,
       role: "member",
@@ -80,41 +77,35 @@ export function createMessenger(config: Config, store: Store, ctx: Context) {
     get online(): boolean {
       return ctx.bots.find((bot) => bot.selfId === config.BOT_QQ)?.status === 1;
     },
-    async acknowledge({
-      id,
-      groupId,
-      messageId,
-    }: Pick<Message, "id" | "groupId" | "messageId">) {
-      if (!config.ACK_EMOJI_ID) {
-        return;
-      }
-
-      try {
-        await getBot().createReaction(groupId, messageId, config.ACK_EMOJI_ID);
-      } catch (error) {
-        logger.warn(
-          "处理标记失败：m%s group=%s %s",
-          id,
-          groupId,
-          logDetail(failureMessage(error), config),
-        );
-      }
-    },
-    async sendText(groupId: string, text: string) {
+    async sendText(
+      groupId: string,
+      text: string,
+      replyTo: string | null = null,
+    ) {
       text = renderQQ(text);
 
       if (!text.trim()) {
         return;
       }
 
-      const segments = [{ type: "text", data: { text } }];
-      const ids = await getBot().sendMessage(groupId, h.text(text));
+      const segments = [
+        ...(replyTo ? [{ type: "reply", data: { id: replyTo } }] : []),
+        { type: "text", data: { text } },
+      ];
+      const ids = await getBot().sendMessage(groupId, [
+        ...(replyTo ? [h.quote(replyTo)] : []),
+        h.text(text),
+      ]);
 
       for (const id of ids) {
-        await saveOutgoing(groupId, id, text, segments);
+        await saveOutgoing(groupId, id, text, segments, undefined, replyTo);
       }
     },
-    async sendNotes(notes: Note[], notification = "") {
+    async sendNotes(
+      notes: Note[],
+      notification = "",
+      replyTo: string | null = null,
+    ) {
       const bot = getBot();
 
       assert.ok(notes.length > 0);
@@ -164,6 +155,14 @@ export function createMessenger(config: Config, store: Store, ctx: Context) {
         documents.push(contents);
       }
 
+      const announcement = renderQQ(notification);
+      const quote = replyTo ? [{ type: "reply", data: { id: replyTo } }] : [];
+
+      // NapCat 的转发接口只接收 node；引用放在首条内容内，整批仍只发一张卡片。
+      if (!announcement && quote.length > 0) {
+        documents[0]![0]!.unshift(...quote);
+      }
+
       const node = (content: Segment[]): Segment => ({
         type: "node",
         data: {
@@ -178,10 +177,11 @@ export function createMessenger(config: Config, store: Store, ctx: Context) {
         // NapCat 把 node 内的 node 列表生成嵌套转发，无需先向群里发送子卡片。
         return notes.length === 1 ? children : [node(children)];
       });
-      const announcement = renderQQ(notification);
 
       if (announcement) {
-        nodes.unshift(node([{ type: "text", data: { text: announcement } }]));
+        nodes.unshift(
+          node([...quote, { type: "text", data: { text: announcement } }]),
+        );
       }
 
       // 使用原生接口保留代码空白，并把整批纪要作为一条群消息发送。
@@ -199,6 +199,7 @@ export function createMessenger(config: Config, store: Store, ctx: Context) {
         ].join("\n"),
         [],
         notes.length === 1 ? notes[0]!.id : undefined,
+        replyTo,
       );
     },
     async getAsset(groupId: string, kind: Asset["kind"], reference: string) {

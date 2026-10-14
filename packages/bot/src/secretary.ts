@@ -2,7 +2,6 @@ import type { Context, Logger } from "@koishijs/core";
 
 import { Ai } from "./agent/ai.ts";
 import type { Config } from "./config.ts";
-import type { Messenger } from "./onebot/messenger.ts";
 import { createMessenger } from "./onebot/messenger.ts";
 import type { ReactionSync } from "./onebot/reactions.ts";
 import { Notes } from "./recording/notes.ts";
@@ -15,7 +14,6 @@ import { logDetail } from "./utils/logging.ts";
 export class Secretary {
   #config: Config;
   #store: Store;
-  #messenger: Messenger;
   #tasks: BackgroundTasks;
   #logger: Logger;
   #controller = new AbortController();
@@ -28,7 +26,7 @@ export class Secretary {
   ) {
     this.#config = config;
     this.#store = store;
-    this.#messenger = createMessenger(config, store, ctx);
+    const messenger = createMessenger(config, store, ctx);
     const ai = new Ai(config, store, this.#controller.signal);
     const notes = new Notes(
       config,
@@ -43,7 +41,7 @@ export class Secretary {
       store,
       ai,
       notes,
-      this.#messenger,
+      messenger,
       this.#controller.signal,
       reactions,
     );
@@ -57,7 +55,6 @@ export class Secretary {
           groupId: message.groupId,
           messageId: message.id,
         });
-        void this.#messenger.acknowledge(message);
       } else if (this.#config.AUTO_REPLY) {
         await this.#store.inbox.observe(message);
       }

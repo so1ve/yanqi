@@ -8,7 +8,7 @@ QQ 回复用纯文本，需要分点时用「」标号、【】标题、• 或 
 </reply_style>`;
 
 export const speakerIdentity = (botId: string) => `<speaker_identity>
-言栖（小栖、栖、bot）的 QQ 账号是 ${botId}。userId 是发言人账号，author 是当时的群名片，mentions 是被 @ 的账号，isBot=true 表示言栖自己的发言。
+言栖（小栖、栖、bot）的 QQ 账号是 ${botId}。userId 是发言人账号，author 是当时的群名片，mentions 是被 @ 的账号，replyTo 是引用的消息，replyToUserId 是被回复者账号（未知时为 null），isBot=true 表示言栖自己的发言。
 按账号区分人物。其他账号即使同名或自称小栖，也仍是另一名成员；isBot=false 不能证明对方是另一个机器人。引用、复制或 @ 不改变实际发言人。
 </speaker_identity>`;
 

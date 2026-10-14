@@ -6,9 +6,10 @@ import type { Selectable } from "kysely";
 import type { Delivery, Note } from "../types.ts";
 import type { Database, Tables } from "./schema.ts";
 
-type Outgoing =
+type Outgoing = (
   | { kind: "text"; groupId: string; content: string }
-  | { kind: "note"; note: Note; repeat?: boolean };
+  | { kind: "note"; note: Note; repeat?: boolean }
+) & { replyTo?: string | null };
 
 export class DeliveryQueue {
   #db: Database;
@@ -50,14 +51,19 @@ export class DeliveryQueue {
     return { items, total: total.count };
   }
 
-  public async enqueueNote(note: Note, requestId?: number) {
-    return (await this.enqueueNotes([{ note, requestId }]))[0]!;
+  public async enqueueNote(
+    note: Note,
+    requestId?: number,
+    replyTo: string | null = null,
+  ) {
+    return (await this.enqueueNotes([{ note, requestId }], "", replyTo))[0]!;
   }
 
   // 整批入队，发送器不会在后续纪要入队前抢先发出第一篇。
   public async enqueueNotes(
     notes: { note: Note; requestId: number | undefined }[],
     notification = "",
+    replyTo: string | null = null,
   ) {
     const results = await this.#db.transaction().execute(async (db) => {
       const results = [];
@@ -69,7 +75,7 @@ export class DeliveryQueue {
             requestId === undefined
               ? `auto-note:${note.id}`
               : `requested:${requestId}:note:${note.id}`,
-            { kind: "note", note, repeat: requestId !== undefined },
+            { kind: "note", note, repeat: requestId !== undefined, replyTo },
           ),
         );
       }
@@ -140,6 +146,7 @@ export class DeliveryQueue {
           topicId: note?.topicId ?? null,
           noteId: note?.id ?? null,
           content: outgoing.kind === "text" ? outgoing.content : "",
+          replyTo: outgoing.replyTo ?? null,
           createdAt: Date.now(),
         })
         .returningAll()
@@ -173,12 +180,13 @@ export class DeliveryQueue {
     return { id: delivery.id, kind: delivery.kind, state: delivery.state };
   }
 
-  public pendingNotes(groupId: string) {
+  public pendingNotes(groupId: string, replyTo: string | null) {
     return this.#db
       .selectFrom("deliveries")
       .selectAll()
       .where("groupId", "=", groupId)
       .where("kind", "=", "note")
+      .where("replyTo", replyTo === null ? "is" : "=", replyTo)
       .where("state", "=", "pending")
       .orderBy("id")
       .execute();

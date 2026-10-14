@@ -47,7 +47,6 @@ export interface Tables {
     Topic,
     | "description"
     | "focus"
-    | "state"
     | "lastSourceId"
     | "revision"
     | "generation"
@@ -189,9 +188,7 @@ export async function createTables(db: Database): Promise<void> {
     .addColumn("focus", "text", (column) => column.notNull().defaultTo(""))
     .addColumn("mode", "text", (column) => column.notNull())
     .addColumn("ownerId", "text")
-    .addColumn("state", "text", (column) =>
-      column.notNull().defaultTo("active"),
-    )
+    .addColumn("state", "text", (column) => column.notNull())
     .addColumn("lastActiveAt", "integer", (column) => column.notNull())
     .addColumn("lastSourceId", "integer", (column) =>
       column.notNull().defaultTo(0),
@@ -289,6 +286,7 @@ export async function createTables(db: Database): Promise<void> {
     .addColumn("groupId", "text", (column) => column.notNull())
     .addColumn("topicId", "text")
     .addColumn("noteId", "integer")
+    .addColumn("replyTo", "text")
     .addColumn("kind", "text", (column) => column.notNull())
     .addColumn("content", "text", (column) => column.notNull())
     .addColumn("state", "text", (column) =>

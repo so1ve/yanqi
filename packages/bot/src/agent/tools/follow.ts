@@ -8,6 +8,8 @@ import {
   directive,
   getTopic,
   object,
+  replyTo,
+  resolveReply,
   title,
   tool,
   topicId,
@@ -23,6 +25,7 @@ const parameters = Type.Union([
   object({
     action: Type.Literal("stop"),
     topicId: Type.Optional(topicId),
+    replyTo,
     include: Type.Optional(sourceScope),
     directive,
   }),
@@ -64,6 +67,7 @@ export function followTool(context: ToolContext) {
         return { topicId: topic.id, title: topic.title, state: "following" };
       }
 
+      const quote = await resolveReply(context, args.replyTo);
       const topic = args.topicId
         ? await getTopic(context, args.topicId)
         : (owned[0] ??
@@ -77,7 +81,7 @@ export function followTool(context: ToolContext) {
       }
 
       if (topic.state === "closed" && topic.endedAtMessageId === null) {
-        return notes.arrange(topic, message.id);
+        return notes.arrange(topic, message.id, quote);
       }
 
       const included = args.include
@@ -89,7 +93,7 @@ export function followTool(context: ToolContext) {
         included.map((source) => source.id),
         args.directive,
       );
-      const result = await notes.arrange(stopped, message.id);
+      const result = await notes.arrange(stopped, message.id, quote);
 
       wake();
 

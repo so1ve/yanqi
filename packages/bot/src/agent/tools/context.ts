@@ -5,6 +5,7 @@ import { Type } from "typebox";
 import type { Config } from "../../config.ts";
 import type { ReactionSync } from "../../onebot/reactions.ts";
 import type { Notes } from "../../recording/notes.ts";
+import { sourceId } from "../../recording/sources.ts";
 import type { Store } from "../../storage/store.ts";
 import type { Message } from "../../types.ts";
 
@@ -33,6 +34,29 @@ export const directive = Type.Optional(
     Type.Literal("hold"),
   ]),
 );
+export const replyTo = Type.Optional({
+  ...sourceId,
+  description:
+    "可选的引用对象，填写本群已知消息 ID（如 m123），省略则不引用。被 @、点名或需要说清在回答哪条消息时，可选触发消息；交付纪要也可选自己之前相关的答复。纪要的引用放在合并转发卡片首条内容内。不要为无关消息建立回复关系。",
+});
+
+export async function resolveReply(
+  { store, message }: RequestContext,
+  reference: string | undefined,
+): Promise<string | null> {
+  if (reference === undefined) {
+    return null;
+  }
+
+  const target = await store.messages.get(Number(reference.slice(1)));
+
+  if (target.groupId !== message.groupId || target.recalledAt !== null) {
+    throw new Error("只能引用本群未撤回的消息");
+  }
+
+  return target.messageId;
+}
+
 export const title = Type.Optional(
   Type.String({ minLength: 1, maxLength: 100 }),
 );

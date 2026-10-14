@@ -56,6 +56,8 @@ export async function enqueueJob<K extends JobKind>(
       const merged = {
         ...summary,
         requested: previous.requested || summary.requested,
+        replyTo:
+          summary.replyTo === undefined ? previous.replyTo : summary.replyTo,
         publish:
           previous.publish === false && !summary.requested
             ? false
@@ -78,9 +80,13 @@ export async function enqueueJob<K extends JobKind>(
         .where("id", "=", id)
         .execute();
       if (merged.publish && (summary.requested || previous.publish === false)) {
-        await enqueuePublication(db, merged.groupId, [
-          { id: merged.topicId, requested: merged.requested },
-        ]);
+        await enqueuePublication(
+          db,
+          merged.groupId,
+          [{ id: merged.topicId, requested: merged.requested }],
+          [],
+          summary.replyTo,
+        );
       }
     }
 
@@ -95,9 +101,13 @@ export async function enqueueJob<K extends JobKind>(
 
   id = job.id;
   if (summary && summary.publish !== false) {
-    await enqueuePublication(db, summary.groupId, [
-      { id: summary.topicId, requested: summary.requested },
-    ]);
+    await enqueuePublication(
+      db,
+      summary.groupId,
+      [{ id: summary.topicId, requested: summary.requested }],
+      [],
+      summary.replyTo,
+    );
   }
 
   logger.info("任务 #%s 入队：kind=%s key=%s", id, kind, key);
@@ -111,6 +121,7 @@ async function enqueuePublication(
   groupId: string,
   topics: JobPayloads["publish"]["topics"],
   requestIds: number[] = [],
+  replyTo?: string | null,
 ): Promise<number | null> {
   // 只有当前请求交给后台的结果需要交付。旧发送指令不授权自动更新再次发群。
   topics = topics.filter((item) => item.requested);
@@ -143,22 +154,32 @@ async function enqueuePublication(
     });
   }
 
-  const requests = await db
-    .selectFrom("topics")
-    .select("directiveMessageId")
-    .where("id", "in", [...merged.keys()])
-    .where("directiveMessageId", "is not", null)
-    .execute();
+  // 重新排队时沿用原批次的请求，不能把话题后来收到的请求归给旧引用。
+  const currentRequests =
+    requestIds.length > 0
+      ? requestIds
+      : (
+          await db
+            .selectFrom("topics")
+            .select("directiveMessageId")
+            .where(
+              "id",
+              "in",
+              topics.map((topic) => topic.id),
+            )
+            .where("directiveMessageId", "is not", null)
+            .execute()
+        ).map((topic) => topic.directiveMessageId!);
   const payload = JSON.stringify({
     groupId,
+    // 合并为一张卡片时采用最新请求选定的引用；旧批次重排不能覆盖新选择。
+    replyTo:
+      replyTo !== undefined &&
+      Math.max(0, ...currentRequests) >= Math.max(0, ...previous.requestIds)
+        ? replyTo
+        : (previous.replyTo ?? null),
     topics: [...merged.values()],
-    requestIds: [
-      ...new Set([
-        ...previous.requestIds,
-        ...requestIds,
-        ...requests.map((topic) => topic.directiveMessageId!),
-      ]),
-    ],
+    requestIds: [...new Set([...previous.requestIds, ...currentRequests])],
   });
   const progress = `等待本批 ${merged.size} 份纪要全部整理完毕后统一交付`;
 
@@ -281,6 +302,7 @@ export class JobQueue {
   public async summarize(
     topic: Topic,
     requested = false,
+    replyTo?: string | null,
   ): Promise<number | null> {
     if (!topic.lastSourceId || topic.generation === topic.noteGeneration) {
       return null;
@@ -293,6 +315,7 @@ export class JobQueue {
         groupId: topic.groupId,
         topicId: topic.id,
         requested,
+        ...(replyTo === undefined ? {} : { replyTo }),
       },
     );
   }
@@ -301,10 +324,13 @@ export class JobQueue {
     groupId: string,
     topics: JobPayloads["publish"]["topics"],
     requestIds: number[] = [],
+    replyTo?: string | null,
   ) {
     return this.#db
       .transaction()
-      .execute((db) => enqueuePublication(db, groupId, topics, requestIds));
+      .execute((db) =>
+        enqueuePublication(db, groupId, topics, requestIds, replyTo),
+      );
   }
 
   public async recordingBusy(groupId: string): Promise<boolean> {

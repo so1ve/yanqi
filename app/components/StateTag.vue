@@ -7,7 +7,6 @@ import { stateNames } from "~/utils/labels";
 const props = defineProps<{ state: string }>();
 const types: Record<string, TagProps["type"]> = {
   running: "info",
-  active: "info",
   done: "success",
   failed: "error",
   pending: "warning",

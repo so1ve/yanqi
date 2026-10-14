@@ -2,13 +2,41 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { rm } from "node:fs/promises";
 
+import type { ExpressionBuilder } from "kysely";
+
 import type { Message, Topic } from "../types.ts";
 import { StoreError, required } from "./errors.ts";
 import { topicDirectory } from "./files.ts";
 import { enqueueJob } from "./jobs.ts";
 import { decodeMessage } from "./messages.ts";
-import type { Database } from "./schema.ts";
+import type { Database, JobRow, Tables } from "./schema.ts";
 import { linkMessages } from "./topic-sources.ts";
+
+// 重试旧任务时 id 不会变；排队和执行中的任务优先于历史结果。
+export const summaryTaskState = (eb: ExpressionBuilder<Tables, "topics">) =>
+  eb
+    .selectFrom("jobs")
+    .select("state")
+    .where("kind", "=", "summarize")
+    .where((eb) =>
+      eb(
+        eb.fn<string>("json_extract", ["payload", eb.val("$.topicId")]),
+        "=",
+        eb.ref("topics.id"),
+      ),
+    )
+    .orderBy((eb) =>
+      eb
+        .case()
+        .when("state", "in", ["running", "pending"])
+        .then(0)
+        .else(1)
+        .end(),
+    )
+    .orderBy("id", "desc")
+    .limit(1)
+    .$castTo<{ state: JobRow["state"] | null }>()
+    .as("summaryTaskState");
 
 export class Topics {
   #db: Database;
@@ -23,6 +51,7 @@ export class Topics {
     return this.#db
       .selectFrom("topics")
       .selectAll()
+      .select(summaryTaskState)
       .where("groupId", "=", groupId)
       .where("id", "=", id)
       .executeTakeFirst();
@@ -52,6 +81,7 @@ export class Topics {
     const [items, total] = await Promise.all([
       query
         .selectAll()
+        .select(summaryTaskState)
         .orderBy("lastActiveAt", "desc")
         .offset(options.offset)
         .limit(options.limit)
@@ -139,6 +169,7 @@ export class Topics {
               title: assignment.title,
               mode: "auto",
               ownerId: null,
+              state: "closed",
               lastActiveAt: 0,
             })
             .execute();

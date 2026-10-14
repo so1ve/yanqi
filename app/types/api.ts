@@ -8,6 +8,8 @@ export type Task =
   InternalApi["/api/groups/:groupId/tasks"]["get"]["items"][number];
 export type Delivery =
   InternalApi["/api/groups/:groupId/deliveries"]["get"]["items"][number];
+export type RecordItem =
+  InternalApi["/api/groups/:groupId/records"]["get"]["items"][number];
 export type RecordDetail =
   InternalApi["/api/groups/:groupId/records/:topicId"]["get"];
 export type Overview = InternalApi["/api/overview"]["get"];

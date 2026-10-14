@@ -1,5 +1,6 @@
 import { decodeJob } from "./jobs.ts";
 import type { Database } from "./schema.ts";
+import { summaryTaskState } from "./topics.ts";
 
 export async function overview(db: Database, day: string) {
   const [messages, records, pending, failed, calls, recent, tasks] =
@@ -33,6 +34,7 @@ export async function overview(db: Database, day: string) {
       db
         .selectFrom("topics")
         .selectAll()
+        .select(summaryTaskState)
         .orderBy("lastActiveAt", "desc")
         .limit(6)
         .execute(),

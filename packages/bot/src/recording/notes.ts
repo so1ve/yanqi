@@ -38,7 +38,11 @@ export class Notes {
     this.#reactions = reactions;
   }
 
-  public async arrange(topic: Topic, requestId: number) {
+  public async arrange(
+    topic: Topic,
+    requestId: number,
+    replyTo: string | null = null,
+  ) {
     const note = await this.#store.notes.find(topic.id);
     const record = {
       topicId: topic.id,
@@ -49,7 +53,7 @@ export class Notes {
     if (note?.generation === topic.generation) {
       const delivery =
         topic.directive === "send"
-          ? await this.#store.deliveries.enqueueNote(note, requestId)
+          ? await this.#store.deliveries.enqueueNote(note, requestId, replyTo)
           : null;
 
       return {
@@ -63,7 +67,7 @@ export class Notes {
 
     // 重做和结束连续记录也属于当前请求，交付与收尾不能仍关联旧指令。
     await this.#store.topics.setDirective(topic.id, topic.directive, requestId);
-    const taskId = await this.#store.jobs.summarize(topic, true);
+    const taskId = await this.#store.jobs.summarize(topic, true, replyTo);
 
     return {
       ...record,

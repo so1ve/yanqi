@@ -84,6 +84,7 @@ export async function messageChunks(
         time: beijingTime(message.sentAt),
         text: text.slice(index * length, (index + 1) * length),
         attachmentTasks,
+        replyToUserId: quote?.userId ?? null,
         replyTo: quote
           ? `m${quote.id}`
           : message.replyTo

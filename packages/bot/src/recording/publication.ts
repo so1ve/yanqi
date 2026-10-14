@@ -55,6 +55,7 @@ export async function publishNotes(
       groupId,
       job.payload.topics,
       job.payload.requestIds,
+      job.payload.replyTo,
     );
 
     return;
@@ -139,6 +140,7 @@ export async function publishNotes(
       groupId,
       job.payload.topics,
       job.payload.requestIds,
+      job.payload.replyTo,
     );
 
     return;
@@ -165,12 +167,17 @@ export async function publishNotes(
   }
 
   if (outgoing.length > 0) {
-    await store.deliveries.enqueueNotes(outgoing, notification);
+    await store.deliveries.enqueueNotes(
+      outgoing,
+      notification,
+      job.payload.replyTo,
+    );
   } else if (action === "notify") {
     await store.deliveries.enqueue(`publication:${job.id}`, {
       kind: "text",
       groupId,
       content: notification,
+      replyTo: job.payload.replyTo ?? null,
     });
   }
 

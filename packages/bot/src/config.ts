@@ -29,7 +29,6 @@ export const configSchema = Type.Object(
     GROUP_ADMINS: Type.Record(qq, Type.Array(qq), { default: {} }),
     ONEBOT_URL: Type.String({ default: "ws://napcat:3001" }),
     ONEBOT_TOKEN: Type.String({ default: "" }),
-    ACK_EMOJI_ID: Type.String({ pattern: "^\\d*$", default: "128051" }),
     LOG_LEVEL: Type.Enum(["info", "debug"], { default: "info" }),
     LOG_DETAIL_CHARS: positive(4000),
     BOT_PERSONA: Type.String({ default: defaultPersona }),

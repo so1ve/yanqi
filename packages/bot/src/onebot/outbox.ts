@@ -74,6 +74,7 @@ export class Outbox {
       if (delivery.kind === "note") {
         for (const item of await this.#store.deliveries.pendingNotes(
           delivery.groupId,
+          delivery.replyTo,
         )) {
           assert.ok(item.noteId !== null && item.topicId !== null);
           const topic = await this.#store.topics.get(item.topicId);
@@ -115,6 +116,7 @@ export class Outbox {
             [
               ...new Set(batch.map((item) => item.content).filter(Boolean)),
             ].join("\n"),
+            delivery.replyTo,
           );
         } else {
           this.#logger.debug(
@@ -126,7 +128,11 @@ export class Outbox {
             continue;
           }
 
-          await this.#messenger.sendText(delivery.groupId, delivery.content);
+          await this.#messenger.sendText(
+            delivery.groupId,
+            delivery.content,
+            delivery.replyTo,
+          );
         }
 
         for (const item of batch) {
