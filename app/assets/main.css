@@ -78,6 +78,6 @@ h3 {
   }
 }
 
-.n-data-table .n-data-table-td {
+.n-data-table .n-data-table-td:not(.n-data-table-td--selection) {
   vertical-align: top;
 }
