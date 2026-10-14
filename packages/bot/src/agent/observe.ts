@@ -16,14 +16,14 @@ export async function observeRequests(
     return;
   }
 
-  const { groupId, messageIds } = job.payload;
+  const { groupId, messageIds, memoryOnly = false } = job.payload;
   const conversation = await store.conversations.open(groupId);
   const messages = (
     await Promise.all(messageIds.map((id) => store.inbox.getRequest(id)))
   ).filter(
     (message): message is Message =>
       message !== null &&
-      !message.command &&
+      (memoryOnly || !message.command) &&
       message.id > conversation.afterMessageId,
   );
 
@@ -48,10 +48,11 @@ export async function observeRequests(
   );
 
   for (const chunk of chunks) {
-    const requestIds = await ai.decisions.selectRequests(
+    const { requestIds, memoryIds } = await ai.decisions.selectMessages(
       groupId,
       chunk,
       context,
+      memoryOnly,
     );
 
     const requests = await store.inbox.scheduleRequests(
@@ -61,6 +62,13 @@ export async function observeRequests(
 
     for (const message of requests) {
       void messenger.acknowledge(message);
+    }
+
+    for (const id of memoryIds) {
+      await store.jobs.enqueue("memory", `memory:${job.id}:${id}`, {
+        groupId,
+        messageId: Number(id.slice(1)),
+      });
     }
   }
 }

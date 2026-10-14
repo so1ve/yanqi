@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import {
   estimateContextTokens,
   estimateMessageTokens,
@@ -29,6 +30,24 @@ import { recordTools } from "./tools/records.ts";
 import { notifyTool, replyTool, skipReplyTool } from "./tools/reply.ts";
 import { settingsTools } from "./tools/settings.ts";
 import { taskTool } from "./tools/tasks.ts";
+
+// 记忆每轮按需读取，旧详情及写入参数不随持续会话重复注入。
+const withoutMemoryDetails = (messages: AgentMessage[]): AgentMessage[] =>
+  messages.flatMap<AgentMessage>((message) => {
+    if (message.role === "toolResult" && message.toolName === "memory") {
+      return [];
+    }
+
+    if (message.role === "assistant") {
+      const content = message.content.filter(
+        (part) => part.type !== "toolCall" || part.name !== "memory",
+      );
+
+      return content.length > 0 ? [{ ...message, content }] : [];
+    }
+
+    return [message];
+  });
 
 export class DialogAI {
   #config: Config;
@@ -67,7 +86,10 @@ export class DialogAI {
           this.#persona,
         ),
         { ...state, conversationSummary: conversation.summary },
-        conversation,
+        {
+          ...conversation,
+          messages: withoutMemoryDetails(conversation.messages),
+        },
         {
           model: this.#config.AI_MODEL,
           thinking: "low",
@@ -137,7 +159,10 @@ export class DialogAI {
 
       assert.ok(request?.role === "user");
       messages[lastUser] = { ...request, content: input };
-      conversation = { ...conversation, messages };
+      conversation = {
+        ...conversation,
+        messages: withoutMemoryDetails(messages),
+      };
       await context.store.conversations.save(conversation);
     } finally {
       await subagents.close();

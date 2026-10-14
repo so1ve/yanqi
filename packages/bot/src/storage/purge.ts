@@ -58,7 +58,8 @@ export async function purgeHistory(
           jobs.some(
             (job) =>
               job.state === "running" ||
-              (job.kind === "intent" && job.state === "pending"),
+              ((job.kind === "intent" || job.kind === "memory") &&
+                job.state === "pending"),
           )
         ) {
           return { skipped: true, through: after };

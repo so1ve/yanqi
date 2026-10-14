@@ -58,7 +58,8 @@ export interface Asset {
 
 export interface JobPayloads {
   intent: { groupId: string; messageId: number };
-  observe: { groupId: string; messageIds: number[] };
+  observe: { groupId: string; messageIds: number[]; memoryOnly?: boolean };
+  memory: { groupId: string; messageId: number };
   detect: { groupId: string; messageIds: number[] };
   summarize: {
     groupId: string;
@@ -126,14 +127,15 @@ export interface MemoryOwner {
 
 export interface Memory extends MemoryOwner {
   key: string;
+  summary: string;
   content: string;
   sourceMessageId: number | null;
   updatedAt: number;
 }
 
-export interface MemoryContext {
-  group: Pick<Memory, "key" | "content">[];
-  user: Pick<Memory, "key" | "content">[];
+export interface MemoryIndex {
+  group: Pick<Memory, "key" | "summary">[];
+  user: Pick<Memory, "key" | "summary">[];
 }
 
 export interface Delivery {

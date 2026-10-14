@@ -1,6 +1,7 @@
 export const kindNames: Record<string, string> = {
   intent: "处理请求",
   observe: "识别请求",
+  memory: "更新记忆",
   detect: "识别讨论",
   summarize: "整理纪要",
   asset: "解析附件",

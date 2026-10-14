@@ -55,6 +55,7 @@ export class BackgroundTasks {
     for (const kind of [
       "intent",
       "observe",
+      "memory",
       "detect",
       "summarize",
       "asset",
@@ -162,6 +163,12 @@ export class BackgroundTasks {
           break;
         }
 
+        case "memory": {
+          await this.#ai.memory.review(job.payload.messageId);
+
+          break;
+        }
+
         case "summarize": {
           await this.#notes.generate(job);
 
@@ -178,6 +185,16 @@ export class BackgroundTasks {
             (progress) => this.#store.jobs.reportProgress(job.id, progress),
             this.#signal,
           );
+
+          const asset = await this.#store.assets.get(job.payload.assetId);
+
+          if (this.#config.AUTO_REPLY && asset.interpretation) {
+            const message = await this.#store.inbox.getRequest(asset.messageId);
+
+            if (message) {
+              await this.#store.inbox.observe(message, true);
+            }
+          }
 
           break;
         }

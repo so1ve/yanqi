@@ -1,6 +1,6 @@
 import { Type } from "typebox";
 
-import type { Memory, MemoryContext, MemoryOwner } from "../types.ts";
+import type { Memory, MemoryIndex, MemoryOwner } from "../types.ts";
 import type { Database } from "./schema.ts";
 
 export const memoryScope = Type.Enum(["group", "user"]);
@@ -9,9 +9,16 @@ export const memoryKey = Type.String({
   maxLength: 60,
   pattern: "\\S",
 });
+export const memorySummary = Type.String({
+  minLength: 1,
+  maxLength: 120,
+  pattern: "\\S",
+  description:
+    "压缩后的简介，保留事项当前状态或偏好的适用条件；不复制全部详情。",
+});
 export const memoryContent = Type.String({
   minLength: 1,
-  maxLength: 500,
+  maxLength: 4000,
   pattern: "\\S",
 });
 export const memoryOwner = {
@@ -26,13 +33,15 @@ async function assertActive(db: Database, sourceMessageId: number | null) {
 
   const source = await db
     .selectFrom("messages")
-    .select("recalledAt")
+    .select(["id", "recalledAt", "receivedAt"])
     .where("id", "=", sourceMessageId)
     .executeTakeFirstOrThrow();
 
   if (source.recalledAt !== null) {
     throw new Error("这次请求已撤回");
   }
+
+  return source;
 }
 
 export class Memories {
@@ -63,6 +72,7 @@ export class Memories {
       query = query.where((eb) =>
         eb.or([
           eb(eb.fn<number>("contains_text", ["content", eb.val(text)]), ">", 0),
+          eb(eb.fn<number>("contains_text", ["summary", eb.val(text)]), ">", 0),
           eb(eb.fn<number>("contains_text", ["key", eb.val(text)]), ">", 0),
           eb(eb.fn<number>("instr", ["ownerId", eb.val(text)]), ">", 0),
         ]),
@@ -84,53 +94,80 @@ export class Memories {
     return { items, total: total.count };
   }
 
-  public async list({ scope, ownerId }: MemoryOwner): Promise<Memory[]> {
+  public async read(
+    { scope, ownerId }: MemoryOwner,
+    keys: string[],
+  ): Promise<Memory[]> {
     return this.#db
       .selectFrom("memories")
       .selectAll()
       .where("scope", "=", scope)
       .where("ownerId", "=", ownerId)
-      .orderBy("updatedAt", "desc")
+      .where("key", "in", keys)
       .orderBy("key")
       .execute();
   }
 
-  public async context(
+  public async index(
     groupId: string,
     userId?: string | null,
-  ): Promise<MemoryContext> {
-    const [group, user] = await Promise.all([
-      this.list({ scope: "group", ownerId: groupId }),
-      userId ? this.list({ scope: "user", ownerId: userId }) : [],
-    ]);
-    const content = ({ key, content }: Memory) => ({ key, content });
+  ): Promise<MemoryIndex> {
+    const entries = await this.#db
+      .selectFrom("memories")
+      .select(["scope", "key", "summary"])
+      .where((eb) =>
+        eb.or([
+          eb.and({ scope: "group", ownerId: groupId }),
+          ...(userId ? [eb.and({ scope: "user", ownerId: userId })] : []),
+        ]),
+      )
+      .orderBy("updatedAt", "desc")
+      .orderBy("key")
+      .execute();
+    const index: MemoryIndex = { group: [], user: [] };
 
-    return { group: group.map(content), user: user.map(content) };
+    for (const { scope, key, summary } of entries) {
+      index[scope].push({ key, summary });
+    }
+
+    return index;
   }
 
   public async remember(
     owner: MemoryOwner,
-    key: string,
-    content: string,
+    entry: Pick<Memory, "key" | "summary" | "content">,
     sourceMessageId: number | null,
-  ): Promise<void> {
-    await this.#db.transaction().execute(async (db) => {
-      await assertActive(db, sourceMessageId);
+  ): Promise<boolean> {
+    return this.#db.transaction().execute(async (db) => {
+      const source = await assertActive(db, sourceMessageId);
       const current = await db
         .selectFrom("memories")
-        .select("key")
+        .select(["key", "sourceMessageId", "updatedAt"])
         .where("scope", "=", owner.scope)
         .where("ownerId", "=", owner.ownerId)
         .execute();
 
-      if (current.length >= 40 && !current.some((item) => item.key === key)) {
+      const existing = current.find((item) => item.key === entry.key);
+
+      // 附件可能晚于新进展解析完成，旧消息不能覆盖较新的记忆或管理台修改。
+      if (
+        existing &&
+        source &&
+        ((existing.sourceMessageId !== null &&
+          existing.sourceMessageId > source.id) ||
+          (existing.sourceMessageId === null &&
+            existing.updatedAt > source.receivedAt))
+      ) {
+        return false;
+      }
+
+      if (current.length >= 40 && !existing) {
         throw new Error("这份记忆已有 40 项，请合并相关内容或删除过时条目");
       }
 
       const values = {
         ...owner,
-        key,
-        content,
+        ...entry,
         sourceMessageId,
         updatedAt: Date.now(),
       };
@@ -142,6 +179,8 @@ export class Memories {
           conflict.columns(["scope", "ownerId", "key"]).doUpdateSet(values),
         )
         .execute();
+
+      return true;
     });
   }
 
@@ -151,13 +190,26 @@ export class Memories {
     sourceMessageId: number | null,
   ): Promise<boolean> {
     return this.#db.transaction().execute(async (db) => {
-      await assertActive(db, sourceMessageId);
-      const result = await db
+      const source = await assertActive(db, sourceMessageId);
+      let query = db
         .deleteFrom("memories")
         .where("scope", "=", owner.scope)
         .where("ownerId", "=", owner.ownerId)
-        .where("key", "=", key)
-        .executeTakeFirst();
+        .where("key", "=", key);
+
+      if (source) {
+        query = query.where((eb) =>
+          eb.or([
+            eb("sourceMessageId", "<=", source.id),
+            eb.and([
+              eb("sourceMessageId", "is", null),
+              eb("updatedAt", "<=", source.receivedAt),
+            ]),
+          ]),
+        );
+      }
+
+      const result = await query.executeTakeFirst();
 
       return result.numDeletedRows > 0n;
     });

@@ -295,7 +295,7 @@ export class JobQueue {
     const rows = await this.#db
       .selectFrom("jobs")
       .selectAll()
-      .where("kind", "not in", ["intent", "observe"])
+      .where("kind", "not in", ["intent", "observe", "memory"])
       .where((eb) =>
         eb.or([eb("state", "!=", "done"), eb("kind", "=", "summarize")]),
       )

@@ -1,3 +1,8 @@
+export interface MessageSelection {
+  requestIds: string[];
+  memoryIds: string[];
+}
+
 export interface DecisionRequest {
   input: string;
   questions: Record<

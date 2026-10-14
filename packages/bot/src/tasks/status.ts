@@ -36,7 +36,9 @@ export async function taskStatus(store: Store, groupId: string, id: number) {
           ? "识别讨论话题"
           : job.kind === "observe"
             ? "识别请求"
-            : "处理对话请求（与后台整理和发送分别执行）",
+            : job.kind === "memory"
+              ? "更新记忆"
+              : "处理对话请求（与后台整理和发送分别执行）",
     state: job.state,
     attempts: job.attempts,
     progress: job.progress,

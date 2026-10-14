@@ -17,6 +17,7 @@ const form = ref({
   ownerId:
     props.memory?.ownerId ?? (props.scope === "group" ? props.groupId : ""),
   key: props.memory?.key ?? "",
+  summary: props.memory?.summary ?? "",
   content: props.memory?.content ?? "",
 });
 
@@ -49,7 +50,7 @@ async function save(): Promise<void> {
       <p class="scope-help">
         {{
           form.scope === "group"
-            ? "只在当前群生效，例如少发言、群内约定或共同项目背景。"
+            ? "只在当前群生效，例如群内约定、会面安排或项目进展。"
             : "跟随这个 QQ 账号跨群生效，例如称呼、回复长度或个人输出偏好。"
         }}
       </p>
@@ -68,11 +69,22 @@ async function save(): Promise<void> {
           placeholder="例如：纪要偏好"
         />
       </NFormItem>
-      <NFormItem label="内容">
+      <NFormItem label="简介">
+        <NInput
+          v-model:value="form.summary"
+          :autosize="{ minRows: 2, maxRows: 4 }"
+          :maxlength="120"
+          placeholder="概括当前状态和重要条件，小栖先读这段简介。"
+          show-count
+          type="textarea"
+        />
+      </NFormItem>
+      <NFormItem label="详情">
         <NInput
           v-model:value="form.content"
           :autosize="{ minRows: 4, maxRows: 12 }"
-          :maxlength="500"
+          :maxlength="4000"
+          placeholder="保留相关细节，小栖需要时会读取。"
           show-count
           type="textarea"
         />
@@ -84,6 +96,7 @@ async function save(): Promise<void> {
           :disabled="
             !/^\d+$/.test(form.ownerId) ||
             !form.key.trim() ||
+            !form.summary.trim() ||
             !form.content.trim()
           "
           :loading="busy"

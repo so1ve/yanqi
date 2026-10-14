@@ -125,7 +125,7 @@ export class Inbox {
       : null;
   }
 
-  public async observe(message: Message): Promise<void> {
+  public async observe(message: Message, memoryOnly = false): Promise<void> {
     if (!this.#canInteract(message)) {
       return;
     }
@@ -136,6 +136,16 @@ export class Inbox {
         .selectAll()
         .where("kind", "=", "observe")
         .where("state", "=", "pending")
+        .where((eb) =>
+          eb(
+            eb.fn<number>("coalesce", [
+              eb.fn("json_extract", ["payload", eb.val("$.memoryOnly")]),
+              eb.val(0),
+            ]),
+            "=",
+            Number(memoryOnly),
+          ),
+        )
         .where((eb) =>
           eb(
             eb.fn<string>("json_extract", ["payload", eb.val("$.groupId")]),
@@ -153,7 +163,7 @@ export class Inbox {
           .set({
             payload: JSON.stringify({
               ...payload,
-              messageIds: [...payload.messageIds, message.id],
+              messageIds: [...new Set([...payload.messageIds, message.id])],
             }),
           })
           .where("id", "=", pending.id)
@@ -163,12 +173,15 @@ export class Inbox {
         await enqueueJob(
           db,
           "observe",
-          `observe:${message.id}`,
+          memoryOnly
+            ? `observe-memory:${message.id}:${Date.now()}`
+            : `observe:${message.id}`,
           {
             groupId: message.groupId,
             messageIds: [message.id],
+            memoryOnly,
           },
-          message.receivedAt + 1000,
+          (memoryOnly ? Date.now() : message.receivedAt) + 1000,
         );
       }
     });

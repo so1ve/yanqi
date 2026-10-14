@@ -10,6 +10,7 @@ import { summaryPrompts } from "./prompts/summary.ts";
 import type { AgentRuntime } from "./runtime.ts";
 import type { Detection, Publication } from "./schemas.ts";
 import { detectionSchema, publicationSchema } from "./schemas.ts";
+import { recallMemoryTool } from "./tools/memory.ts";
 
 export class RecordingAI {
   #runtime: AgentRuntime;
@@ -61,12 +62,12 @@ export class RecordingAI {
         focus,
         messages,
         context,
-        memory: await this.#store.memories.context(
-          topic.groupId,
-          topic.ownerId,
-        ),
+        memory: await this.#store.memories.index(topic.groupId, topic.ownerId),
       },
-      { thinking: "high" },
+      {
+        thinking: "high",
+        tools: [recallMemoryTool(this.#store, topic.groupId, topic.ownerId)],
+      },
     );
 
     return result.markdown.trim();
@@ -85,12 +86,12 @@ export class RecordingAI {
         focus: topic.focus,
         sections,
         ...(targetChars === undefined ? {} : { targetChars }),
-        memory: await this.#store.memories.context(
-          topic.groupId,
-          topic.ownerId,
-        ),
+        memory: await this.#store.memories.index(topic.groupId, topic.ownerId),
       },
-      { thinking: "high" },
+      {
+        thinking: "high",
+        tools: [recallMemoryTool(this.#store, topic.groupId, topic.ownerId)],
+      },
     );
   }
 
@@ -117,7 +118,7 @@ export class RecordingAI {
       context,
       request,
       recent,
-      memory: await this.#store.memories.context(
+      memory: await this.#store.memories.index(
         topic.groupId,
         request[0]?.userId ?? topic.ownerId,
       ),
@@ -127,8 +128,17 @@ export class RecordingAI {
     return this.#runtime.json(
       "publication",
       publicationSchema,
-      `${prompts.publication}\n${this.#sourceRules}\n${this.#persona}`,
+      `${prompts.publication}\n${this.#sourceRules}\n${summaryMemory}\n${this.#persona}`,
       input,
+      {
+        tools: [
+          recallMemoryTool(
+            this.#store,
+            topic.groupId,
+            request[0]?.userId ?? topic.ownerId,
+          ),
+        ],
+      },
     );
   }
 }

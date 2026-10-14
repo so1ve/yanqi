@@ -12,12 +12,12 @@ import type { AgentRuntime } from "../runtime.ts";
 import { reserveCall } from "../usage.ts";
 import { createClefDecision } from "./clef.ts";
 import { createJevDecision } from "./jev.ts";
-import { selectRequests } from "./llm.ts";
+import { selectMessages } from "./llm.ts";
 import { createOpenAIDecision } from "./openai.ts";
-import type { EvaluateDecision } from "./types.ts";
+import type { EvaluateDecision, MessageSelection } from "./types.ts";
 
 const choiceSchema = Type.Object({
-  choice: Type.Enum(["process", "ignore"]),
+  choice: Type.Enum(["process", "memory", "ignore"]),
   confidence: Type.Number({ minimum: 0, maximum: 1 }),
 });
 
@@ -70,12 +70,13 @@ export class Decisions {
     this.#signal = signal;
   }
 
-  public async selectRequests(
+  public async selectMessages(
     groupId: string,
     messages: ChatMessage[],
     context: ChatMessage[],
-  ): Promise<string[]> {
-    const selected: string[] = [];
+    memoryOnly = false,
+  ): Promise<MessageSelection> {
+    const selected: MessageSelection = { requestIds: [], memoryIds: [] };
 
     // 按发言人分批，个人偏好不会影响同批的其他人。
     for (const userId of new Set(messages.map((message) => message.userId))) {
@@ -83,7 +84,7 @@ export class Decisions {
         messages: messages.map(decisionMessage),
         context: context.map(decisionMessage),
         requestUserId: userId,
-        memory: await this.#store.memories.context(groupId, userId),
+        memory: await this.#store.memories.index(groupId, userId),
       };
       const ids = [
         ...new Set(
@@ -95,9 +96,14 @@ export class Decisions {
 
       // Clef 每次最多接受 64 个问题。
       for (let offset = 0; offset < ids.length; offset += 64) {
-        selected.push(
-          ...(await this.#classify(input, ids.slice(offset, offset + 64))),
+        const batch = await this.#classify(
+          input,
+          ids.slice(offset, offset + 64),
+          memoryOnly,
         );
+
+        selected.requestIds.push(...batch.requestIds);
+        selected.memoryIds.push(...batch.memoryIds);
       }
     }
 
@@ -107,11 +113,21 @@ export class Decisions {
   async #classify(
     state: Record<string, unknown>,
     candidates: string[],
-  ): Promise<string[]> {
-    const rules = `${decisionPrompt}\n${chatSourceRules(this.#config.BOT_QQ)}`;
+    memoryOnly: boolean,
+  ): Promise<MessageSelection> {
+    const rules = `${decisionPrompt}\n${chatSourceRules(this.#config.BOT_QQ)}${memoryOnly ? "\n<attachment_review>附件解析完成，本轮只判断是否值得更新记忆。仅选择 memory 或 ignore，不重新回复、执行请求或叫醒主对话。</attachment_review>" : ""}`;
+    const criteria = memoryOnly
+      ? { memory: decisionCriteria.memory, ignore: decisionCriteria.ignore }
+      : decisionCriteria;
 
     if (!this.#evaluate) {
-      return selectRequests(this.#runtime, rules, state, candidates);
+      return selectMessages(
+        this.#runtime,
+        rules,
+        state,
+        candidates,
+        memoryOnly,
+      );
     }
 
     const questions = Object.fromEntries(
@@ -119,8 +135,8 @@ export class Decisions {
         id,
         {
           // 分类规则必须放在服务实际读取的 instructions 中，修改遵循 prompts/README.md。
-          instructions: `${rules}\n<target>只分类 messages 中 ID 为 ${id} 的消息，返回 process 或 ignore 对应的选择。</target>`,
-          criteria: decisionCriteria,
+          instructions: `${rules}\n<target>只分类 messages 中 ID 为 ${id} 的消息，从给定选项中选择对应的处理方式。</target>`,
+          criteria,
         },
       ]),
     );
@@ -134,10 +150,21 @@ export class Decisions {
       if (candidates.length > 1) {
         const middle = Math.ceil(candidates.length / 2);
 
-        return [
-          ...(await this.#classify(state, candidates.slice(0, middle))),
-          ...(await this.#classify(state, candidates.slice(middle))),
-        ];
+        const first = await this.#classify(
+          state,
+          candidates.slice(0, middle),
+          memoryOnly,
+        );
+        const rest = await this.#classify(
+          state,
+          candidates.slice(middle),
+          memoryOnly,
+        );
+
+        return {
+          requestIds: [...first.requestIds, ...rest.requestIds],
+          memoryIds: [...first.memoryIds, ...rest.memoryIds],
+        };
       }
 
       throw new Error(
@@ -172,7 +199,7 @@ export class Decisions {
       "decision:observe",
     );
     const answers = await this.#evaluate({ input, questions }, this.#signal);
-    const selected: string[] = [];
+    const selected: MessageSelection = { requestIds: [], memoryIds: [] };
 
     this.#logger.debug(
       "%s 决策返回：%s",
@@ -183,7 +210,7 @@ export class Decisions {
     for (const id of candidates) {
       const answer = answers[id];
 
-      if (!Value.Check(choiceSchema, answer)) {
+      if (!Value.Check(choiceSchema, answer) || !(answer.choice in criteria)) {
         throw new Error(`决策服务返回的消息 ${id} 的选项或置信度格式不正确`);
       }
 
@@ -199,14 +226,17 @@ export class Decisions {
       );
 
       if (forward) {
-        selected.push(id);
+        selected.requestIds.push(id);
+      } else if (answer.choice === "memory") {
+        selected.memoryIds.push(id);
       }
     }
 
     this.#logger.info(
-      "%s 独立决策完成：接收请求=%s/%s 耗时=%s ms",
+      "%s 独立决策完成：请求=%s 记忆=%s 候选=%s 耗时=%s ms",
       label,
-      selected.length,
+      selected.requestIds.length,
+      selected.memoryIds.length,
       candidates.length,
       Math.round(performance.now() - startedAt),
     );

@@ -76,7 +76,7 @@ const columns = computed<DataTableColumns<Memory>>(() => [
             class: "cell-sub",
             style: "white-space: pre-wrap; font-size: 13px; color: #68788b",
           },
-          row.content,
+          row.summary,
         ),
       ]),
   },
@@ -126,7 +126,7 @@ const columns = computed<DataTableColumns<Memory>>(() => [
   <PageHeading
     :description="
       scope === 'group'
-        ? `${group?.name ?? groupId} · 本群共同的约定与长期信息`
+        ? `${group?.name ?? groupId} · 本群的约定、后续安排与项目进展`
         : '按 QQ 账号跨群使用的个人偏好，只影响与本人的交互'
     "
     :title="scope === 'group' ? '群共享记忆' : '个人偏好'"
@@ -154,7 +154,7 @@ const columns = computed<DataTableColumns<Memory>>(() => [
   <LoadState
     :description="
       scope === 'group'
-        ? '向小栖说明本群的约定，它会在之后的判断和回复中使用。'
+        ? '小栖会从对话中记住共同约定、后续安排与进展，也可以在这里添加。'
         : '在对话中告诉小栖你的偏好，也可以在这里添加。'
     "
     :empty="!data?.items.length"

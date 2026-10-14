@@ -61,7 +61,7 @@ export async function handleRequest(
     Math.min(3000, Math.floor(config.AI_INPUT_CHARS / 4)),
     conversation.afterMessageId,
   );
-  const memory = await store.memories.context(message.groupId, message.userId);
+  const memory = await store.memories.index(message.groupId, message.userId);
   const tools = {
     store,
     message,

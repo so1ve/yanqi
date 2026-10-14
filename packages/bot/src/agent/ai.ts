@@ -3,6 +3,7 @@ import type { Store } from "../storage/store.ts";
 import { Decisions } from "./decisions/index.ts";
 import { DialogAI } from "./dialog.ts";
 import { MediaAI } from "./media.ts";
+import { MemoryAI } from "./memory.ts";
 import { RecordingAI } from "./recording.ts";
 import { AgentRuntime } from "./runtime.ts";
 
@@ -11,6 +12,7 @@ export class Ai {
   public readonly dialog: DialogAI;
   public readonly recording: RecordingAI;
   public readonly media: MediaAI;
+  public readonly memory: MemoryAI;
 
   constructor(config: Config, store: Store, signal: AbortSignal) {
     const runtime = new AgentRuntime(config, store, signal);
@@ -24,6 +26,7 @@ export class Ai {
     this.decisions = new Decisions(config, store, runtime, signal);
     this.dialog = new DialogAI(config, runtime, style);
     this.recording = new RecordingAI(runtime, style, store, config.BOT_QQ);
+    this.memory = new MemoryAI(config, store, runtime);
     this.media = new MediaAI(config, store, runtime, signal);
   }
 }
