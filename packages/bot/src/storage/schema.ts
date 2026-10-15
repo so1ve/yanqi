@@ -19,6 +19,7 @@ export interface Tables {
     id: string;
     cursor: Generated<number>;
     aiEnabled: Generated<number>;
+    historyThrough: Generated<number>;
   };
   conversations: {
     groupId: string;
@@ -28,13 +29,17 @@ export interface Tables {
     messages: string;
   };
   messages: Defaults<
-    Omit<Message, "content" | "isBot" | "addressed" | "command"> & {
+    Omit<
+      Message,
+      "content" | "isBot" | "addressed" | "command" | "historical"
+    > & {
       content: Uint8Array;
       isBot: number;
       addressed: number;
       command: number;
+      historical: number;
     },
-    "id" | "isBot" | "addressed" | "command"
+    "id" | "isBot" | "addressed" | "command" | "historical"
   >;
   message_reactions: {
     messageId: number;
@@ -113,6 +118,9 @@ export async function createTables(db: Database): Promise<void> {
     .ifNotExists()
     .addColumn("id", "text", (column) => column.primaryKey())
     .addColumn("cursor", "integer", (column) => column.notNull().defaultTo(0))
+    .addColumn("historyThrough", "integer", (column) =>
+      column.notNull().defaultTo(0),
+    )
     .addColumn("aiEnabled", "integer", (column) =>
       column.notNull().defaultTo(1),
     )
@@ -151,6 +159,9 @@ export async function createTables(db: Database): Promise<void> {
     )
     .addColumn("role", "text", (column) => column.notNull())
     .addColumn("command", "integer", (column) => column.notNull().defaultTo(0))
+    .addColumn("historical", "integer", (column) =>
+      column.notNull().defaultTo(0),
+    )
     .addColumn("recalledAt", "integer")
     .addColumn("noteId", "integer")
     .addUniqueConstraint("messages_group_message", ["groupId", "messageId"])

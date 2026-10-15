@@ -187,8 +187,9 @@ export async function conversationBefore(
     ? await store.messages.conversation(
         groupId,
         1,
-        Number(first.id.slice(1)) - 1,
+        beforeId - 1,
         afterId,
+        Number(first.id.slice(1)),
       )
     : [];
 

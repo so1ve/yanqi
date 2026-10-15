@@ -140,14 +140,23 @@ export async function selectSources(
       },
     );
 
-    if (fromId > throughId || boundaries.length !== ids.length) {
+    const first = boundaries.find((source) => source.id === fromId);
+    const last = boundaries.find((source) => source.id === throughId);
+
+    if (
+      !first ||
+      !last ||
+      first.sentAt > last.sentAt ||
+      (first.sentAt === last.sentAt && first.id > last.id)
+    ) {
       throw new Error(
         "消息区间必须按先后顺序指定，且仅限本群当前请求及此前的消息",
       );
     }
 
-    sources = await store.messages.listMetadata(request.groupId, throughId, {
+    sources = await store.messages.listMetadata(request.groupId, request.id, {
       fromId,
+      throughId,
       includeBot,
     });
   } else if ("topicIds" in scope) {

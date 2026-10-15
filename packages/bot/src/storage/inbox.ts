@@ -26,6 +26,7 @@ export class Inbox {
   #canInteract(message: IncomingMessage | Message): boolean {
     return (
       !message.isBot &&
+      !message.historical &&
       (this.#config.ADMIN_IDS.includes(message.userId) ||
         (this.#config.GROUP_ADMINS[message.groupId]?.includes(message.userId) ??
           false) ||
@@ -43,7 +44,8 @@ export class Inbox {
         .where("messageId", "=", input.messageId)
         .executeTakeFirst();
 
-      if (existing) {
+      // 补录和实时事件可能同时到达；实时事件仍需正常交给对话处理。
+      if (existing && (!existing.historical || input.historical)) {
         // 自发消息事件可能先于发送接口返回；补上发送时选定的引用关系。
         if (
           input.isBot &&
@@ -93,16 +95,23 @@ export class Inbox {
           : undefined;
       const command = canInteract && (input.addressed || quote !== undefined);
 
+      const values = {
+        ...input,
+        content: encodeContent(input.content),
+        isBot: Number(input.isBot),
+        addressed: Number(input.addressed),
+        command: Number(command),
+        historical: Number(input.historical ?? false),
+      };
       const message = decodeMessage(
-        await db
-          .insertInto("messages")
-          .values({
-            ...input,
-            content: encodeContent(input.content),
-            isBot: Number(input.isBot),
-            addressed: Number(input.addressed),
-            command: Number(command),
-          })
+        await (
+          existing
+            ? db
+                .updateTable("messages")
+                .set(values)
+                .where("id", "=", existing.id)
+            : db.insertInto("messages").values(values)
+        )
           .returningAll()
           .executeTakeFirstOrThrow(),
       );
@@ -110,7 +119,7 @@ export class Inbox {
       if (!input.isBot) {
         await captureAssets(db, message, input.content);
 
-        if (!command) {
+        if (!command && !input.historical) {
           const topics = await db
             .selectFrom("topics")
             .select("id")

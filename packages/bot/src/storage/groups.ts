@@ -33,6 +33,15 @@ export class Groups {
       .execute();
   }
 
+  public async advanceHistory(groupId: string, through: number): Promise<void> {
+    await this.#db
+      .updateTable("groups")
+      .set({ historyThrough: through })
+      .where("id", "=", groupId)
+      .where("historyThrough", "<", through)
+      .execute();
+  }
+
   public async configure(id: string, automatic?: boolean): Promise<void> {
     await this.#db
       .insertInto("groups")

@@ -12,6 +12,7 @@ export const decodeMessage = (row: MessageRow): Message => ({
   isBot: Boolean(row.isBot),
   addressed: Boolean(row.addressed),
   command: Boolean(row.command),
+  historical: Boolean(row.historical),
 });
 
 export interface MessageMetadata {
@@ -103,6 +104,7 @@ export class Messages {
       .where("groupId", "=", groupId)
       .where("id", "<=", through)
       .where("isBot", "=", 0)
+      .orderBy("sentAt", "desc")
       .orderBy("id", "desc")
       .limit(limit)
       .execute();
@@ -115,13 +117,32 @@ export class Messages {
     limit: number,
     through: number,
     after = 0,
+    beforeId?: number,
   ): Promise<Message[]> {
-    const rows = await this.#db
+    let query = this.#db
       .selectFrom("messages")
       .selectAll()
       .where("groupId", "=", groupId)
       .where("id", "<=", through)
-      .where("id", ">", after)
+      .where("id", ">", after);
+
+    if (beforeId !== undefined) {
+      query = query.where((eb) =>
+        eb(
+          eb.refTuple("sentAt", "id"),
+          "<",
+          eb
+            .selectFrom("messages as boundary")
+            .select(["boundary.sentAt", "boundary.id"])
+            .where("boundary.groupId", "=", groupId)
+            .where("boundary.id", "=", beforeId)
+            .$asTuple("sentAt", "id"),
+        ),
+      );
+    }
+
+    const rows = await query
+      .orderBy("sentAt", "desc")
       .orderBy("id", "desc")
       .limit(limit)
       .execute();
@@ -157,7 +178,9 @@ export class Messages {
     {
       from = 0,
       to = Number.MAX_SAFE_INTEGER,
-      fromId = 0,
+      fromId,
+      throughId,
+      beforeId,
       ids,
       topicIds,
       query,
@@ -167,6 +190,8 @@ export class Messages {
       from?: number;
       to?: number;
       fromId?: number;
+      throughId?: number;
+      beforeId?: number;
       ids?: number[];
       topicIds?: string[];
       query?: string;
@@ -181,9 +206,31 @@ export class Messages {
       .where("groupId", "=", groupId)
       .where("sentAt", ">=", from)
       .where("sentAt", "<", to)
-      .where("id", ">=", fromId)
       .where("id", "<=", through)
+      .orderBy("sentAt", "desc")
       .orderBy("id", "desc");
+
+    // 补录的 ID 比实时消息大；原文区间和翻页按发送时间，through 仅限定本次请求可见的快照。
+    for (const [id, operator] of [
+      [fromId, ">="],
+      [throughId, "<="],
+      [beforeId, "<"],
+    ] as const) {
+      if (id !== undefined) {
+        selection = selection.where((eb) =>
+          eb(
+            eb.refTuple("sentAt", "id"),
+            operator,
+            eb
+              .selectFrom("messages as boundary")
+              .select(["boundary.sentAt", "boundary.id"])
+              .where("boundary.groupId", "=", groupId)
+              .where("boundary.id", "=", id)
+              .$asTuple("sentAt", "id"),
+          ),
+        );
+      }
+    }
 
     if (!includeBot) {
       selection = selection.where("isBot", "=", 0);
@@ -238,6 +285,7 @@ export class Messages {
       .where("groupId", "=", groupId)
       .where("id", ">", group.cursor)
       .where("isBot", "=", 0)
+      .where("historical", "=", 0)
       .orderBy("id")
       .limit(limit)
       .execute();
@@ -254,6 +302,7 @@ export class Messages {
       .selectFrom("messages")
       .selectAll()
       .where("id", "in", ids)
+      .orderBy("sentAt")
       .orderBy("id")
       .execute();
 
@@ -320,6 +369,7 @@ export class Messages {
       .where("command", "=", 0)
       .where("sentAt", ">=", from)
       .where("sentAt", "<=", to)
+      .orderBy("sentAt")
       .orderBy("id")
       .execute();
 
@@ -337,13 +387,17 @@ export class Messages {
     const rows = await this.#db
       .selectFrom("messages")
       .select(["userId", "displayName"])
-      .where("id", "in", (eb) =>
+      .where("groupId", "=", groupId)
+      .where("userId", "in", userIds)
+      .where("id", "=", (eb) =>
         eb
-          .selectFrom("messages")
-          .select((eb) => eb.fn.max<number>("id").as("id"))
-          .where("groupId", "=", groupId)
-          .where("userId", "in", userIds)
-          .groupBy("userId"),
+          .selectFrom("messages as latest")
+          .select("latest.id")
+          .whereRef("latest.groupId", "=", "messages.groupId")
+          .whereRef("latest.userId", "=", "messages.userId")
+          .orderBy("latest.sentAt", "desc")
+          .orderBy("latest.id", "desc")
+          .limit(1),
       )
       .execute();
 

@@ -121,21 +121,30 @@ export function chatHistoryTools(context: ReadContext, onMetadata: OnMetadata) {
               })
             : await store.messages.listMetadata(
                 message.groupId,
-                args.action === "context" && args.beforeId
-                  ? Math.min(Number(args.beforeId.slice(1)), message.id) - 1
-                  : message.id - 1,
+                message.id - 1,
                 args.action === "context"
-                  ? { includeBot: true, limit: 40 }
+                  ? {
+                      includeBot: true,
+                      limit: 40,
+                      beforeId: args.beforeId
+                        ? Number(args.beforeId.slice(1))
+                        : message.id,
+                    }
                   : { query: args.query.trim(), includeBot: true },
               );
         const first = sources[0];
         const last = sources.at(-1);
         const earlier =
           args.action === "context" && first
-            ? await store.messages.listMetadata(message.groupId, first.id - 1, {
-                includeBot: true,
-                limit: 1,
-              })
+            ? await store.messages.listMetadata(
+                message.groupId,
+                message.id - 1,
+                {
+                  includeBot: true,
+                  limit: 1,
+                  beforeId: first.id,
+                },
+              )
             : [];
 
         return history.register(

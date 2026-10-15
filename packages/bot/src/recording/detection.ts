@@ -19,11 +19,9 @@ export async function detectTopics(
   )
     .slice(0, 15)
     .map(({ id, title, description }) => ({ id, title, description }));
-  const recent = await store.messages.conversation(
-    groupId,
-    20,
-    messages[0]!.id - 1,
-  );
+  const recent = (
+    await store.messages.conversation(groupId, 20, messages[0]!.id - 1)
+  ).filter((message) => !message.historical);
   const discussionIds = new Set(
     [...messages, ...recent]
       .filter(

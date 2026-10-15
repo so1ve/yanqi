@@ -5,6 +5,7 @@ import { OneBotBot } from "koishi-plugin-adapter-onebot";
 
 import type { Config } from "./config.ts";
 import { configurationError } from "./config.ts";
+import { HistorySync } from "./onebot/history.ts";
 import { recallMessage, saveMessage } from "./onebot/message.ts";
 import { ReactionSync } from "./onebot/reactions.ts";
 import { Secretary } from "./secretary.ts";
@@ -17,6 +18,7 @@ export class Yanqi {
   #app: App;
   #config: Config;
   #secretary: Secretary | null = null;
+  #history: HistorySync;
   #enabled: boolean;
   #connection: ForkScope | null = null;
   #listeners: (() => void)[] = [];
@@ -38,6 +40,7 @@ export class Yanqi {
     this.#config = structuredClone(config);
     this.#enabled = autostart;
     this.store = new Store(database, directory, this.#config);
+    this.#history = new HistorySync(this.store, this.#config);
 
     const groups = app
       .platform("onebot")
@@ -55,6 +58,17 @@ export class Yanqi {
     );
 
     this.#listeners = [
+      app.on("bot-status-updated", (bot) => {
+        if (bot.platform !== "onebot" || bot.selfId !== this.#config.BOT_QQ) {
+          return;
+        }
+
+        if (bot.status === 1) {
+          this.#history.connect((bot as OneBotBot<Context>).internal);
+        } else {
+          this.#history.disconnect();
+        }
+      }),
       groups.on("notice", (session: Session) => {
         if (session.subtype === "group-msg-emoji-like") {
           return this.#track(() => this.reactions.receive(session)).catch(
@@ -68,6 +82,10 @@ export class Yanqi {
         this.#track(async () => {
           const secretary = this.#secretary;
           const message = await saveMessage(session, this.store, this.#config);
+
+          if (message) {
+            await this.#history.received(message);
+          }
 
           // 只处理接收时正在运行的对话，暂停或更换配置后不重放旧请求。
           if (message && secretary && secretary === this.#secretary) {
@@ -143,6 +161,7 @@ export class Yanqi {
 
   public configure(config: Config): Promise<void> {
     return this.#change(async () => {
+      await this.#history.close();
       await this.#stop();
       await this.store.groups.ensure(config.GROUP_IDS);
 
@@ -171,6 +190,10 @@ export class Yanqi {
       }
 
       await this.#app.lifecycle.flush();
+      if (this.online) {
+        this.#history.connect(this.napcat);
+      }
+
       if (this.#enabled) {
         const error = configurationError(config);
 
@@ -242,6 +265,7 @@ export class Yanqi {
         dispose();
       }
 
+      await this.#history.close();
       await this.#stop();
       await Promise.all(this.#events);
       await this.reactions.close();

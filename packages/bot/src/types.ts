@@ -17,9 +17,14 @@ export interface IncomingMessage {
   addressed: boolean;
   role: "owner" | "admin" | "member";
   noteId?: number;
+  historical?: boolean;
 }
 
-export interface Message extends Omit<IncomingMessage, "noteId"> {
+export interface Message extends Omit<
+  IncomingMessage,
+  "noteId" | "historical"
+> {
+  historical: boolean;
   id: number;
   command: boolean;
   recalledAt: number | null;

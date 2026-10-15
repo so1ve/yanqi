@@ -83,6 +83,7 @@ export class Recordings {
             .where("id", ">", request.id)
             .where("isBot", "=", 0)
             .where("command", "=", 0)
+            .where("historical", "=", 0)
             .execute();
 
           messages.push(...subsequent.map((message) => message.id));
