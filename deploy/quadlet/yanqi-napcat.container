@@ -1,0 +1,22 @@
+[Unit]
+Description=NapCat for Yanqi
+
+[Container]
+Image=docker.io/mlikiowa/napcat-docker:latest
+ContainerName=yanqi-napcat
+Network=yanqi.network
+NetworkAlias=napcat
+Environment=MODE=ws
+Environment=NAPCAT_UID=1000
+Environment=NAPCAT_GID=1000
+PublishPort=127.0.0.1:6100:6099
+Volume=%h/yanqi/napcat/config:/app/napcat/config:Z
+Volume=%h/yanqi/napcat/qq:/app/.config/QQ:Z
+
+[Service]
+Restart=always
+RestartSec=5
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target
