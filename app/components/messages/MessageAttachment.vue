@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { FileText, Messages, Microphone, Movie, Photo } from "@vicons/tabler";
-import { computed } from "vue";
+import { computed, ref } from "vue";
 
 import ResourceRetry from "~/components/resources/ResourceRetry.vue";
 import type { Message } from "~/types/api";
@@ -23,6 +23,14 @@ const kinds = {
 const kind = computed(
   () => kinds[props.asset.previewable ? "image" : props.asset.kind],
 );
+const audioFailed = ref(false);
+const previewVersion = ref(0);
+
+function updated() {
+  audioFailed.value = false;
+  previewVersion.value++;
+  emit("updated");
+}
 </script>
 
 <template>
@@ -33,6 +41,17 @@ const kind = computed(
       class="image"
       :src="`${path}?preview=1`"
     />
+    <audio
+      v-if="asset.kind === 'audio' && asset.downloadable && !audioFailed"
+      class="audio"
+      controls
+      preload="none"
+      :src="`${path}?preview=1&v=${previewVersion}`"
+      @error="audioFailed = true"
+    />
+    <p v-else-if="audioFailed" class="error-text">
+      语音无法播放，请重新处理以转换格式。
+    </p>
     <div class="attachment-bar">
       <span class="attachment-kind">
         <NIcon :component="kind.icon" :size="17" />
@@ -51,7 +70,7 @@ const kind = computed(
     </div>
     <p v-if="asset.error" class="error-text">{{ asset.error }}</p>
     <div class="retry">
-      <ResourceRetry :asset :group-id @updated="emit('updated')" />
+      <ResourceRetry :asset :group-id @updated="updated" />
       <NuxtLink :to="`/${groupId}/resources?q=asset:${asset.id}`">
         资源详情
       </NuxtLink>
@@ -75,6 +94,12 @@ const kind = computed(
 }
 
 .image {
+  max-width: 100%;
+  margin-bottom: 10px;
+}
+
+.audio {
+  display: block;
   max-width: 100%;
   margin-bottom: 10px;
 }

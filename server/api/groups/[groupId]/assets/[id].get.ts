@@ -1,6 +1,6 @@
 import { extname } from "node:path";
 
-import { imageMimeType } from "@yanqi/bot";
+import { audioMimeType, imageMimeType } from "@yanqi/bot";
 import {
   createError,
   defineEventHandler,
@@ -32,21 +32,15 @@ export default defineEventHandler(async (event) => {
   }
 
   const bytes = await readDataFile(bot.store.directory, asset.path);
-  const mediaTypes: Record<string, string> = {
-    ".wav": "audio/wav",
-    ".mp3": "audio/mpeg",
-    ".ogg": "audio/ogg",
-    ".mp4": "video/mp4",
-  };
-  const preview =
-    queryParam(event, "preview") === "1" &&
-    (imageMimeType(asset.path) || mediaTypes[extname(asset.path)]);
+  const mime =
+    imageMimeType(asset.path) ||
+    audioMimeType(asset.path) ||
+    (extname(asset.path) === ".mp4" ? "video/mp4" : undefined);
+  const preview = queryParam(event, "preview") === "1" && Boolean(mime);
 
-  setResponseHeader(
-    event,
-    "Content-Type",
-    preview || "application/octet-stream",
-  );
+  setResponseHeader(event, "Cache-Control", "private, no-cache");
+
+  setResponseHeader(event, "Content-Type", mime || "application/octet-stream");
   setResponseHeader(
     event,
     "Content-Disposition",

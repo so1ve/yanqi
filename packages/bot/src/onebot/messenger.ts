@@ -275,7 +275,17 @@ export function createMessenger(config: Config, store: Store, ctx: Context) {
       }
 
       if (kind === "audio") {
-        return (await internal.getRecord(reference, "wav", true)).file;
+        const record: { base64?: string } = await internal._get("get_record", {
+          file: reference,
+          out_format: "wav",
+        });
+
+        if (!record.base64) {
+          throw new Error("NapCat 未返回转换后的语音内容");
+        }
+
+        // file 是 NapCat 容器内的路径；两个服务之间通过文件内容传递。
+        return `data:audio/wav;base64,${record.base64}`;
       }
 
       if (kind === "file") {

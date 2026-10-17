@@ -12,6 +12,7 @@ import type { ReactionSync } from "../onebot/reactions.ts";
 import { detectTopics } from "../recording/detection.ts";
 import type { Notes } from "../recording/notes.ts";
 import { publishNotes } from "../recording/publication.ts";
+import { AudioFormatError } from "../storage/audio.ts";
 import type { Store } from "../storage/store.ts";
 import type { Job, JobKind } from "../types.ts";
 import { AiError, AiProtocolError, failureMessage } from "../utils/errors.ts";
@@ -230,7 +231,8 @@ export class BackgroundTasks {
         ...(error instanceof BudgetExceeded ? { after: error.nextRunAt } : {}),
         retryable:
           !(error instanceof AiProtocolError) &&
-          !(error instanceof AiSizeError),
+          !(error instanceof AiSizeError) &&
+          !(error instanceof AudioFormatError),
       });
 
       this.#logger.warn(

@@ -54,6 +54,16 @@ export function imageMimeType(path: string): string | undefined {
   return types[extname(path).toLowerCase()];
 }
 
+export function audioMimeType(path: string): string | undefined {
+  const types: Record<string, string> = {
+    ".wav": "audio/wav",
+    ".mp3": "audio/mpeg",
+    ".ogg": "audio/ogg",
+  };
+
+  return types[extname(path).toLowerCase()];
+}
+
 export async function imageFormat(path: string) {
   const file = await open(path, "r");
 

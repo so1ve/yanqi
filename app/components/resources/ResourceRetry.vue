@@ -43,7 +43,7 @@ const label = computed(() => {
     return asset.interpretation ? "重新识别" : "识别图片";
   }
   if (asset.kind === "audio") {
-    return asset.interpretation ? "重新转写" : "转写语音";
+    return asset.interpretation ? "重新转写" : "重新处理";
   }
 
   return asset.kind === "forward" ? "重新读取" : "重新下载";

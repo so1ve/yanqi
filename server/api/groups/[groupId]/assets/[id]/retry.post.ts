@@ -1,3 +1,4 @@
+import { audioMimeType } from "@yanqi/bot";
 import { createError, defineEventHandler, getRouterParam } from "h3";
 
 import {
@@ -26,9 +27,13 @@ export default defineEventHandler(async (event) => {
     asset.path &&
     asset.state !== "missing" &&
     asset.kind === "audio" &&
+    audioMimeType(asset.path) &&
     !bot.config.AI_AUDIO_MODEL
   ) {
-    throw createError({ statusCode: 409, message: "请先配置语音转写模型" });
+    throw createError({
+      statusCode: 409,
+      message: "语音已可播放；如需转写，请先配置语音转写模型",
+    });
   }
 
   const taskId = await storeOperation(() =>

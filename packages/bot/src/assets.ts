@@ -14,9 +14,11 @@ import {
 import type { Messenger } from "./onebot/messenger.ts";
 import {
   assetPath,
+  audioMimeType,
   imageFormat,
   imageMimeType,
 } from "./storage/asset-files.ts";
+import { saveAudio } from "./storage/audio.ts";
 import type { Store } from "./storage/store.ts";
 import { failureMessage } from "./utils/errors.ts";
 
@@ -168,17 +170,43 @@ export async function collectAsset(
           createWriteStream(temporary, { flags: "wx", mode: 0o600 }),
           { signal },
         );
-        // QQ 的 file 表示发送方式；图片格式以文件内容为准。
-        const format = await imageFormat(temporary);
-        const target = assetPath(
-          store.directory,
-          format ? "image" : asset.kind,
-          `${hash.digest("hex")}${format?.extension ?? (mime.startsWith("image/") ? ".bin" : suffix)}`,
-        );
+        if (asset.kind === "audio") {
+          await reportProgress("正在转换语音为可播放的格式");
+          try {
+            path = await saveAudio(
+              store.directory,
+              temporary,
+              config.MAX_ATTACHMENT_BYTES,
+              signal,
+            );
+            await rm(temporary);
+          } catch (error) {
+            // 转换失败也保留原始语音，后续重试不依赖可能过期的 QQ 地址。
+            const original = assetPath(
+              store.directory,
+              "audio",
+              `${hash.digest("hex")}.bin`,
+            );
 
-        await mkdir(dirname(target), { recursive: true });
-        await rename(temporary, target);
-        path = target;
+            await mkdir(dirname(original), { recursive: true });
+            await rename(temporary, original);
+            path = original;
+
+            throw error;
+          }
+        } else {
+          // QQ 的 file 表示发送方式；图片格式以文件内容为准。
+          const format = await imageFormat(temporary);
+          const target = assetPath(
+            store.directory,
+            format ? "image" : asset.kind,
+            `${hash.digest("hex")}${format?.extension ?? (mime.startsWith("image/") ? ".bin" : suffix)}`,
+          );
+
+          await mkdir(dirname(target), { recursive: true });
+          await rename(temporary, target);
+          path = target;
+        }
       } catch (error) {
         await rm(temporary, { force: true });
 
@@ -186,6 +214,18 @@ export async function collectAsset(
       }
 
       await store.assets.save(id, "saved", path, null, null);
+    }
+
+    // 旧版可能把 AMR / SILK 存成 .bin。重试时直接修复本地原件，无须重新下载。
+    if (asset.kind === "audio" && !audioMimeType(path)) {
+      await reportProgress("正在转换已保存的语音");
+      path = await saveAudio(
+        store.directory,
+        path,
+        config.MAX_ATTACHMENT_BYTES,
+        signal,
+      );
+      await store.assets.save(id, "saved", path, interpretation, null);
     }
 
     const savedPath = path;

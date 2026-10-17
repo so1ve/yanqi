@@ -22,6 +22,7 @@ const path = computed(
   () => `/api/groups/${props.groupId}/assets/${props.asset.id}`,
 );
 const mediaFailed = ref(false);
+const previewVersion = ref(0);
 const opened = ref(false);
 const source = ref<Message>();
 const loading = ref(false);
@@ -54,6 +55,7 @@ async function loadForward() {
 
 function updated() {
   mediaFailed.value = false;
+  previewVersion.value++;
   emit("updated");
 }
 
@@ -87,7 +89,7 @@ function onDescriptionWheel(event: WheelEvent) {
           v-if="asset.kind === 'audio' && asset.downloadable && !mediaFailed"
           controls
           preload="none"
-          :src="`${path}?preview=1`"
+          :src="`${path}?preview=1&v=${previewVersion}`"
           @error="mediaFailed = true"
         />
         <video
@@ -96,13 +98,19 @@ function onDescriptionWheel(event: WheelEvent) {
           "
           controls
           preload="none"
-          :src="`${path}?preview=1`"
+          :src="`${path}?preview=1&v=${previewVersion}`"
           @error="mediaFailed = true"
         />
         <p v-if="!asset.downloadable">
           {{ asset.state === "missing" ? "原件已清理" : "原件尚未保存" }}
         </p>
-        <p v-else-if="mediaFailed">浏览器暂时无法播放，可下载原件。</p>
+        <p v-else-if="mediaFailed">
+          {{
+            asset.kind === "audio"
+              ? "语音无法播放，请重新处理以转换格式。"
+              : "浏览器暂时无法播放，可下载原件。"
+          }}
+        </p>
       </template>
     </div>
     <div class="description">

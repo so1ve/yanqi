@@ -3,7 +3,11 @@ export type { Config, ModelConfig } from "./config.ts";
 export { configSchema, configurationError, parseConfig } from "./config.ts";
 export { attachmentReference, forwardMessages } from "./onebot/content.ts";
 export { reactionMeaning } from "./reactions/catalog.ts";
-export { assetFileName, imageMimeType } from "./storage/asset-files.ts";
+export {
+  assetFileName,
+  audioMimeType,
+  imageMimeType,
+} from "./storage/asset-files.ts";
 export { StoreError } from "./storage/errors.ts";
 export { readDataFile } from "./storage/files.ts";
 export {
