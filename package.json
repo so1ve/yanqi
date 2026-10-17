@@ -18,6 +18,7 @@
     "@koishijs/core": "catalog:",
     "@vicons/tabler": "catalog:",
     "@yanqi/bot": "workspace:*",
+    "archiver": "catalog:",
     "dompurify": "catalog:",
     "h3": "catalog:",
     "idb": "catalog:",
@@ -33,6 +34,7 @@
   "devDependencies": {
     "@so1ve/eslint-config": "catalog:",
     "@so1ve/prettier-config": "catalog:",
+    "@types/archiver": "catalog:",
     "@types/node": "catalog:",
     "eslint": "catalog:",
     "prettier": "catalog:",

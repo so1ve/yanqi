@@ -24,8 +24,10 @@ catalog:
   "@koishijs/plugin-http": "0.6.3"
   "@so1ve/eslint-config": "4.7.0"
   "@so1ve/prettier-config": "4.7.0"
+  "@types/archiver": 7.0.0
   "@types/node": "26.6.5"
   "@vicons/tabler": "0.13.0"
+  archiver: 7.0.1
   "dompurify": "^3.3.1"
   "entities": "8.1.0"
   "eslint": "10.12.0"

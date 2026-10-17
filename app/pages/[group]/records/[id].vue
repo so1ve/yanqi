@@ -23,7 +23,6 @@ import { positiveInteger, useQueryValue } from "~/composables/useQueryValue";
 import { useWorkspace } from "~/composables/useWorkspace";
 import type { RecordDetail } from "~/types/api";
 import { api } from "~/utils/api";
-import { downloadText } from "~/utils/download";
 import { formatTime } from "~/utils/format";
 
 const route = useRoute();
@@ -112,16 +111,6 @@ function remove(): void {
     },
   });
 }
-function download(): void {
-  if (!data.value?.note) {
-    return;
-  }
-  downloadText(
-    `${data.value.topic.title.replace(/[\\/:*?"<>|]/g, "_")}.md`,
-    data.value.note.markdown,
-    "text/markdown",
-  );
-}
 </script>
 
 <template>
@@ -141,9 +130,13 @@ function download(): void {
     >
       <template #icon><NIcon :component="Refresh" /></template>
     </NButton>
-    <NButton v-if="data?.note && !isDraft" @click="download">
+    <NButton
+      v-if="data?.note && !isDraft"
+      :href="`/api/${base}/export?version=${data.note.id}`"
+      tag="a"
+    >
       <template #icon><NIcon :component="Download" /></template>
-      导出
+      下载 ZIP
     </NButton>
     <NButton
       v-if="data?.note && !isDraft"
