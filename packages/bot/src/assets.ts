@@ -12,7 +12,11 @@ import {
   forwardAttachments,
 } from "./onebot/content.ts";
 import type { Messenger } from "./onebot/messenger.ts";
-import { assetPath, imageFormat } from "./storage/asset-files.ts";
+import {
+  assetPath,
+  imageFormat,
+  imageMimeType,
+} from "./storage/asset-files.ts";
 import type { Store } from "./storage/store.ts";
 import { failureMessage } from "./utils/errors.ts";
 
@@ -41,7 +45,7 @@ export async function collectAsset(
       )?.data.content;
       const forwarded = await expandForward(
         asset.reference,
-        interpretation ? JSON.parse(interpretation) : embedded,
+        !refresh && interpretation ? JSON.parse(interpretation) : embedded,
         (reference) => messenger.getForward(reference),
         config.MAX_ATTACHMENT_BYTES,
         signal,
@@ -77,7 +81,12 @@ export async function collectAsset(
       return;
     }
 
-    if (!path) {
+    if (
+      !path ||
+      (refresh &&
+        (asset.kind === "video" ||
+          (asset.kind === "file" && !imageMimeType(path))))
+    ) {
       await reportProgress(`正在下载附件 #${id}（${asset.kind}）`);
       const url = /^https?:\/\//i.test(asset.reference)
         ? asset.reference

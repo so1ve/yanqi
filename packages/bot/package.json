@@ -20,6 +20,7 @@
     "kysely": "catalog:",
     "marked": "catalog:",
     "openai": "catalog:",
+    "silk-wasm": "catalog:",
     "typebox": "catalog:"
   },
   "devDependencies": {

@@ -2,13 +2,17 @@
 import { NVirtualList, useMessage } from "naive-ui";
 import { nextTick, onMounted, onScopeDispose, ref, useTemplateRef } from "vue";
 
-import ImageCard from "~/components/images/ImageCard.vue";
-import type { ImageItem, ImagePage } from "~/types/api";
+import ResourceCard from "~/components/resources/ResourceCard.vue";
+import type { ResourceItem, ResourcePage } from "~/types/api";
 import { api, errorText } from "~/utils/api";
 
-const props = defineProps<{ groupId: string; query: string }>();
+const props = defineProps<{
+  groupId: string;
+  query: string;
+  kind: ResourceItem["kind"] | "";
+}>();
 const message = useMessage();
-const items = ref<ImageItem[]>([]);
+const items = ref<ResourceItem[]>([]);
 const loading = ref(false);
 const error = ref("");
 const next = ref<number | null>(null);
@@ -23,8 +27,12 @@ async function load() {
   loading.value = true;
   error.value = "";
   try {
-    const page = await api<ImagePage>(`groups/${props.groupId}/images`, {
-      query: { q: props.query || undefined, before: next.value ?? undefined },
+    const page = await api<ResourcePage>(`groups/${props.groupId}/resources`, {
+      query: {
+        q: props.query || undefined,
+        kind: props.kind || undefined,
+        before: next.value ?? undefined,
+      },
       signal: controller.signal,
     });
     items.value.push(...page.items);
@@ -54,13 +62,17 @@ function onScroll() {
 }
 async function update(id: number) {
   try {
-    const page = await api<ImagePage>(`groups/${props.groupId}/images`, {
+    const page = await api<ResourcePage>(`groups/${props.groupId}/resources`, {
       query: { q: `asset:${id}` },
       signal: controller.signal,
     });
     const index = items.value.findIndex((item) => item.id === id);
     if (index !== -1 && page.items[0]) {
-      items.value[index] = page.items[0];
+      if (props.kind && page.items[0].kind !== props.kind) {
+        items.value.splice(index, 1);
+      } else {
+        items.value[index] = page.items[0];
+      }
     }
   } catch (cause) {
     if (!controller.signal.aborted) {
@@ -76,11 +88,12 @@ onMounted(load);
     :empty="!loading && !error && items.length === 0"
     :error="items.length > 0 ? '' : error"
     :loading="loading && items.length === 0"
+    title="没有符合条件的资源"
     @retry="load"
   >
     <NVirtualList
       ref="list"
-      class="image-list"
+      class="resource-list"
       item-resizable
       :item-size="300"
       :items
@@ -88,7 +101,7 @@ onMounted(load);
       @scroll="onScroll"
     >
       <template #default="{ item }">
-        <ImageCard :asset="item" :group-id @updated="update(item.id)" />
+        <ResourceCard :asset="item" :group-id @updated="update(item.id)" />
       </template>
     </NVirtualList>
   </LoadState>
@@ -96,12 +109,12 @@ onMounted(load);
     <span v-if="loading">正在加载…</span>
     <NButton v-else-if="error" @click="load">{{ error }} · 重试</NButton>
     <NButton v-else-if="next !== null" text @click="load">继续加载</NButton>
-    <span v-else>已显示全部 {{ items.length }} 张图片</span>
+    <span v-else>已显示全部 {{ items.length }} 项资源</span>
   </div>
 </template>
 
 <style scoped>
-.image-list {
+.resource-list {
   height: calc(100dvh - 290px);
   min-height: 320px;
   border: 1px solid #e8edf2;

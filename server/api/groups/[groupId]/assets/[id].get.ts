@@ -32,8 +32,15 @@ export default defineEventHandler(async (event) => {
   }
 
   const bytes = await readDataFile(bot.store.directory, asset.path);
+  const mediaTypes: Record<string, string> = {
+    ".wav": "audio/wav",
+    ".mp3": "audio/mpeg",
+    ".ogg": "audio/ogg",
+    ".mp4": "video/mp4",
+  };
   const preview =
-    queryParam(event, "preview") === "1" && imageMimeType(asset.path);
+    queryParam(event, "preview") === "1" &&
+    (imageMimeType(asset.path) || mediaTypes[extname(asset.path)]);
 
   setResponseHeader(
     event,

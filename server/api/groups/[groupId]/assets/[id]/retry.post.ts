@@ -14,13 +14,20 @@ export default defineEventHandler(async (event) => {
   const asset = requireItem(await bot.store.assets.find(groupId, id));
 
   if (
+    asset.path &&
+    asset.state !== "missing" &&
     (asset.kind === "image" || asset.path?.includes("/assets/images/")) &&
     !bot.config.AI_VISION_MODEL
   ) {
     throw createError({ statusCode: 409, message: "请先配置图片识别模型" });
   }
 
-  if (asset.kind === "audio" && !bot.config.AI_AUDIO_MODEL) {
+  if (
+    asset.path &&
+    asset.state !== "missing" &&
+    asset.kind === "audio" &&
+    !bot.config.AI_AUDIO_MODEL
+  ) {
     throw createError({ statusCode: 409, message: "请先配置语音转写模型" });
   }
 

@@ -1,3 +1,5 @@
+import type { Asset } from "@yanqi/bot";
+
 export const kindNames: Record<string, string> = {
   intent: "处理请求",
   observe: "识别请求",
@@ -16,4 +18,12 @@ export const stateNames: Record<string, string> = {
   done: "已完成",
   failed: "失败",
   cancelled: "已取消",
+};
+
+export const assetKindNames: Record<Asset["kind"], string> = {
+  image: "图片",
+  audio: "语音",
+  video: "视频",
+  file: "文件",
+  forward: "合并转发",
 };

@@ -20,6 +20,7 @@ export default defineEventHandler(async (event) => {
         groupId,
         job.id,
         controller.signal,
+        true,
       );
 
       await stream.push({

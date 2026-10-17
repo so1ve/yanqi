@@ -2,7 +2,7 @@
 import { FileText, Messages, Microphone, Movie, Photo } from "@vicons/tabler";
 import { computed } from "vue";
 
-import { useAssetRecognition } from "~/composables/useAssetRecognition";
+import ResourceRetry from "~/components/resources/ResourceRetry.vue";
 import type { Message } from "~/types/api";
 
 const emit = defineEmits<{ updated: [] }>();
@@ -10,11 +10,6 @@ const props = defineProps<{
   asset: Message["assets"][number];
   groupId: string;
 }>();
-const { processing, retry } = useAssetRecognition(
-  () => props.groupId,
-  () => props.asset.id,
-  () => emit("updated"),
-);
 const path = computed(
   () => `/api/groups/${props.groupId}/assets/${props.asset.id}`,
 );
@@ -55,27 +50,12 @@ const kind = computed(
       </span>
     </div>
     <p v-if="asset.error" class="error-text">{{ asset.error }}</p>
-    <NButton
-      v-if="
-        asset.error ||
-        asset.state === 'failed' ||
-        asset.previewable ||
-        asset.kind === 'image'
-      "
-      class="retry"
-      :loading="processing"
-      size="small"
-      text
-      @click="retry"
-    >
-      {{
-        asset.state === "missing"
-          ? "重新获取并识别"
-          : asset.previewable || asset.kind === "image"
-            ? "重新识别"
-            : "重新解析"
-      }}
-    </NButton>
+    <div class="retry">
+      <ResourceRetry :asset :group-id @updated="emit('updated')" />
+      <NuxtLink :to="`/${groupId}/resources?q=asset:${asset.id}`">
+        资源详情
+      </NuxtLink>
+    </div>
     <details v-if="asset.interpretation" class="interpretation">
       <summary>查看识别内容</summary>
       <p>{{ asset.interpretation }}</p>
@@ -139,7 +119,11 @@ const kind = computed(
 }
 
 .retry {
-  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+  font-size: 12px;
 }
 
 .interpretation {

@@ -695,7 +695,12 @@ export class JobQueue {
     });
   }
 
-  public async wait(groupId: string, id: number, signal?: AbortSignal) {
+  public async wait(
+    groupId: string,
+    id: number,
+    signal?: AbortSignal,
+    waitForRetries = false,
+  ) {
     // 先订阅再读取，避免任务恰好在读取期间完成而漏掉通知。
     const changes = on(this.#changes, String(id), { signal });
 
@@ -715,7 +720,7 @@ export class JobQueue {
         if (
           job.state === "done" ||
           job.state === "failed" ||
-          (job.state === "pending" && job.lastError !== null)
+          (!waitForRetries && job.state === "pending" && job.lastError !== null)
         ) {
           return job;
         }

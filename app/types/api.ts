@@ -18,8 +18,8 @@ export type Message =
   InternalApi["/api/groups/:groupId/messages/read"]["post"][number];
 export type Memory = InternalApi["/api/memories"]["get"]["items"][number];
 export type Usage = InternalApi["/api/groups/:groupId/usage"]["get"];
-export type ImagePage = InternalApi["/api/groups/:groupId/images"]["get"];
-export type ImageItem = ImagePage["items"][number];
+export type ResourcePage = InternalApi["/api/groups/:groupId/resources"]["get"];
+export type ResourceItem = ResourcePage["items"][number];
 export type ResourceStats = InternalApi["/api/storage/resources"]["get"];
 export type PurgeResult = InternalApi["/api/storage/purge"]["post"];
 

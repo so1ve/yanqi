@@ -180,37 +180,48 @@ export class Assets {
       .executeTakeFirst();
   }
 
-  public async listImages(
+  public async list(
     groupId: string,
     query: string | undefined,
     before: number | undefined,
+    kind?: Asset["kind"],
   ) {
+    // 图片也可能以文件发送；按保存后的文件类型分类。
+    const resourceKind = sql<Asset["kind"]>`case
+      when assets.path like ${`${this.#directory}/assets/images/%`} then 'image'
+      else assets.kind end`;
     let selection = this.#db
       .selectFrom("assets")
       .innerJoin("messages", "messages.id", "assets.messageId")
-      .where("messages.groupId", "=", groupId)
-      .where((eb) =>
-        eb.or([
-          eb("assets.kind", "=", "image"),
-          eb("assets.path", "like", `${this.#directory}/assets/images/%`),
-        ]),
-      );
+      .leftJoin("jobs", (join) =>
+        join.on("jobs.key", "=", sql<string>`'asset:' || assets.id`),
+      )
+      .where("messages.groupId", "=", groupId);
+
+    if (kind) {
+      selection = selection.where(resourceKind, "=", kind);
+    }
 
     if (query) {
       const id = /^(?:asset:|#)?(\d+)$/i.exec(query);
+      const messageId = /^m(\d+)$/i.exec(query);
 
       selection = id
         ? selection.where("assets.id", "=", Number(id[1]))
-        : selection.where((eb) =>
-            eb(
-              eb.fn<number>("contains_text", [
-                "assets.interpretation",
-                eb.val(query),
-              ]),
-              "=",
-              1,
-            ),
-          );
+        : messageId
+          ? selection.where("assets.messageId", "=", Number(messageId[1]))
+          : selection.where((eb) =>
+              eb.or(
+                (["assets.interpretation", "messages.text"] as const).map(
+                  (column) =>
+                    eb(
+                      eb.fn<number>("contains_text", [column, eb.val(query)]),
+                      "=",
+                      1,
+                    ),
+                ),
+              ),
+            );
     }
 
     if (before !== undefined) {
@@ -219,7 +230,11 @@ export class Assets {
 
     const rows = await selection
       .selectAll("assets")
-      .select("messages.sentAt")
+      .select([
+        "messages.sentAt",
+        "jobs.state as taskState",
+        resourceKind.as("resourceKind"),
+      ])
       .orderBy("assets.id", "desc")
       .limit(41)
       .execute();
@@ -227,10 +242,15 @@ export class Assets {
     return {
       items: rows
         .slice(0, 40)
-        .map(({ path, reference: _reference, ...asset }) => ({
-          ...asset,
-          available: Boolean(path && asset.state !== "missing"),
-        })),
+        .map(
+          ({ path, reference: _reference, resourceKind: kind, ...asset }) => ({
+            ...asset,
+            kind,
+            interpretation: kind === "forward" ? null : asset.interpretation,
+            downloadable: Boolean(path && asset.state !== "missing"),
+            previewable: Boolean(path && imageMimeType(path)),
+          }),
+        ),
       next: rows.length > 40 ? rows[39]!.id : null,
     };
   }
