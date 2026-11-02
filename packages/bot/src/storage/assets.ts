@@ -361,7 +361,9 @@ export class Assets {
             .set({ interpretation: content, error: null, state: "saved" })
             .where("id", "=", asset.id)
             .execute();
-          await messageChanged(db, asset.messageId);
+          if (asset.interpretation !== content || asset.state === "missing") {
+            await messageChanged(db, asset.messageId);
+          }
         }
       });
 
@@ -440,7 +442,15 @@ export class Assets {
         .set({ state, path, interpretation, error })
         .where("id", "=", id)
         .execute();
-      await messageChanged(db, asset.messageId);
+      // 重试状态和错误文案不是新的讨论内容，不能让同一纪要反复生成版本。
+      if (
+        asset.path !== path ||
+        asset.interpretation !== interpretation ||
+        (asset.state === "missing") !== (state === "missing")
+      ) {
+        await messageChanged(db, asset.messageId);
+      }
+
       if (state === "saved" && path) {
         const restored = await db
           .updateTable("assets")

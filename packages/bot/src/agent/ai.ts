@@ -25,7 +25,7 @@ export class Ai {
 
     this.decisions = new Decisions(config, store, runtime, signal);
     this.dialog = new DialogAI(config, runtime, style);
-    this.recording = new RecordingAI(runtime, style, store, config.BOT_QQ);
+    this.recording = new RecordingAI(config, runtime, style, store);
     this.memory = new MemoryAI(config, store, runtime);
     this.media = new MediaAI(config, store, runtime, signal);
   }

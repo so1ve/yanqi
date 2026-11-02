@@ -2,12 +2,13 @@ import { Logger } from "@koishijs/core";
 
 import type { Ai } from "../agent/ai.ts";
 import { AiSizeError } from "../agent/usage.ts";
-import type { Config } from "../config.ts";
 import type { Store } from "../storage/store.ts";
 import type { ChatMessage, Message, Note, Topic } from "../types.ts";
 import { contextWithin, messageChunks } from "./messages.ts";
 
-export function reusableSections(
+type SummaryWriter = Awaited<ReturnType<Ai["recording"]["prepareSummary"]>>;
+
+function reusableSections(
   sources: { id: number }[],
   previous: Note | null,
   changed: Set<number>,
@@ -22,24 +23,22 @@ export function reusableSections(
 }
 
 export class Summarizer {
-  #config: Config;
   #store: Store;
   #ai: Ai;
   #logger = new Logger("yanqi:notes");
 
-  constructor(config: Config, store: Store, ai: Ai) {
-    this.#config = config;
+  constructor(store: Store, ai: Ai) {
     this.#store = store;
     this.#ai = ai;
   }
 
   async #summarize(
-    topic: Topic,
+    writer: SummaryWriter,
     chunk: ChatMessage[],
     context: ChatMessage[],
   ): Promise<string> {
     try {
-      return await this.#ai.recording.summarize(topic, chunk, context);
+      return await writer.summarize(chunk, context);
     } catch (error) {
       if (!(error instanceof AiSizeError)) {
         throw error;
@@ -69,28 +68,29 @@ export class Summarizer {
       const content: string[] = [];
 
       for (const part of parts) {
-        content.push(await this.#summarize(topic, part, context));
+        content.push(await this.#summarize(writer, part, context));
       }
 
-      return content.filter(Boolean).join("\n\n");
+      return this.#compose(writer, content);
     }
   }
 
-  public async *sections(
+  public async generate(
     topic: Topic,
     sources: Message[],
     previous: Note | null,
-  ): AsyncGenerator<{
-    sections: Note["sections"];
-    completed: number;
-    total: number;
-  }> {
+    progress: (value: {
+      sections: Note["sections"];
+      completed: number;
+      total: number;
+    }) => Promise<void>,
+  ): Promise<{ sections: Note["sections"]; content: string }> {
+    const writer = await this.#ai.recording.prepareSummary(topic);
     const changed = await this.#store.topics.changedMessages(
       topic.id,
       previous?.generation ?? -1,
     );
     const sections = reusableSections(sources, previous, changed);
-    const budget = Math.floor(this.#config.AI_INPUT_CHARS / 4);
     const contextFor = async (chunk: ChatMessage[]) => {
       const ids = new Set(chunk.map((message) => message.id));
       const first = Number(chunk[0]!.id.slice(1));
@@ -114,16 +114,15 @@ export class Summarizer {
       return contextWithin(
         this.#store,
         [...new Map(context.map((message) => [message.id, message])).values()],
-        Math.floor(this.#config.AI_INPUT_CHARS / 6),
+        writer.contextChars,
       );
     };
 
     const recorded = new Set(sections.flatMap((section) => section.messageIds));
     const added = sources.filter((message) => !recorded.has(message.id));
-    const additions: Note["sections"] = [];
-    const chunks = await messageChunks(this.#store, added, budget);
+    const chunks = await messageChunks(this.#store, added, writer.inputChars);
 
-    yield { sections, completed: 0, total: chunks.length };
+    await progress({ sections, completed: 0, total: chunks.length });
 
     // 每段只依赖原文，可以同时整理；按原文顺序写入，最多同时调用两次 AI。
     for (let index = 0; index < chunks.length; index += 2) {
@@ -141,7 +140,7 @@ export class Summarizer {
               ...new Set(chunk.map((message) => Number(message.id.slice(1)))),
             ],
             content: await this.#summarize(
-              topic,
+              writer,
               chunk,
               await contextFor(chunk),
             ),
@@ -154,17 +153,24 @@ export class Summarizer {
           throw result.reason;
         }
 
-        additions.push(result.value);
+        sections.push(result.value);
       }
 
-      yield {
-        sections: [...sections, ...additions].sort(
-          (a, b) => a.messageIds[0]! - b.messageIds[0]!,
-        ),
+      sections.sort((a, b) => a.messageIds[0]! - b.messageIds[0]!);
+      await progress({
+        sections,
         completed: Math.min(index + 2, chunks.length),
         total: chunks.length,
-      };
+      });
     }
+
+    return {
+      sections,
+      content: await this.#compose(
+        writer,
+        sections.map((section) => section.content),
+      ),
+    };
   }
 
   #batches(sections: string[], budget: number): string[][] {
@@ -207,7 +213,7 @@ export class Summarizer {
   }
 
   async #reduce(
-    topic: Topic,
+    writer: SummaryWriter,
     sections: string[],
     budget: number,
   ): Promise<string[]> {
@@ -226,11 +232,7 @@ export class Summarizer {
 
       for (let attempt = 0; ; attempt++) {
         try {
-          const draft = await this.#ai.recording.merge(
-            topic,
-            batch,
-            targetChars,
-          );
+          const draft = await writer.merge(batch, targetChars);
 
           if (JSON.stringify([draft]).length > size * 0.75) {
             throw new AiSizeError("中间摘要未充分缩短，无法继续整体合并");
@@ -256,41 +258,39 @@ export class Summarizer {
     return reduced;
   }
 
-  public async compose(
-    topic: Topic,
-    sections: Note["sections"],
-  ): Promise<string> {
-    let drafts = sections
-      .map((section) => section.content.trim())
-      .filter(Boolean);
+  async #compose(writer: SummaryWriter, sections: string[]): Promise<string> {
+    let drafts = sections.map((section) => section.trim()).filter(Boolean);
 
     if (drafts.length === 0) {
       return "";
     }
 
-    let budget = Math.floor(this.#config.AI_INPUT_CHARS / 3);
+    // 一批已经按完整摘要要求生成，无需再次让模型重写同一份内容。
+    if (drafts.length === 1) {
+      return drafts[0]!;
+    }
+
+    let budget = writer.inputChars;
 
     for (let attempt = 0; ; attempt++) {
       while (JSON.stringify(drafts).length > budget) {
         this.#logger.info(
-          "纪要逐级合并：topic=%s sections=%s chars=%s",
-          topic.id,
+          "纪要逐级合并：sections=%s chars=%s",
           drafts.length,
           JSON.stringify(drafts).length,
         );
-        drafts = await this.#reduce(topic, drafts, budget);
+        drafts = await this.#reduce(writer, drafts, budget);
       }
 
       try {
-        // 最后一次调用统一整理全部议题；即使只有一批，也不直接交付分批草稿。
-        return await this.#ai.recording.merge(topic, drafts);
+        return await writer.merge(drafts);
       } catch (error) {
         if (!(error instanceof AiSizeError) || attempt === 1) {
           throw error;
         }
 
         budget = Math.floor(budget / 2);
-        drafts = await this.#reduce(topic, drafts, budget);
+        drafts = await this.#reduce(writer, drafts, budget);
       }
     }
   }

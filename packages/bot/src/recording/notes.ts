@@ -4,38 +4,24 @@ import { join } from "node:path";
 import { Logger } from "@koishijs/core";
 
 import type { Ai } from "../agent/ai.ts";
-import type { Config } from "../config.ts";
-import type { ReactionSync } from "../onebot/reactions.ts";
 import { topicDirectory, writeMarkdown } from "../storage/files.ts";
 import type { Store } from "../storage/store.ts";
 import { waitForAsset } from "../tasks/assets.ts";
-import type { Job, Note, Topic } from "../types.ts";
+import type { Job, Topic } from "../types.ts";
 import { noteImages } from "./images.ts";
 import { Summarizer } from "./summary.ts";
 import { transcript } from "./transcript.ts";
 
 export class Notes {
-  #config: Config;
   #store: Store;
-  #ai: Ai;
   #summary: Summarizer;
   #logger = new Logger("yanqi:notes");
   #signal: AbortSignal;
-  #reactions: ReactionSync;
 
-  constructor(
-    config: Config,
-    store: Store,
-    ai: Ai,
-    signal: AbortSignal,
-    reactions: ReactionSync,
-  ) {
-    this.#config = config;
+  constructor(store: Store, ai: Ai, signal: AbortSignal) {
     this.#store = store;
-    this.#ai = ai;
-    this.#summary = new Summarizer(config, store, ai);
+    this.#summary = new Summarizer(store, ai);
     this.#signal = signal;
-    this.#reactions = reactions;
   }
 
   public async arrange(
@@ -126,7 +112,7 @@ export class Notes {
         );
       }),
     );
-    await this.#reactions.refresh(pendingSources);
+    // 使用通知同步后已保存的回应；逐条远程刷新会阻塞整段历史的整理。
     // 附件解析会更新原文版本，完成后再读取本次整理的范围与版本。
     const topic = await this.#store.topics.get(topicId);
     const generation = topic.generation;
@@ -175,47 +161,39 @@ export class Notes {
         : `${sources.length} 条原始消息`;
       const header = `# ${topic.title}\n\n第 ${revision} 版 · ${scope}`;
       const footer = "[查看完整原文](transcript.md)\n";
-      let sections: Note["sections"] = [];
-      let content = "";
       let excerpt = "";
 
-      for await (const progress of this.#summary.sections(
+      const { content, sections } = await this.#summary.generate(
         topic,
         sources,
         note,
-      )) {
-        sections = progress.sections;
-        content = sections
-          .map((section) => section.content)
-          .filter(Boolean)
-          .join("\n\n");
-        const outline = content
-          .split("\n")
-          .filter((line) => /^#{2,3} |^\*\*/.test(line))
-          .join("；");
+        async (progress) => {
+          const content = progress.sections
+            .map((section) => section.content)
+            .filter(Boolean)
+            .join("\n\n");
+          const outline = content
+            .split("\n")
+            .filter((line) => /^#{2,3} |^\*\*/.test(line))
+            .join("；");
 
-        excerpt = (outline || content).slice(0, 600);
-        await writeMarkdown(
-          path,
-          `${header}\n\n> 草稿：整理尚未完成。\n\n${noteImages(content, await images(), directory)}\n\n${footer}`,
-        );
-        await this.#store.jobs.reportProgress(
-          job.id,
-          `共 ${sources.length} 条原文，已提取 ${progress.completed}/${progress.total} 批。${excerpt ? `已整理内容摘录：${excerpt}。` : ""}草稿：${path}`,
-        );
-        this.#logger.info(
-          "纪要草稿已更新：topic=%s sections=%s file=%s",
-          topic.id,
-          sections.length,
-          path,
-        );
-      }
-
-      await this.#store.jobs.reportProgress(
-        job.id,
-        `正在合并相关观点。${excerpt ? `已整理内容摘录：${excerpt}。` : ""}草稿：${path}`,
+          excerpt = (outline || content).slice(0, 600);
+          await writeMarkdown(
+            path,
+            `${header}\n\n> 草稿：整理尚未完成。\n\n${noteImages(content, await images(), directory)}\n\n${footer}`,
+          );
+          await this.#store.jobs.reportProgress(
+            job.id,
+            `共 ${sources.length} 条原文，已整理 ${progress.completed}/${progress.total} 批。${progress.completed === progress.total ? "正在完成纪要。" : ""}${excerpt ? `已整理内容摘录：${excerpt}。` : ""}草稿：${path}`,
+          );
+          this.#logger.info(
+            "纪要草稿已更新：topic=%s sections=%s file=%s",
+            topic.id,
+            progress.sections.length,
+            path,
+          );
+        },
       );
-      content = await this.#summary.compose(topic, sections);
       const markdown = `${header}\n\n${noteImages(content, await images(), directory) || "所选原文中没有找到与整理要求相关的内容。"}\n\n${footer}`;
 
       await writeMarkdown(path, markdown);
